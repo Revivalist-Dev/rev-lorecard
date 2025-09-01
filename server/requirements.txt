@@ -1,0 +1,16 @@
+python-dotenv
+pydantic>=2.0
+litestar
+uvicorn
+psycopg
+psycopg_pool
+psycopg_binary
+jinja2
+httpx
+pytest
+pytest-asyncio
+testcontainers[postgres]
+rich
+beautifulsoup4
+lxml
+html-to-markdown
