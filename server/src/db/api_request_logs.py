@@ -3,7 +3,7 @@ from datetime import datetime
 from typing import Any, Dict, Optional
 from uuid import UUID, uuid4
 
-from db.connection import execute_query, fetch_query, fetchrow_query
+from db.connection import get_db_connection
 from db.common import PaginatedResponse, PaginationMeta
 from pydantic import BaseModel
 
@@ -33,6 +33,7 @@ class ApiRequestLog(CreateApiRequestLog):
 
 async def create_api_request_log(log: CreateApiRequestLog) -> ApiRequestLog:
     """Create a new API request log."""
+    db = await get_db_connection()
     log_id = uuid4()
     query = """
         INSERT INTO "ApiRequestLog" (
@@ -40,6 +41,7 @@ async def create_api_request_log(log: CreateApiRequestLog) -> ApiRequestLog:
             response, input_tokens, output_tokens, calculated_cost, latency_ms, error, timestamp
         )
         VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        RETURNING *
     """
     params = (
         log_id,
@@ -56,30 +58,35 @@ async def create_api_request_log(log: CreateApiRequestLog) -> ApiRequestLog:
         log.error,
         log.timestamp,
     )
-    await execute_query(query, params)
-    return await get_api_request_log(log_id)  # pyright: ignore[reportReturnType]
+    result = await db.fetch_one(query, params)
+    if not result:
+        raise Exception("Failed to create API request log")
+    return ApiRequestLog(**result)
 
 
 async def get_api_request_log(log_id: UUID) -> ApiRequestLog | None:
     """Retrieve an API request log by its ID."""
+    db = await get_db_connection()
     query = 'SELECT * FROM "ApiRequestLog" WHERE id = %s'
-    result = await fetchrow_query(query, (log_id,))
+    result = await db.fetch_one(query, (log_id,))
     return ApiRequestLog(**result) if result else None
 
 
 async def count_logs_by_project(project_id: str) -> int:
     """Count all API request logs for a specific project."""
-    query = 'SELECT COUNT(*) FROM "ApiRequestLog" WHERE project_id = %s'
-    result = await fetchrow_query(query, (project_id,))
-    return result["count"] if result else 0
+    db = await get_db_connection()
+    query = 'SELECT COUNT(*) as count FROM "ApiRequestLog" WHERE project_id = %s'
+    result = await db.fetch_one(query, (project_id,))
+    return result["count"] if result and "count" in result else 0
 
 
 async def list_logs_by_project_paginated(
     project_id: str, limit: int = 100, offset: int = 0
 ) -> PaginatedResponse[ApiRequestLog]:
     """Retrieve all API request logs for a specific project with pagination."""
+    db = await get_db_connection()
     query = 'SELECT * FROM "ApiRequestLog" WHERE project_id = %s ORDER BY timestamp DESC LIMIT %s OFFSET %s'
-    results = await fetch_query(query, (project_id, limit, offset))
+    results = await db.fetch_all(query, (project_id, limit, offset))
     logs = [ApiRequestLog(**row) for row in results] if results else []
     total_items = await count_logs_by_project(project_id)
     current_page = offset // limit + 1

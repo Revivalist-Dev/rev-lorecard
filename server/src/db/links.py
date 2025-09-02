@@ -3,7 +3,7 @@ from enum import Enum
 from typing import List, Optional
 from uuid import UUID, uuid4
 
-from db.connection import execute_query, fetch_query, fetchrow_query, get_pool
+from db.connection import get_db_connection
 from pydantic import BaseModel
 from db.common import PaginatedResponse, PaginationMeta
 
@@ -50,42 +50,44 @@ async def create_links(links: List[CreateLink]) -> List[Link]:
     This function uses a transaction to ensure all links are inserted or none are.
     Returns the list of created links.
     """
-    pool = await get_pool()
+    db = await get_db_connection()
     created_links: List[Link] = []
-    async with pool.connection() as conn:
-        async with conn.transaction():
-            query = """
-                INSERT INTO "Link" (id, project_id, url)
-                VALUES (%s, %s, %s)
-                RETURNING *
-            """
-            for link in links:
-                result = await fetchrow_query(
-                    query, (uuid4(), link.project_id, link.url), conn=conn
-                )
-                if result:
-                    created_links.append(Link(**result))
+
+    async with db.transaction() as tx:
+        query = """
+            INSERT INTO "Link" (id, project_id, url)
+            VALUES (%s, %s, %s)
+            ON CONFLICT (project_id, url) DO NOTHING
+            RETURNING *
+        """
+        for link in links:
+            result = await tx.fetch_one(query, (uuid4(), link.project_id, link.url))
+            if result:
+                created_links.append(Link(**result))
     return created_links
 
 
 async def get_link(link_id: UUID) -> Link | None:
     """Retrieve a link by its ID."""
+    db = await get_db_connection()
     query = 'SELECT * FROM "Link" WHERE id = %s'
-    result = await fetchrow_query(query, (link_id,))
+    result = await db.fetch_one(query, (link_id,))
     return Link(**result) if result else None
 
 
 async def count_links_by_project(project_id: str) -> int:
     """Count all links for a given project."""
-    query = 'SELECT COUNT(*) FROM "Link" WHERE project_id = %s'
-    result = await fetchrow_query(query, (project_id,))
-    return result["count"] if result else 0
+    db = await get_db_connection()
+    query = 'SELECT COUNT(*) as count FROM "Link" WHERE project_id = %s'
+    result = await db.fetch_one(query, (project_id,))
+    return result["count"] if result and "count" in result else 0
 
 
 async def get_processable_links_for_project(project_id: str) -> List[Link]:
     """Retrieve all processable (pending or failed) links for a specific project."""
+    db = await get_db_connection()
     query = "SELECT * FROM \"Link\" WHERE project_id = %s AND (status = 'pending' OR status = 'failed')"
-    results = await fetch_query(query, (project_id,))
+    results = await db.fetch_all(query, (project_id,))
     return [Link(**row) for row in results] if results else []
 
 
@@ -93,8 +95,9 @@ async def list_links_by_project_paginated(
     project_id: str, limit: int = 100, offset: int = 0
 ) -> PaginatedResponse[Link]:
     """Retrieve all links associated with a specific project with pagination."""
+    db = await get_db_connection()
     query = 'SELECT * FROM "Link" WHERE project_id = %s ORDER BY created_at DESC LIMIT %s OFFSET %s'
-    results = await fetch_query(query, (project_id, limit, offset))
+    results = await db.fetch_all(query, (project_id, limit, offset))
     links = [Link(**row) for row in results] if results else []
     total_items = await count_links_by_project(project_id)
     current_page = offset // limit + 1
@@ -111,6 +114,7 @@ async def list_links_by_project_paginated(
 
 async def update_link(link_id: UUID, link_update: UpdateLink) -> Link | None:
     """Update a link's status, error message, or lorebook entry ID."""
+    db = await get_db_connection()
     update_data = link_update.model_dump(exclude_unset=True)
     if not update_data:
         return await get_link(link_id)
@@ -128,5 +132,5 @@ async def update_link(link_id: UUID, link_update: UpdateLink) -> Link | None:
     set_clause = ", ".join(set_clause_parts)
     query = f'UPDATE "Link" SET {set_clause} WHERE id = %s'
 
-    await execute_query(query, params)
+    await db.execute(query, tuple(params))
     return await get_link(link_id)

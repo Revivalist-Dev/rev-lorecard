@@ -1,112 +1,68 @@
 import os
-import json
-from uuid import UUID
-from typing import Optional, Union, Any
+from typing import Optional
 
-from psycopg.rows import dict_row
-from psycopg_pool import AsyncConnectionPool
+from db.database import AsyncDB, PostgresDB, SQLiteDB
+from logging_config import get_logger
 
-import psycopg
+logger = get_logger(__name__)
 
-pool: Optional[AsyncConnectionPool] = None
+db: Optional[AsyncDB] = None
 
 
-async def get_pool() -> AsyncConnectionPool:
-    """Get the async connection pool."""
-    global pool
-    if pool is None:
-        DATABASE_URL = os.environ.get(
+async def get_db_connection() -> AsyncDB:
+    """
+    Returns the global database connection instance.
+    Initializes the database connection if it doesn't exist.
+    """
+    global db
+    if db is None:
+        await init_database()
+
+    if db is None:  # check again after potential initialization
+        raise ConnectionError("Database could not be initialized.")
+    return db
+
+
+def set_db_connection(new_db: AsyncDB):
+    """Sets the global database connection instance, used for testing."""
+    global db
+    db = new_db
+
+
+async def init_database():
+    """Initializes the database based on environment variables."""
+    global db
+    if db:
+        return
+
+    db_type = os.getenv("DATABASE_TYPE", "postgres").lower()
+    logger.info(f"Initializing database of type: {db_type}")
+
+    if db_type == "postgres":
+        db_url = os.environ.get(
             "DATABASE_URL", "postgresql://user:password@localhost:5432/lorebook_creator"
         )
-        pool = AsyncConnectionPool(conninfo=DATABASE_URL, min_size=10, max_size=300)
-        await pool.open()
-    if pool is None:
-        raise ConnectionError("Database pool could not be initialized")
-    return pool
+        db = PostgresDB(db_url)
+        schema_path = "src/schema.sql"
+    elif db_type == "sqlite":
+        db_url = os.environ.get("DATABASE_URL", "lorebook_creator.db")
+        db = SQLiteDB(db_url)
+        schema_path = "src/schema.sqlite.sql"
+    else:
+        raise ValueError(f"Unsupported DATABASE_TYPE: {db_type}")
+
+    await db.connect()
+    initialized = await db.is_initialized()
+    if not initialized:
+        logger.info("Database tables not found, creating schema.")
+        await db.init_db(schema_path)
+    else:
+        logger.info("Database already initialized.")
 
 
-def set_pool(new_pool: AsyncConnectionPool):
-    """Set the connection pool. Used for testing."""
-    global pool
-    pool = new_pool
-
-
-async def close_pool():
-    """Close the connection pool."""
-    global pool
-    if pool:
-        await pool.close()
-        pool = None
-
-
-async def init_db(conn: Optional[psycopg.AsyncConnection] = None):
-    """Initialize the database from the schema.sql file."""
-    with open("src/schema.sql", "r") as f:
-        schema = f.read()
-    await execute_query(schema, conn=conn)
-
-
-def _process_param(p: Any) -> Any:
-    if isinstance(p, dict):
-        return json.dumps(p)
-    if isinstance(p, UUID):
-        return str(p)
-    if isinstance(p, (list, tuple)):
-        return [_process_param(item) for item in p]
-    return p
-
-
-async def _execute_query(
-    method: str,
-    query: str,
-    params: Optional[Union[tuple, list]] = None,
-    conn: Optional[psycopg.AsyncConnection] = None,
-) -> Any:
-    """Helper to execute a query with optional parameters."""
-    global pool
-    current_pool = pool or await get_pool()
-    assert current_pool is not None, "Database pool is not initialized"
-
-    async def _execute(connection: psycopg.AsyncConnection) -> Any:
-        processed_params = tuple(_process_param(p) for p in params) if params else ()
-        async with connection.cursor(row_factory=dict_row) as cur:
-            await cur.execute(query, processed_params)  # pyright: ignore[reportArgumentType]
-
-            if method == "execute":
-                return
-
-            db_method = getattr(cur, method)
-            return await db_method()
-
-    if conn:
-        return await _execute(conn)
-
-    async with current_pool.connection() as connection:
-        return await _execute(connection)
-
-
-async def execute_query(
-    query: str,
-    params: Optional[Union[tuple, list]] = None,
-    conn: Optional[psycopg.AsyncConnection] = None,
-) -> None:
-    """Execute a query with optional parameters."""
-    await _execute_query("execute", query, params, conn)
-
-
-async def fetch_query(
-    query: str,
-    params: Optional[Union[tuple, list]] = None,
-    conn: Optional[psycopg.AsyncConnection] = None,
-) -> list[dict]:
-    """Execute a fetch query with optional parameters."""
-    return await _execute_query("fetchall", query, params, conn)
-
-
-async def fetchrow_query(
-    query: str,
-    params: Optional[Union[tuple, list]] = None,
-    conn: Optional[psycopg.AsyncConnection] = None,
-) -> Optional[dict]:
-    """Execute a fetchrow query with optional parameters."""
-    return await _execute_query("fetchone", query, params, conn)
+async def close_database():
+    """Closes the global database connection."""
+    global db
+    if db:
+        await db.disconnect()
+        db = None

@@ -1,8 +1,8 @@
 import pytest
 import pytest_asyncio
-from psycopg_pool import AsyncConnectionPool
 from litestar.testing import AsyncTestClient
 
+from db.database import AsyncDB, PostgresDB, SQLiteDB
 from db.projects import (
     AiProviderConfig,
     CreateProject,
@@ -12,14 +12,24 @@ from services.background_jobs import process_background_job
 
 
 @pytest_asyncio.fixture(autouse=True)
-async def cleanup_tables(db_connection_pool: AsyncConnectionPool):
+async def cleanup_tables(db: AsyncDB):
     """Fixture to clean up tables after each test."""
     yield
-    async with db_connection_pool.connection() as conn:
-        async with conn.cursor() as cur:
-            await cur.execute(
-                'TRUNCATE "Project", "BackgroundJob", "ApiRequestLog", "Link", "LorebookEntry", "GlobalTemplate" CASCADE;'
-            )
+    if isinstance(db, PostgresDB):
+        await db.execute(
+            'TRUNCATE "Project", "BackgroundJob", "ApiRequestLog", "Link", "LorebookEntry", "GlobalTemplate" CASCADE;'
+        )
+    elif isinstance(db, SQLiteDB):
+        tables = [
+            "Project",
+            "BackgroundJob",
+            "ApiRequestLog",
+            "Link",
+            "LorebookEntry",
+            "GlobalTemplate",
+        ]
+        for table in tables:
+            await db.execute(f'DELETE FROM "{table}";')
 
 
 @pytest.fixture
@@ -51,10 +61,14 @@ def real_project_payload() -> CreateProject:
 async def test_generate_selector_job_with_test_client(
     client_test: AsyncTestClient,
     real_project_payload: CreateProject,
+    db_type: str,
 ):
     """
     End-to-end test for the GENERATE_SELECTOR job using the AsyncTestClient.
     """
+    if db_type == "sqlite":
+        pytest.skip("Skipping generate_selector test for SQLite")
+
     project_id = real_project_payload.id
 
     # 1. Create the project
@@ -71,7 +85,8 @@ async def test_generate_selector_job_with_test_client(
                 "purpose": "To gather detailed character information including backgrounds, traits, and relationships",
                 "extraction_notes": "Focus extraction on the specific type of content requested. For characters: extract names, aliases, descriptions, personality, history, and relationships. For locations: extract features, history, significance. For other topics: extract key aspects relevant to the subject.",
                 "criteria": "Page must be specifically created as a character article (e.g., character profile, biography page). Reject pages that only mention or reference the character within other content.",
-            }
+            },
+            "status": "search_params_generated",
         },
     )
     assert response.status_code == 200
@@ -184,7 +199,10 @@ async def test_extract_links_job_with_test_client(
     # 2. Manually set the link_extraction_selector for the project
     response = await client_test.patch(
         f"/api/projects/{project_id}",
-        json={"link_extraction_selector": ["a.category-page__member-link"]},
+        json={
+            "link_extraction_selector": ["a.category-page__member-link"],
+            "status": "selector_generated",
+        },
     )
     assert response.status_code == 200
 

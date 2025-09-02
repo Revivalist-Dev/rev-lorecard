@@ -5,6 +5,7 @@ uvicorn
 psycopg
 psycopg_pool
 psycopg_binary
+aiosqlite
 jinja2
 httpx
 pytest

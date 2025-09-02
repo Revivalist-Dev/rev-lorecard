@@ -3,14 +3,19 @@ import sys
 import pytest
 import pytest_asyncio
 from testcontainers.postgres import PostgresContainer
-from psycopg_pool import AsyncConnectionPool
 from litestar.testing import AsyncTestClient
 
-from db.connection import close_pool, init_db, set_pool
+from db.connection import set_db_connection, close_database
+from db.database import PostgresDB, SQLiteDB, AsyncDB
 from main import create_app
 
 if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
+
+@pytest.fixture(scope="session", params=["postgres", "sqlite"])
+def db_type(request):
+    return request.param
 
 
 @pytest.fixture(scope="session")
@@ -20,22 +25,32 @@ def postgres_container():
 
 
 @pytest_asyncio.fixture(scope="session")
-async def db_connection_pool(postgres_container: PostgresContainer):
-    dsn = postgres_container.get_connection_url().replace("+psycopg2", "")
-    pool = AsyncConnectionPool(conninfo=dsn, min_size=1, max_size=10)
-    await pool.open()
-    set_pool(pool)  # pyright: ignore[reportArgumentType]
-    yield pool
-    await close_pool()
+async def db(db_type: str, postgres_container: PostgresContainer, tmp_path_factory):
+    if db_type == "postgres":
+        dsn = postgres_container.get_connection_url().replace("+psycopg2", "")
+        db_instance = PostgresDB(dsn)
+    elif db_type == "sqlite":
+        db_path = tmp_path_factory.mktemp("data") / "test.db"
+        db_instance = SQLiteDB(str(db_path))
+    else:
+        raise ValueError(f"Unsupported db_type: {db_type}")
+
+    await db_instance.connect()
+    set_db_connection(db_instance)
+    yield db_instance
+    await close_database()
 
 
 @pytest_asyncio.fixture(scope="session", autouse=True)
-async def setup_database(db_connection_pool: AsyncConnectionPool):
-    await init_db()
+async def setup_database(db: AsyncDB):
+    schema_path = (
+        "src/schema.sql" if isinstance(db, PostgresDB) else "src/schema.sqlite.sql"
+    )
+    await db.init_db(schema_path)
 
 
 @pytest_asyncio.fixture(scope="session")
-async def client_test(db_connection_pool):
+async def client_test(db: AsyncDB):
     app = create_app()
     async with AsyncTestClient(app) as client:
         yield client

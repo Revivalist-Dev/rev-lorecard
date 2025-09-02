@@ -7,7 +7,6 @@ import uuid
 from controllers.sse import SSEController
 from db.background_jobs import (
     BackgroundJob,
-    TaskName,
     UpdateBackgroundJob,
     get_background_job,
     update_background_job,

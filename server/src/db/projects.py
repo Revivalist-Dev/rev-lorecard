@@ -1,9 +1,9 @@
 from enum import Enum
 import json
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, List
 
 from pydantic import BaseModel, Field
-from db.connection import execute_query, fetch_query, fetchrow_query
+from db.connection import get_db_connection
 from datetime import datetime
 from db.common import PaginatedResponse, PaginationMeta
 
@@ -92,9 +92,11 @@ class Project(CreateProject):
 
 
 async def create_project(project: CreateProject) -> Project:
+    db = await get_db_connection()
     query = """
         INSERT INTO "Project" (id, name, source_url, prompt, templates, ai_provider_config, requests_per_minute, max_pages_to_crawl)
         VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+        RETURNING *
     """
     params = (
         project.id,
@@ -106,14 +108,17 @@ async def create_project(project: CreateProject) -> Project:
         project.requests_per_minute,
         project.max_pages_to_crawl,
     )
-    await execute_query(query, params)
-    return await get_project(project.id)  # pyright: ignore[reportReturnType]
+    result = await db.fetch_one(query, params)
+    if not result:
+        raise Exception("Failed to create project")
+    return Project(**result)
 
 
 async def get_project(project_id: str) -> Project | None:
     """Retrieve a project by its ID."""
+    db = await get_db_connection()
     query = 'SELECT * FROM "Project" WHERE id = %s'
-    result = await fetchrow_query(query, (project_id,))
+    result = await db.fetch_one(query, (project_id,))
     if result and result.get("search_params"):
         result["search_params"] = SearchParams.model_validate(result["search_params"])
     return Project(**result) if result else None
@@ -121,17 +126,19 @@ async def get_project(project_id: str) -> Project | None:
 
 async def count_projects() -> int:
     """Count all projects."""
-    query = 'SELECT COUNT(*) FROM "Project"'
-    result = await fetchrow_query(query)
-    return result["count"] if result else 0
+    db = await get_db_connection()
+    query = 'SELECT COUNT(*) as count FROM "Project"'
+    result = await db.fetch_one(query)
+    return result["count"] if result and "count" in result else 0
 
 
 async def list_projects_paginated(
     limit: int = 50, offset: int = 0
 ) -> PaginatedResponse[Project]:
     """List all projects with pagination."""
+    db = await get_db_connection()
     query = 'SELECT * FROM "Project" ORDER BY created_at DESC LIMIT %s OFFSET %s'
-    results = await fetch_query(query, (limit, offset))
+    results = await db.fetch_all(query, (limit, offset))
     projects = [Project(**row) for row in results] if results else []
     total_items = await count_projects()
     current_page = offset // limit + 1
@@ -149,12 +156,13 @@ async def list_projects_paginated(
 async def update_project(
     project_id: str, project_update: UpdateProject
 ) -> Project | None:
+    db = await get_db_connection()
     update_data = project_update.model_dump(exclude_unset=True)
     if not update_data:
         return await get_project(project_id)
 
     set_clause_parts = []
-    params = []
+    params: List[Any] = []
     for key, value in update_data.items():
         set_clause_parts.append(f'"{key}" = %s')
         if key in ["ai_provider_config", "templates", "search_params"]:
@@ -169,13 +177,18 @@ async def update_project(
 
     params.append(project_id)
     set_clause = ", ".join(set_clause_parts)
-    query = f'UPDATE "Project" SET {set_clause}, updated_at = NOW() WHERE id = %s'
+    query = f'UPDATE "Project" SET {set_clause} WHERE id = %s RETURNING *'
 
-    await execute_query(query, params)
-    return await get_project(project_id)
+    result = await db.fetch_one(query, tuple(params))
+    if not result:
+        return None
+    if result.get("search_params"):
+        result["search_params"] = SearchParams.model_validate(result["search_params"])
+    return Project(**result)
 
 
 async def delete_project(project_id: str):
     """Delete a project from the database."""
+    db = await get_db_connection()
     query = 'DELETE FROM "Project" WHERE id = %s'
-    await execute_query(query, (project_id,))
+    await db.execute(query, (project_id,))

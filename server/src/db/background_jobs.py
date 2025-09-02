@@ -4,7 +4,7 @@ import json
 from typing import Any, Dict, List, Optional, Union
 from uuid import UUID, uuid4
 
-from db.connection import execute_query, fetch_query, fetchrow_query
+from db.connection import get_db_connection
 from db.common import PaginatedResponse, PaginationMeta
 from pydantic import BaseModel, ValidationError
 
@@ -164,28 +164,29 @@ def _deserialize_job(db_row: Dict[str, Any]) -> BackgroundJob:
 
 async def create_background_job(job: CreateBackgroundJob) -> BackgroundJob:
     """Create a new background job and return it."""
-    job_id = uuid4()
+    db = await get_db_connection()
     query = """
         INSERT INTO "BackgroundJob" (id, task_name, project_id, payload)
         VALUES (%s, %s, %s, %s)
+        RETURNING *
     """
     params = (
-        job_id,
+        uuid4(),
         job.task_name.value,
         job.project_id,
         job.payload.model_dump_json() if job.payload else None,
     )
-    await execute_query(query, params)
-    new_job = await get_background_job(job_id)
-    if not new_job:
-        raise Exception("Failed to retrieve newly created job")
-    return new_job
+    result = await db.fetch_one(query, params)
+    if not result:
+        raise Exception("Failed to create background job")
+    return _deserialize_job(result)
 
 
 async def get_background_job(job_id: UUID) -> BackgroundJob | None:
     """Retrieve a background job by its ID."""
+    db = await get_db_connection()
     query = 'SELECT * FROM "BackgroundJob" WHERE id = %s'
-    result = await fetchrow_query(query, (job_id,))
+    result = await db.fetch_one(query, (job_id,))
     return _deserialize_job(result) if result else None
 
 
@@ -193,8 +194,9 @@ async def list_background_jobs_paginated(
     limit: int = 50, offset: int = 0
 ) -> PaginatedResponse[BackgroundJob]:
     """List all background jobs with pagination, newest first."""
+    db = await get_db_connection()
     query = 'SELECT * FROM "BackgroundJob" ORDER BY created_at DESC LIMIT %s OFFSET %s'
-    results = await fetch_query(query, (limit, offset))
+    results = await db.fetch_all(query, (limit, offset))
     jobs = [_deserialize_job(row) for row in results] if results else []
     total_items = await count_background_jobs()
     current_page = offset // limit + 1
@@ -211,43 +213,31 @@ async def list_background_jobs_paginated(
 
 async def count_background_jobs() -> int:
     """Count all background jobs."""
-    query = 'SELECT COUNT(*) FROM "BackgroundJob"'
-    result = await fetchrow_query(query)
-    return result["count"] if result else 0
+    db = await get_db_connection()
+    query = 'SELECT COUNT(*) as count FROM "BackgroundJob"'
+    result = await db.fetch_one(query)
+    return result["count"] if result and "count" in result else 0
 
 
 async def count_in_progress_background_jobs_by_task_name(task_name: TaskName) -> int:
     """Count the number of 'in_progress' jobs for a specific task name."""
+    db = await get_db_connection()
     query = """
-        SELECT COUNT(*)
+        SELECT COUNT(*) as count
         FROM "BackgroundJob"
         WHERE task_name = %s AND status = 'in_progress'
     """
-    result = await fetchrow_query(query, (task_name.value,))
-    return result["count"] if result else 0
+    result = await db.fetch_one(query, (task_name.value,))
+    return result["count"] if result and "count" in result else 0
 
 
 async def get_and_lock_pending_background_job() -> BackgroundJob | None:
     """
     Atomically retrieve the oldest pending job and set its status to 'in_progress'.
-    This uses 'SELECT ... FOR UPDATE SKIP LOCKED' to prevent race conditions.
+    This uses the underlying database's locking mechanism to prevent race conditions.
     """
-    # This query is specific to PostgreSQL.
-    query = """
-        WITH oldest_pending AS (
-            SELECT id
-            FROM "BackgroundJob"
-            WHERE status = 'pending'
-            ORDER BY created_at
-            LIMIT 1
-            FOR UPDATE SKIP LOCKED
-        )
-        UPDATE "BackgroundJob"
-        SET status = 'in_progress', updated_at = NOW()
-        WHERE id = (SELECT id FROM oldest_pending)
-        RETURNING *;
-    """
-    result = await fetchrow_query(query)
+    db = await get_db_connection()
+    result = await db.get_and_lock_pending_background_job()
     return _deserialize_job(result) if result else None
 
 
@@ -255,6 +245,7 @@ async def update_background_job(
     job_id: UUID, job_update: UpdateBackgroundJob
 ) -> BackgroundJob | None:
     """Update a background job's state."""
+    db = await get_db_connection()
     update_data = job_update.model_dump(exclude_unset=True)
     if not update_data:
         return await get_background_job(job_id)
@@ -273,13 +264,17 @@ async def update_background_job(
 
     params.append(job_id)
     set_clause = ", ".join(set_clause_parts)
-    query = f'UPDATE "BackgroundJob" SET {set_clause}, updated_at = NOW() WHERE id = %s'
+    # The `updated_at` column is updated automatically by the database schema's default value.
+    query = f'UPDATE "BackgroundJob" SET {set_clause} WHERE id = %s RETURNING *'
 
-    await execute_query(query, tuple(params))
-    return await get_background_job(job_id)
+    result = await db.fetch_one(query, tuple(params))
+    if not result:
+        return None
+    return _deserialize_job(result)
 
 
 async def delete_background_job(job_id: UUID) -> None:
     """Delete a background job from the database."""
+    db = await get_db_connection()
     query = 'DELETE FROM "BackgroundJob" WHERE id = %s'
-    await execute_query(query, (job_id,))
+    await db.execute(query, (job_id,))
