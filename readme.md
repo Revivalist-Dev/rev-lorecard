@@ -1,8 +1,113 @@
-## Getting Started with Docker
+# Lorebook Creator
 
-The only prerequisite is to have Docker and Docker Compose installed.
+A web application to automatically create structured lorebooks from online sources using AI.
 
-### Installation
+## How to Run the Application
+
+Choose the option that best fits your needs.
+
+### Option 1: Quick Start with Docker (Recommended for Users)
+
+This is the fastest way to run the application. It uses the pre-built image from GitHub and does not require you to download the source code.
+
+**1. Create a directory and `.env` file**
+First, create a folder on your computer for the application's data. Inside that folder, create a file named `.env` and add your API key.
+
+```env
+# .env file
+OPENROUTER_API_KEY=your_secret_key_here
+PORT=3000
+```
+
+**2. Run the application**
+Open your terminal in that same folder and choose one of the commands below.
+
+*   **To run with SQLite (Simple & Recommended):**
+    A `data` folder will be created in your current directory to store the database.
+
+    *   **For Linux, macOS, or WSL:**
+        ```bash
+        docker run -d --name lorebook-app --restart unless-stopped -p 3000:3000 \
+          --env-file .env \
+          -e DATABASE_TYPE=sqlite \
+          -e DATABASE_URL=/app/server/data/lorebook_creator.db \
+          -v "$(pwd)/data:/app/server/data" \
+          ghcr.io/bmen25124/lorebook-creator:latest
+        ```
+
+    *   **For Windows (Command Prompt):**
+        ```cmd
+        docker run -d --name lorebook-app --restart unless-stopped -p 3000:3000 ^
+          --env-file .env ^
+          -e DATABASE_TYPE=sqlite ^
+          -e DATABASE_URL=/app/server/data/lorebook_creator.db ^
+          -v "%cd%/data:/app/server/data" ^
+          ghcr.io/bmen25124/lorebook-creator:latest
+        ```
+        
+    *   **For Windows (PowerShell):**
+        ```powershell
+        docker run -d --name lorebook-app --restart unless-stopped -p 3000:3000 `
+          --env-file .env `
+          -e DATABASE_TYPE=sqlite `
+          -e DATABASE_URL=/app/server/data/lorebook_creator.db `
+          -v "${pwd}/data:/app/server/data" `
+          ghcr.io/bmen25124/lorebook-creator:latest
+        ```
+
+*   **To run with PostgreSQL (Advanced):**
+    This requires starting a separate database container first. These commands work on all platforms.
+
+    ```bash
+    # 1. Create a network
+    docker network create lorebook-net
+
+    # 2. Start the database container
+    docker run -d --name lorebook-db --restart unless-stopped --network lorebook-net \
+      -e POSTGRES_USER=user -e POSTGRES_PASSWORD=password -e POSTGRES_DB=lorebook_creator \
+      -v lorebook_creator_postgres_data:/var/lib/postgresql/data \
+      postgres:13
+
+    # 3. Start the application container
+    docker run -d --name lorebook-app --restart unless-stopped --network lorebook-net -p 3000:3000 \
+      --env-file .env \
+      -e DATABASE_TYPE=postgres \
+      -e DATABASE_URL=postgresql://user:password@lorebook-db:5432/lorebook_creator \
+      ghcr.io/bmen25124/lorebook-creator:latest
+    ```
+
+---
+
+### Option 2: Run from Source on Windows (`start.bat`)
+
+Use this method if you are on Windows and prefer not to use Docker. This script automates the entire setup process.
+
+**Prerequisites:**
+You must have the following software installed and available in your PATH:
+-   [Git](https://git-scm.com/downloads)
+-   [Python](https://www.python.org/downloads/) (version 3.10 or higher)
+-   [Node.js](https://nodejs.org/) (version 18 or higher)
+-   [uv](https://github.com/astral-sh/uv) (run `pip install uv`)
+-   [pnpm](https://pnpm.io/installation) (run `npm install -g pnpm`)
+
+**1. Clone the repository**
+```bash
+git clone https://github.com/bmen25124/lorebook-creator.git
+cd lorebook-creator
+```
+
+**2. Run the script**
+Simply double-click the `start.bat` file or run it from your terminal:
+```bash
+.\start.bat
+```
+The first time you run it, the script will guide you through setting up your configuration (`.env` file), install all dependencies, build the client, and start the server.
+
+---
+
+### Option 3: Run from Source with Docker Compose (For Developers)
+
+Use this method if you have cloned the source code and want to build and run the application in a containerized environment. This is ideal for development.
 
 **1. Clone the repository**
 ```bash
@@ -11,7 +116,7 @@ cd lorebook-creator
 ```
 
 **2. Configure your API Key**
-Copy the example environment file to create your own local configuration.
+Copy the example environment file.
 ```bash
 # On Linux, macOS, or WSL
 cp .env.example .env
@@ -19,25 +124,23 @@ cp .env.example .env
 # On Windows
 copy .env.example .env
 ```
-Now, open the new `.env` file with a text editor and add your `OPENROUTER_API_KEY`.
+Now, open the new `.env` file and add your `OPENROUTER_API_KEY`.
 
-### Running the Application
+**3. Build and run the application**
 
-*   **To run with SQLite (Default & Simplest):**
+*   **To run with SQLite (Default):**
     ```bash
     docker-compose up --build
     ```
-    This is the easiest way to get started. Your database will be saved in a `data` folder in your project directory.
 
-*   **To run with PostgreSQL (Optional & More Robust):**
-    Use the `-f` flag to include the PostgreSQL configuration.
+*   **To run with PostgreSQL (Optional):**
     ```bash
     docker-compose -f docker-compose.yml -f docker-compose.postgres.yml up --build
     ```
 
-The first time you run this, Docker will build the application, which may take a few minutes.
+---
 
 ### Accessing the App
 
-Once the containers are running, the application will be available at:
+Once running, the application will be available at:
 **[http://localhost:3000](http://localhost:3000)**
