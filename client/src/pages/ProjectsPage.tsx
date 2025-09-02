@@ -142,7 +142,7 @@ export function ProjectsPage() {
             ) : (
               <Table.Tr>
                 <Table.Td colSpan={4}>
-                  <Text c="dimmed" align="center">
+                  <Text c="dimmed" ta="center">
                     No projects found. Create one to get started!
                   </Text>
                 </Table.Td>

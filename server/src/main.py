@@ -1,13 +1,18 @@
 import asyncio
+from pathlib import Path
 import sys
 from dotenv import load_dotenv
 from logging_config import get_logger, setup_logging
 
 import uvicorn
-from litestar import Litestar
+from litestar import Litestar, asgi, get
 from litestar.router import Router
 from litestar.exceptions import ValidationException
 from litestar.config.cors import CORSConfig
+from litestar.static_files import StaticFiles
+from litestar.types import Receive, Scope, Send
+from litestar.file_system import BaseLocalFileSystem
+from litestar.response.file import ASGIFileResponse
 import threading
 
 from worker import run_worker
@@ -68,6 +73,34 @@ async def create_default_templates():
             logger.info(f"Created default template: {template.name}")
 
 
+CLIENT_BUILD_DIR = Path(__file__).parent.parent.parent / "client" / "dist"
+assets_app = StaticFiles(
+    is_html_mode=False,
+    directories=[CLIENT_BUILD_DIR / "assets"],
+    file_system=BaseLocalFileSystem(),
+)
+
+
+@asgi(path="/assets", is_static=True)
+async def serve_assets(scope: Scope, receive: Receive, send: Send) -> None:
+    """Handles serving static assets from the /assets directory."""
+    await assets_app(scope, receive, send)
+
+
+@get(path=["/", "/{path:path}"], sync_to_thread=False)
+async def spa_fallback(path: str | None = None) -> ASGIFileResponse:
+    """
+    Serves the index.html file for all non-API and non-asset routes.
+    This is the catch-all for the Single-Page Application.
+    """
+    return ASGIFileResponse(
+        file_path=CLIENT_BUILD_DIR / "index.html",
+        media_type="text/html",
+        filename="index.html",
+        content_disposition_type="inline",
+    )
+
+
 def create_app():
     api_router = Router(
         path="/api",
@@ -95,8 +128,13 @@ def create_app():
             ValidationException: validation_exception_handler,
             ValueError: value_error_exception_handler,
         },
-        route_handlers=[api_router],
+        route_handlers=[
+            api_router,
+            serve_assets,
+            spa_fallback,
+        ],
         on_startup=[create_default_templates],
+        static_files_config=None,
     )
 
 
