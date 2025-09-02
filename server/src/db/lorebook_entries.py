@@ -120,7 +120,7 @@ async def update_lorebook_entry(
 
     params.append(entry_id)
     set_clause = ", ".join(set_clause_parts)
-    query = f'UPDATE "LorebookEntry" SET {set_clause} WHERE id = %s'
+    query = f'UPDATE "LorebookEntry" SET {set_clause}, updated_at = NOW() WHERE id = %s'
 
     await execute_query(query, params)
     return await get_lorebook_entry(entry_id)

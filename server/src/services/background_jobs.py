@@ -23,7 +23,7 @@ from db.links import (
     UpdateLink,
     create_links,
     get_link,
-    get_pending_links_for_project,
+    get_processable_links_for_project,
     update_link,
 )
 from db.lorebook_entries import CreateLorebookEntry, create_lorebook_entry
@@ -134,13 +134,12 @@ async def generate_selector(job: BackgroundJob, project: Project):
         urls = [urljoin(project.source_url, url) for url in urls]
         selector_urls[selector] = urls
 
-    await update_project(
-        project.id,
-        UpdateProject(
-            link_extraction_selector=selector_response.selectors,
-            status=ProjectStatus.selector_generated,
-        ),
+    update_payload = UpdateProject(
+        link_extraction_selector=selector_response.selectors,
     )
+    if project.status == ProjectStatus.search_params_generated:
+        update_payload.status = ProjectStatus.selector_generated
+    await update_project(project.id, update_payload)
     await update_job_with_notification(
         job.id,
         UpdateBackgroundJob(
@@ -208,17 +207,16 @@ async def generate_search_params(job: BackgroundJob, project: Project):
     )
 
     search_params_response = SearchParamsResponse.model_validate(response.content)
-    await update_project(
-        project.id,
-        UpdateProject(
-            search_params=SearchParams(
-                purpose=search_params_response.purpose,
-                extraction_notes=search_params_response.extraction_notes,
-                criteria=search_params_response.criteria,
-            ),
-            status=ProjectStatus.search_params_generated,
-        ),
+    update_payload = UpdateProject(
+        search_params=SearchParams(
+            purpose=search_params_response.purpose,
+            extraction_notes=search_params_response.extraction_notes,
+            criteria=search_params_response.criteria,
+        )
     )
+    if project.status == ProjectStatus.draft:
+        update_payload.status = ProjectStatus.search_params_generated
+    await update_project(project.id, update_payload)
     await update_job_with_notification(
         job.id,
         UpdateBackgroundJob(
@@ -246,9 +244,10 @@ async def extract_links(job: BackgroundJob, project: Project):
 
     links = await create_links(links_to_create)
     await send_links_created_notification(job, links)
-    await update_project(
-        project.id, UpdateProject(status=ProjectStatus.links_extracted)
-    )
+    if project.status == ProjectStatus.selector_generated:
+        await update_project(
+            project.id, UpdateProject(status=ProjectStatus.links_extracted)
+        )
     await update_job_with_notification(
         job.id,
         UpdateBackgroundJob(
@@ -359,7 +358,7 @@ async def process_project_entries(job: BackgroundJob, project: Project):
         raise Exception("Invalid payload for process_project_entries task")
 
     scraper = Scraper()
-    pending_links = await get_pending_links_for_project(project.id)
+    pending_links = await get_processable_links_for_project(project.id)
     total_links = len(pending_links)
     if not total_links:
         raise Exception("No pending links found for project")
@@ -367,7 +366,8 @@ async def process_project_entries(job: BackgroundJob, project: Project):
     processed_count = 0
     failed_count = 0
 
-    await update_project(project.id, UpdateProject(status=ProjectStatus.processing))
+    if project.status == ProjectStatus.links_extracted:
+        await update_project(project.id, UpdateProject(status=ProjectStatus.processing))
     await update_job_with_notification(
         job.id,
         UpdateBackgroundJob(total_items=total_links, processed_items=0, progress=0.0),

@@ -42,8 +42,8 @@ export function StepGenerateSelector({ project }: StepProps) {
       </Paper>
 
       <Group justify="flex-end">
-        <Button onClick={handleGenerate} loading={generateSelector.isPending} disabled={isProcessed}>
-          {isProcessed ? 'Selector Generated' : 'Generate Selector'}
+        <Button onClick={handleGenerate} loading={generateSelector.isPending}>
+          {isProcessed ? 'Re-generate Selector' : 'Generate Selector'}
         </Button>
       </Group>
 

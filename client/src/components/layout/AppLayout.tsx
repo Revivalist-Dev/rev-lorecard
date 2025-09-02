@@ -31,6 +31,13 @@ export function AppLayout() {
             leftSection={<IconHome size="1rem" />}
             active={pathname === '/' || pathname.startsWith('/projects')}
           />
+          <NavLink
+            component={Link}
+            to="/templates"
+            label="Templates"
+            leftSection={<IconHome size="1rem" />}
+            active={pathname === '/templates'}
+          />
         </Box>
       </AppShell.Navbar>
 

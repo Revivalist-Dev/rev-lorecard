@@ -82,9 +82,9 @@ async def count_links_by_project(project_id: str) -> int:
     return result["count"] if result else 0
 
 
-async def get_pending_links_for_project(project_id: str) -> List[Link]:
-    """Retrieve all pending links for a specific project."""
-    query = "SELECT * FROM \"Link\" WHERE project_id = %s AND status = 'pending'"
+async def get_processable_links_for_project(project_id: str) -> List[Link]:
+    """Retrieve all processable (pending or failed) links for a specific project."""
+    query = "SELECT * FROM \"Link\" WHERE project_id = %s AND (status = 'pending' OR status = 'failed')"
     results = await fetch_query(query, (project_id,))
     return [Link(**row) for row in results] if results else []
 

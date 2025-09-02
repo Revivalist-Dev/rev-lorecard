@@ -1,50 +1,122 @@
-import { Stack, Text, Textarea, Button, Paper, Code, Group } from '@mantine/core';
-import type { Project } from '../../types';
+import { Stack, Text, Textarea, Button, Paper, Group } from '@mantine/core';
+import type { Project, SearchParams } from '../../types';
 import { useGenerateSearchParamsJob } from '../../hooks/useJobMutations';
 import { useLatestJob } from '../../hooks/useProjectJobs';
 import { JobStatusIndicator } from '../common/JobStatusIndicator';
+import { useForm } from '@mantine/form';
+import { useUpdateProject } from '../../hooks/useProjectMutations';
+import { useEffect } from 'react';
+import { notifications } from '@mantine/notifications';
 
 interface StepProps {
   project: Project;
 }
 
+interface FormValues {
+  prompt: string;
+  search_params: SearchParams;
+}
+
 export function StepGenerateSearchParams({ project }: StepProps) {
   const generateSearchParams = useGenerateSearchParamsJob();
+  const updateProjectMutation = useUpdateProject();
   const { job } = useLatestJob(project.id, 'generate_search_params');
+
+  const form = useForm<FormValues>({
+    initialValues: {
+      prompt: project.prompt || '',
+      search_params: project.search_params || { purpose: '', extraction_notes: '', criteria: '' },
+    },
+  });
+
+  // Re-sync form when project data changes from outside (e.g., after generation)
+  useEffect(() => {
+    form.setValues({
+      prompt: project.prompt || '',
+      search_params: project.search_params || { purpose: '', extraction_notes: '', criteria: '' },
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [project]);
 
   const handleGenerate = () => {
     generateSearchParams.mutate({ project_id: project.id });
   };
 
-  const hasBeenProcessed = !!project.search_params;
+  const handleSaveChanges = (values: FormValues) => {
+    updateProjectMutation.mutate(
+      { projectId: project.id, data: values },
+      {
+        onSuccess: () => {
+          notifications.show({
+            title: 'Saved',
+            message: 'Your changes have been saved successfully.',
+            color: 'green',
+          });
+        },
+      }
+    );
+  };
+
+  const hasBeenGenerated = !!project.search_params;
+  const isDirty = form.isDirty();
 
   return (
-    <Stack>
-      <Text>
-        First, we'll use an AI to analyze your high-level prompt and generate structured search parameters. This helps
-        guide the next steps of the process more effectively.
-      </Text>
-      <Textarea label="Your high-level prompt" value={project.prompt || ''} readOnly autosize minRows={2} />
-      <Group justify="flex-end">
-        <Button onClick={handleGenerate} loading={generateSearchParams.isPending} disabled={hasBeenProcessed}>
-          {hasBeenProcessed ? 'Generated' : 'Generate Search Parameters'}
-        </Button>
-      </Group>
+    <form onSubmit={form.onSubmit(handleSaveChanges)}>
+      <Stack>
+        <Text>
+          First, we'll use an AI to analyze your high-level prompt and generate structured search parameters. You can
+          also edit these manually.
+        </Text>
+        <Textarea
+          label="Your high-level prompt"
+          placeholder="e.g., 'All major and minor locations in Skyrim'"
+          autosize
+          minRows={2}
+          {...form.getInputProps('prompt')}
+        />
+        <Group justify="flex-end">
+          <Button
+            variant="default"
+            onClick={handleGenerate}
+            loading={generateSearchParams.isPending}
+            disabled={!form.values.prompt}
+          >
+            {hasBeenGenerated ? 'Re-generate Parameters' : 'Generate Search Parameters'}
+          </Button>
+          {isDirty && (
+            <Button type="submit" loading={updateProjectMutation.isPending}>
+              Save Changes
+            </Button>
+          )}
+        </Group>
 
-      <JobStatusIndicator job={job} title="Generation Job Status" />
+        <JobStatusIndicator job={job} title="Generation Job Status" />
 
-      {project.search_params && (
-        <Paper withBorder p="md" mt="md">
-          <Stack>
-            <Text fw={500}>Generated Purpose:</Text>
-            <Code block>{project.search_params.purpose}</Code>
-            <Text fw={500}>Generated Extraction Notes:</Text>
-            <Code block>{project.search_params.extraction_notes}</Code>
-            <Text fw={500}>Generated Criteria:</Text>
-            <Code block>{project.search_params.criteria}</Code>
-          </Stack>
-        </Paper>
-      )}
-    </Stack>
+        {hasBeenGenerated && (
+          <Paper withBorder p="md" mt="md">
+            <Stack>
+              <Textarea
+                label="Generated Purpose"
+                autosize
+                minRows={2}
+                {...form.getInputProps('search_params.purpose')}
+              />
+              <Textarea
+                label="Generated Extraction Notes"
+                autosize
+                minRows={3}
+                {...form.getInputProps('search_params.extraction_notes')}
+              />
+              <Textarea
+                label="Generated Criteria"
+                autosize
+                minRows={2}
+                {...form.getInputProps('search_params.criteria')}
+              />
+            </Stack>
+          </Paper>
+        )}
+      </Stack>
+    </form>
   );
 }

@@ -58,6 +58,18 @@ export function StepProcessEntries({ project }: StepProps) {
   const totalPages = Math.ceil(totalItems / PAGE_SIZE);
   const isProcessing = project.status === 'processing';
   const isDone = project.status === 'completed' || project.status === 'failed';
+  const hasIncompleteLinks = totalItems > 0 && links.some((link) => link.status !== 'completed');
+
+  let buttonText = 'Start Generation';
+  if (isProcessing) {
+    buttonText = 'Processing...';
+  } else if (project.status === 'links_extracted') {
+    buttonText = 'Start Generation';
+  } else if (isDone && hasIncompleteLinks) {
+    buttonText = 'Reprocess Failed/Pending Links';
+  } else if (isDone) {
+    buttonText = 'Generation Complete';
+  }
 
   if (
     project.status === 'draft' ||
@@ -75,8 +87,12 @@ export function StepProcessEntries({ project }: StepProps) {
       </Text>
 
       <Group justify="flex-end">
-        <Button onClick={handleStart} loading={startGeneration.isPending || isProcessing} disabled={isDone}>
-          {isDone ? 'Generation Complete' : 'Start Generation'}
+        <Button
+          onClick={handleStart}
+          loading={startGeneration.isPending || isProcessing}
+          disabled={startGeneration.isPending || isProcessing || (isDone && !hasIncompleteLinks)}
+        >
+          {buttonText}
         </Button>
       </Group>
 

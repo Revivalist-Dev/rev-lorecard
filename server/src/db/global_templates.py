@@ -103,7 +103,9 @@ async def update_global_template(
 
     params.append(template_id)
     set_clause = ", ".join(set_clause_parts)
-    query = f'UPDATE "GlobalTemplate" SET {set_clause} WHERE id = %s'
+    query = (
+        f'UPDATE "GlobalTemplate" SET {set_clause}, updated_at = NOW() WHERE id = %s'
+    )
 
     await execute_query(query, params)
     return await get_global_template(template_id)
