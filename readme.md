@@ -29,6 +29,7 @@ Open your terminal in that same folder and choose one of the commands below.
         ```bash
         docker run -d --name lorebook-app --restart unless-stopped -p 3000:3000 \
           --env-file .env \
+          -e APP_ENV=production \
           -e DATABASE_TYPE=sqlite \
           -e DATABASE_URL=/app/server/data/lorebook_creator.db \
           -v "$(pwd)/data:/app/server/data" \
@@ -39,6 +40,7 @@ Open your terminal in that same folder and choose one of the commands below.
         ```cmd
         docker run -d --name lorebook-app --restart unless-stopped -p 3000:3000 ^
           --env-file .env ^
+          -e APP_ENV=production ^
           -e DATABASE_TYPE=sqlite ^
           -e DATABASE_URL=/app/server/data/lorebook_creator.db ^
           -v "%cd%/data:/app/server/data" ^
@@ -49,6 +51,7 @@ Open your terminal in that same folder and choose one of the commands below.
         ```powershell
         docker run -d --name lorebook-app --restart unless-stopped -p 3000:3000 `
           --env-file .env `
+          -e APP_ENV=production `
           -e DATABASE_TYPE=sqlite `
           -e DATABASE_URL=/app/server/data/lorebook_creator.db `
           -v "${pwd}/data:/app/server/data" `
@@ -71,6 +74,7 @@ Open your terminal in that same folder and choose one of the commands below.
     # 3. Start the application container
     docker run -d --name lorebook-app --restart unless-stopped --network lorebook-net -p 3000:3000 \
       --env-file .env \
+      -e APP_ENV=production \
       -e DATABASE_TYPE=postgres \
       -e DATABASE_URL=postgresql://user:password@lorebook-db:5432/lorebook_creator \
       ghcr.io/bmen25124/lorebook-creator:latest

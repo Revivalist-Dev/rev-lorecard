@@ -9,6 +9,7 @@ services:
     environment:
       - PORT=${PORT:-3000}
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      - APP_ENV=${APP_ENV:-production}
 
       # --- Default to SQLite ---
       - DATABASE_TYPE=${DATABASE_TYPE:-sqlite}

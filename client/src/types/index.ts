@@ -67,6 +67,12 @@ export interface LorebookEntry {
   updated_at: string;
 }
 
+export interface UpdateLorebookEntryPayload {
+  title?: string;
+  content?: string;
+  keywords?: string[];
+}
+
 export type JobStatus = 'pending' | 'in_progress' | 'completed' | 'failed' | 'cancelling' | 'canceled';
 export type TaskName = 'generate_selector' | 'extract_links' | 'process_project_entries' | 'generate_search_params';
 

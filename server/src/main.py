@@ -29,6 +29,7 @@ from controllers.background_jobs import (
 )
 from controllers.analytics import AnalyticsController
 from controllers.global_templates import GlobalTemplateController
+from controllers.health import HealthController
 from exceptions import (
     generic_exception_handler,
     validation_exception_handler,
@@ -133,6 +134,7 @@ def create_app():
         },
         route_handlers=[
             get_app_info,
+            HealthController,
             ApiRequestLogController,
             ProviderController,
             SSEController,

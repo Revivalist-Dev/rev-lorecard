@@ -1,13 +1,15 @@
 import { useState, useEffect } from 'react';
 import { Stack, Text, Button, Group, Table, Loader, Alert, Title, ActionIcon, Pagination } from '@mantine/core';
-import { IconAlertCircle, IconDownload, IconTrash } from '@tabler/icons-react';
+import { IconAlertCircle, IconDownload, IconPencil, IconTrash } from '@tabler/icons-react';
 import { useProjectEntries } from '../../hooks/useProjectEntries';
-import type { Project } from '../../types';
+import type { LorebookEntry, Project } from '../../types';
 import apiClient from '../../services/api';
 import { notifications } from '@mantine/notifications';
 import { useModals } from '@mantine/modals';
 import { useDeleteLorebookEntry } from '../../hooks/useLorebookEntryMutations';
 import { useSearchParams } from 'react-router-dom';
+import { useDisclosure } from '@mantine/hooks';
+import { LorebookEntryModal } from './LorebookEntryModal';
 
 interface StepCompletedViewProps {
   project: Project;
@@ -20,6 +22,9 @@ export function StepCompletedView({ project }: StepCompletedViewProps) {
   const [searchParams, setSearchParams] = useSearchParams();
   const pageFromUrl = parseInt(searchParams.get(URL_PARAM_KEY) || '1', 10);
   const [activePage, setPage] = useState(isNaN(pageFromUrl) ? 1 : pageFromUrl);
+
+  const [editModalOpened, { open: openEditModal, close: closeEditModal }] = useDisclosure(false);
+  const [selectedEntry, setSelectedEntry] = useState<LorebookEntry | null>(null);
 
   const {
     data: entriesResponse,
@@ -45,6 +50,11 @@ export function StepCompletedView({ project }: StepCompletedViewProps) {
       },
       { replace: true }
     );
+  };
+
+  const handleOpenEditModal = (entry: LorebookEntry) => {
+    setSelectedEntry(entry);
+    openEditModal();
   };
 
   const [isDownloading, setIsDownloading] = useState(false);
@@ -116,68 +126,74 @@ export function StepCompletedView({ project }: StepCompletedViewProps) {
   const totalPages = Math.ceil(totalItems / PAGE_SIZE);
 
   return (
-    <Stack mt="md">
-      <Group justify="space-between">
-        <Title order={3}>Lorebook Generation Complete</Title>
-        <Button
-          leftSection={<IconDownload size={16} />}
-          onClick={handleDownload}
-          loading={isDownloading}
-          disabled={totalItems === 0}
-        >
-          Download Lorebook
-        </Button>
-      </Group>
-
-      <Text c="dimmed">
-        {totalItems} entries have been successfully generated for this project. You can review them below or download
-        the final JSON file.
-      </Text>
-
-      <Table striped highlightOnHover withTableBorder withColumnBorders>
-        <Table.Thead>
-          <Table.Tr>
-            <Table.Th>Title</Table.Th>
-            <Table.Th>Keywords</Table.Th>
-            <Table.Th>Content Snippet</Table.Th>
-            <Table.Th>Actions</Table.Th>
-          </Table.Tr>
-        </Table.Thead>
-        <Table.Tbody>
-          {entries.map((entry) => (
-            <Table.Tr key={entry.id}>
-              <Table.Td>{entry.title}</Table.Td>
-              <Table.Td>{entry.keywords.join(', ')}</Table.Td>
-              <Table.Td>
-                <Text lineClamp={2}>{entry.content}</Text>
-              </Table.Td>
-              <Table.Td>
-                <Group gap="xs" justify="center">
-                  <ActionIcon
-                    variant="subtle"
-                    color="red"
-                    onClick={() => openDeleteModal(entry.id, entry.title)}
-                    loading={deleteEntryMutation.isPending && deleteEntryMutation.variables === entry.id}
-                  >
-                    <IconTrash size={16} />
-                  </ActionIcon>
-                </Group>
-              </Table.Td>
-            </Table.Tr>
-          ))}
-        </Table.Tbody>
-      </Table>
-      {totalItems === 0 && (
-        <Text c="dimmed" ta="center" p="md">
-          No entries were generated.
-        </Text>
-      )}
-
-      {totalPages > 1 && (
-        <Group justify="center" mt="md">
-          <Pagination value={activePage} onChange={handlePageChange} total={totalPages} />
+    <>
+      <LorebookEntryModal opened={editModalOpened} onClose={closeEditModal} entry={selectedEntry} />
+      <Stack mt="md">
+        <Group justify="space-between">
+          <Title order={3}>Lorebook Generation Complete</Title>
+          <Button
+            leftSection={<IconDownload size={16} />}
+            onClick={handleDownload}
+            loading={isDownloading}
+            disabled={totalItems === 0}
+          >
+            Download Lorebook
+          </Button>
         </Group>
-      )}
-    </Stack>
+
+        <Text c="dimmed">
+          {totalItems} entries have been successfully generated for this project. You can review them below or download
+          the final JSON file.
+        </Text>
+
+        <Table striped highlightOnHover withTableBorder withColumnBorders>
+          <Table.Thead>
+            <Table.Tr>
+              <Table.Th>Title</Table.Th>
+              <Table.Th>Keywords</Table.Th>
+              <Table.Th>Content Snippet</Table.Th>
+              <Table.Th>Actions</Table.Th>
+            </Table.Tr>
+          </Table.Thead>
+          <Table.Tbody>
+            {entries.map((entry) => (
+              <Table.Tr key={entry.id}>
+                <Table.Td>{entry.title}</Table.Td>
+                <Table.Td>{entry.keywords.join(', ')}</Table.Td>
+                <Table.Td>
+                  <Text lineClamp={2}>{entry.content}</Text>
+                </Table.Td>
+                <Table.Td>
+                  <Group gap="xs" justify="center">
+                    <ActionIcon variant="subtle" color="blue" onClick={() => handleOpenEditModal(entry)}>
+                      <IconPencil size={16} />
+                    </ActionIcon>
+                    <ActionIcon
+                      variant="subtle"
+                      color="red"
+                      onClick={() => openDeleteModal(entry.id, entry.title)}
+                      loading={deleteEntryMutation.isPending && deleteEntryMutation.variables === entry.id}
+                    >
+                      <IconTrash size={16} />
+                    </ActionIcon>
+                  </Group>
+                </Table.Td>
+              </Table.Tr>
+            ))}
+          </Table.Tbody>
+        </Table>
+        {totalItems === 0 && (
+          <Text c="dimmed" ta="center" p="md">
+            No entries were generated.
+          </Text>
+        )}
+
+        {totalPages > 1 && (
+          <Group justify="center" mt="md">
+            <Pagination value={activePage} onChange={handlePageChange} total={totalPages} />
+          </Group>
+        )}
+      </Stack>
+    </>
   );
 }

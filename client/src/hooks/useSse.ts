@@ -49,6 +49,9 @@ export function useSse(projectId: string | undefined) {
           message: `The job has finished with status: ${updatedJob.status}.`,
           color: updatedJob.status === 'completed' ? 'green' : 'red',
         });
+
+        queryClient.invalidateQueries({ queryKey: ['apiRequestLogs', updatedJob.project_id] });
+        queryClient.invalidateQueries({ queryKey: ['projectAnalytics', updatedJob.project_id] });
       }
     });
 

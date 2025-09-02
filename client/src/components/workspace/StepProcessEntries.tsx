@@ -6,6 +6,7 @@ import { useProjectLinks } from '../../hooks/useProjectLinks';
 import type { Project } from '../../types';
 import { JobStatusIndicator } from '../common/JobStatusIndicator';
 import { useSearchParams } from 'react-router-dom';
+import { useModals } from '@mantine/modals';
 
 interface StepProps {
   project: Project;
@@ -25,6 +26,7 @@ export function StepProcessEntries({ project }: StepProps) {
   const [searchParams, setSearchParams] = useSearchParams();
   const pageFromUrl = parseInt(searchParams.get(URL_PARAM_KEY) || '1', 10);
   const [activePage, setPage] = useState(isNaN(pageFromUrl) ? 1 : pageFromUrl);
+  const modals = useModals();
 
   const startGeneration = useProcessProjectEntriesJob();
   const { job: processingJob } = useLatestJob(project.id, 'process_project_entries');
@@ -49,16 +51,36 @@ export function StepProcessEntries({ project }: StepProps) {
     );
   };
 
-  const handleStart = () => {
-    startGeneration.mutate({ project_id: project.id });
-  };
-
   const links = linksResponse?.data || [];
   const totalItems = linksResponse?.meta.total_items || 0;
   const totalPages = Math.ceil(totalItems / PAGE_SIZE);
   const isJobActive = processingJob?.status === 'pending' || processingJob?.status === 'in_progress';
   const isDone = project.status === 'completed' || project.status === 'failed';
   const hasIncompleteLinks = totalItems > 0 && links.some((link) => link.status !== 'completed');
+
+  const handleStart = () => {
+    modals.openConfirmModal({
+      title: 'Confirm Generation',
+      centered: true,
+      children: (
+        <Stack>
+          <Text size="sm">
+            You are about to process approximately <strong>{totalItems}</strong> links.
+          </Text>
+          <Text size="sm">
+            This will make up to {totalItems} API calls to the <strong>{project.ai_provider_config.model_name}</strong>{' '}
+            model.
+          </Text>
+          <Text size="sm" fw={700}>
+            Are you sure you want to proceed?
+          </Text>
+        </Stack>
+      ),
+      labels: { confirm: 'Start Generation', cancel: 'Cancel' },
+      confirmProps: { color: 'blue' },
+      onConfirm: () => startGeneration.mutate({ project_id: project.id }),
+    });
+  };
 
   let buttonText = 'Start Generation';
   if (isJobActive) {
