@@ -2,6 +2,48 @@
 
 A web application to automatically create structured lorebooks from online sources using AI.
 
+## Screenshot & Videos
+
+<details>
+  <summary>Main Workflow</summary>
+  
+  *A video demonstrating the main workflow of creating a lorebook from a URL.*
+  
+  <video src="https://github.com/bmen25124/lorebook-creator/raw/main/showcase/main-workflow-1.5x.mp4" width="800"></video>
+</details>
+
+<details>
+  <summary>Project Analytics</summary>
+  
+  *View analytics for each project, including token usage and costs.*
+  
+  ![Project Analytics](showcase/project-analytics.png)
+</details>
+
+<details>
+  <summary>API Request Logs</summary>
+  
+  *Inspect detailed logs for every API request made during the process.*
+  
+  ![API Request Logs](showcase/api-request-logs.png)
+</details>
+
+<details>
+  <summary>Link Extraction</summary>
+  
+  *The application automatically extracts relevant links from the source.*
+  
+  ![Link Extraction](showcase/extract-links.png)
+</details>
+
+<details>
+  <summary>Completed Lorebook</summary>
+  
+  *The final generated lorebook, structured and ready for use.*
+  
+  ![Completed Lorebook](showcase/complete.png)
+</details>
+
 ## How to Run the Application
 
 Choose the option that best fits your needs.
