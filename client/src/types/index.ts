@@ -34,7 +34,9 @@ export interface Project {
   templates: ProjectTemplates;
   ai_provider_config: AiProviderConfig;
   requests_per_minute: number;
+  max_pages_to_crawl: number;
   link_extraction_selector?: string[];
+  link_extraction_pagination_selector?: string;
   search_params?: SearchParams;
   status: ProjectStatus;
   created_at: string;
@@ -123,6 +125,7 @@ export interface CreateProjectPayload {
   templates: ProjectTemplates;
   ai_provider_config: AiProviderConfig;
   requests_per_minute: number;
+  max_pages_to_crawl: number;
 }
 
 export interface ProjectAnalytics {

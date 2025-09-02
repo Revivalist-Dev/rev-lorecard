@@ -6,6 +6,8 @@ CREATE TABLE "Project" (
     "prompt" TEXT,
     "search_params" JSONB,
     "link_extraction_selector" TEXT[], -- CSS selectors to extract links
+    "link_extraction_pagination_selector" TEXT,
+    "max_pages_to_crawl" INTEGER NOT NULL DEFAULT 20
     "templates" JSONB NOT NULL,
     "ai_provider_config" JSONB NOT NULL,
     "status" TEXT NOT NULL DEFAULT 'draft',

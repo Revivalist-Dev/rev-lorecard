@@ -44,9 +44,8 @@ export function StepExtractLinks({ project }: StepProps) {
   const { job: latestSelectorJob } = useLatestJob(project.id, 'generate_selector');
   const { job: latestExtractLinksJob } = useLatestJob(project.id, 'extract_links');
 
+  const allUrls = (latestSelectorJob?.result as { found_urls: string[] } | undefined)?.found_urls || [];
   const [selectedUrls, setSelectedUrls] = useState<string[]>([]);
-  const selectorResult = latestSelectorJob?.result as { selectors: Record<string, string[]> } | undefined;
-  const allUrls = selectorResult ? [...new Set(Object.values(selectorResult.selectors).flat())] : [];
 
   const { data: savedLinksResponse, isLoading: isLoadingSavedLinks } = useProjectLinks(project.id, {
     page: activePage,
@@ -56,30 +55,15 @@ export function StepExtractLinks({ project }: StepProps) {
   const isProcessed = project.status !== 'selector_generated';
 
   useEffect(() => {
-    const newPageFromUrl = parseInt(searchParams.get(URL_PARAM_KEY) || '1', 10);
-    const validPage = isNaN(newPageFromUrl) ? 1 : newPageFromUrl;
-    if (validPage !== activePage) {
-      setPage(validPage);
-    }
-  }, [searchParams, activePage]);
-
-  const handlePageChange = (newPage: number) => {
-    setPage(newPage);
-    setSearchParams(
-      (prev) => {
-        prev.set(URL_PARAM_KEY, newPage.toString());
-        return prev;
-      },
-      { replace: true }
-    );
-  };
-
-  useEffect(() => {
     if (!isProcessed && allUrls.length > 0) {
       setSelectedUrls(allUrls);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isProcessed, latestSelectorJob]);
+
+  const handlePageChange = (newPage: number) => {
+    setPage(newPage);
+  };
 
   const handleSaveLinks = () => {
     extractLinks.mutate({ project_id: project.id, urls: selectedUrls });
@@ -91,6 +75,7 @@ export function StepExtractLinks({ project }: StepProps) {
     return <Text c="dimmed">Complete the previous step to extract links.</Text>;
   }
 
+  // VIEW 1: After links are saved, show the results table.
   if (isProcessed) {
     if (isLoadingSavedLinks) {
       return (
@@ -130,22 +115,25 @@ export function StepExtractLinks({ project }: StepProps) {
         </Table>
         {totalPages > 1 && (
           <Group justify="center" mt="md">
-            <Pagination value={activePage} onChange={handlePageChange} total={totalPages} />
+            <Pagination
+              value={pageFromUrl}
+              onChange={(p) => setSearchParams({ [URL_PARAM_KEY]: p.toString() })}
+              total={totalPages}
+            />
           </Group>
         )}
-        <JobStatusIndicator job={latestExtractLinksJob} title="Link Extraction Job Status" />
+        <JobStatusIndicator job={latestExtractLinksJob} title="Link Saving Job Status" />
       </Stack>
     );
   }
 
+  // VIEW 2: Before links are saved, show the selection UI.
   const totalPages = Math.ceil(allUrls.length / PAGE_SIZE);
   const paginatedUrls = allUrls.slice((activePage - 1) * PAGE_SIZE, activePage * PAGE_SIZE);
 
   return (
     <Stack>
-      <Text>
-        Review the links found by the generated selectors. Uncheck any links you wish to exclude from the lorebook.
-      </Text>
+      <Text>Review the links found by the crawler. Uncheck any links you wish to exclude from the lorebook.</Text>
       <Paper withBorder p="md">
         <Group justify="space-between" mb="sm">
           <Title order={5}>
@@ -184,7 +172,7 @@ export function StepExtractLinks({ project }: StepProps) {
         </Button>
       </Group>
 
-      <JobStatusIndicator job={latestExtractLinksJob} title="Link Extraction Job Status" />
+      <JobStatusIndicator job={latestExtractLinksJob} title="Link Saving Job Status" />
     </Stack>
   );
 }

@@ -1,26 +1,67 @@
-import { Stack, Text, Button, Paper, Code, Group, Accordion, ThemeIcon } from '@mantine/core';
-import { IconLink } from '@tabler/icons-react';
+import { useEffect } from 'react';
+import { Stack, Text, Button, Paper, Code, Group, Accordion, TextInput, NumberInput } from '@mantine/core';
+import { useForm } from '@mantine/form';
 import { useGenerateSelectorJob } from '../../hooks/useJobMutations';
+import { useUpdateProject } from '../../hooks/useProjectMutations';
 import { useLatestJob } from '../../hooks/useProjectJobs';
 import type { Project } from '../../types';
 import { JobStatusIndicator } from '../common/JobStatusIndicator';
+import { notifications } from '@mantine/notifications';
 
 interface StepProps {
   project: Project;
 }
 
+interface FormValues {
+  source_url: string;
+  max_pages_to_crawl: number;
+}
+
 export function StepGenerateSelector({ project }: StepProps) {
   const generateSelector = useGenerateSelectorJob();
+  const updateProjectMutation = useUpdateProject();
   const { job: latestSelectorJob } = useLatestJob(project.id, 'generate_selector');
+
+  const form = useForm<FormValues>({
+    initialValues: {
+      source_url: project.source_url || '',
+      max_pages_to_crawl: project.max_pages_to_crawl || 20,
+    },
+    validate: {
+      source_url: (value) => (value.trim().length > 0 ? null : 'Source URL cannot be empty'),
+    },
+  });
+
+  useEffect(() => {
+    form.setValues({
+      source_url: project.source_url || '',
+      max_pages_to_crawl: project.max_pages_to_crawl || 20,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [project]);
 
   const handleGenerate = () => {
     generateSelector.mutate({ project_id: project.id });
   };
 
+  const handleSaveChanges = (values: FormValues) => {
+    updateProjectMutation.mutate(
+      { projectId: project.id, data: values },
+      {
+        onSuccess: () => {
+          notifications.show({ title: 'Saved', message: 'Project settings updated.', color: 'green' });
+          form.resetDirty();
+        },
+      }
+    );
+  };
+
   const isUnlocked = !!project.search_params;
-  const isProcessed = project.status !== 'draft' && project.status !== 'search_params_generated';
-  const selectorResult = latestSelectorJob?.result as { selectors: Record<string, string[]> } | undefined;
+  const selectorResult = latestSelectorJob?.result as
+    | { selectors: string[]; found_urls: string[]; pagination_selector?: string }
+    | undefined;
   const isJobActive = latestSelectorJob?.status === 'pending' || latestSelectorJob?.status === 'in_progress';
+  const hasUnsavedChanges = form.isDirty();
 
   if (!isUnlocked) {
     return <Text c="dimmed">Complete the previous step to generate selectors.</Text>;
@@ -29,63 +70,74 @@ export function StepGenerateSelector({ project }: StepProps) {
   return (
     <Stack>
       <Text>
-        Next, the AI will analyze the HTML of your source URL and your search parameters to propose CSS selectors for
-        finding content links.
+        The AI will analyze your source URL to propose CSS selectors. The system will then use these selectors to crawl
+        the site and find all links.
       </Text>
 
-      <Paper withBorder p="md" bg="dark.6">
-        <Text size="sm">
-          <Text span fw={700}>
-            Source URL:
-          </Text>{' '}
-          {project.source_url}
-        </Text>
-      </Paper>
+      <form onSubmit={form.onSubmit(handleSaveChanges)}>
+        <Paper withBorder p="md">
+          <Stack>
+            <TextInput
+              label="Source URL"
+              placeholder="https://example.com/category/items"
+              {...form.getInputProps('source_url')}
+            />
+            <NumberInput
+              label="Max Pages to Crawl"
+              description="The maximum number of pages to follow via pagination links. Set to 1 to disable."
+              min={1}
+              max={100}
+              {...form.getInputProps('max_pages_to_crawl')}
+            />
+          </Stack>
+        </Paper>
 
-      <Group justify="flex-end">
-        <Button
-          onClick={handleGenerate}
-          loading={generateSelector.isPending || isJobActive}
-          disabled={generateSelector.isPending || isJobActive}
-        >
-          {isJobActive ? 'Generation in Progress...' : isProcessed ? 'Re-generate Selector' : 'Generate Selector'}
-        </Button>
-      </Group>
+        <Group justify="flex-end">
+          {hasUnsavedChanges && (
+            <Button type="submit" loading={updateProjectMutation.isPending} variant="outline">
+              Save Changes
+            </Button>
+          )}
+          <Button
+            onClick={handleGenerate}
+            loading={generateSelector.isPending || isJobActive}
+            disabled={generateSelector.isPending || isJobActive || hasUnsavedChanges}
+            title={hasUnsavedChanges ? 'You have unsaved changes' : ''}
+          >
+            {isJobActive ? 'Crawling...' : 'Generate Selectors & Find Links'}
+          </Button>
+        </Group>
+      </form>
 
-      <JobStatusIndicator job={latestSelectorJob} title="Selector Job Status" />
+      <JobStatusIndicator job={latestSelectorJob} title="Selector Generation & Crawl Status" />
 
       {selectorResult && (
         <Paper withBorder p="md" mt="md">
           <Text fw={500} mb="sm">
-            Generated Selectors & Matched Links:
+            Crawl Complete: Found {selectorResult.found_urls.length} unique links.
           </Text>
           <Accordion variant="separated">
-            {Object.entries(selectorResult.selectors).map(([selector, urls]) => (
-              <Accordion.Item value={selector} key={selector}>
-                <Accordion.Control>
-                  <Code>{selector}</Code> ({urls.length} links found)
-                </Accordion.Control>
-                <Accordion.Panel>
-                  <Stack gap="xs">
-                    {urls.slice(0, 10).map((url, i) => (
-                      <Group key={i} gap="xs" wrap="nowrap">
-                        <ThemeIcon size={20} variant="light">
-                          <IconLink size={14} />
-                        </ThemeIcon>
-                        <Text size="xs" truncate>
-                          {url}
-                        </Text>
-                      </Group>
-                    ))}
-                    {urls.length > 10 && (
-                      <Text size="xs" c="dimmed">
-                        ...and {urls.length - 10} more.
+            <Accordion.Item value="summary">
+              <Accordion.Control>Selectors Used for Crawl</Accordion.Control>
+              <Accordion.Panel>
+                <Stack gap="xs">
+                  <Text size="sm" fw={500}>
+                    Content Selectors:
+                  </Text>
+                  {selectorResult.selectors.map((selector) => (
+                    <Code key={selector}>{selector}</Code>
+                  ))}
+                  {selectorResult.pagination_selector && (
+                    <>
+                      <Text size="sm" fw={500} mt="xs">
+                        Pagination Selector:
                       </Text>
-                    )}
-                  </Stack>
-                </Accordion.Panel>
-              </Accordion.Item>
-            ))}
+                      <Code>{selectorResult.pagination_selector}</Code>
+                    </>
+                  )}
+                </Stack>
+              </Accordion.Panel>
+            </Accordion.Item>
           </Accordion>
         </Paper>
       )}

@@ -1,4 +1,5 @@
 import asyncio
+import hashlib
 from uuid import UUID
 
 from urllib.parse import urljoin
@@ -51,7 +52,7 @@ from services.rate_limiter import (
     wait_for_rate_limit,
 )
 from db.api_request_logs import create_api_request_log, CreateApiRequestLog
-from services.scraper import Scraper
+from services.scraper import Scraper, html_to_markdown
 from providers.index import providers
 from logging_config import get_logger
 from services.templates import create_messages_from_template
@@ -66,7 +67,6 @@ async def generate_selector(job: BackgroundJob, project: Project):
     if not project.search_params:
         raise ValueError("Project must have search params")
 
-    """Generate a CSS selector for a project."""
     scraper = Scraper()
     logger.info(f"[{job.id}] Scraping content from {project.source_url}")
     content = await scraper.get_content(project.source_url, clean=True, pretty=True)
@@ -125,26 +125,76 @@ async def generate_selector(job: BackgroundJob, project: Project):
     )
 
     selector_response = SelectorResponse.model_validate(response.content)
-    selector_urls = {}
-    soup = BeautifulSoup(content, "html.parser")
-    for selector in selector_response.selectors:
-        links = soup.select(selector)
-        urls: list[str] = [link.get("href") for link in links if link.get("href")]  # pyright: ignore[reportAssignmentType]
-        # if URL is not absolute, join with source URL
-        urls = [urljoin(project.source_url, url) for url in urls]
-        selector_urls[selector] = urls
-
     update_payload = UpdateProject(
         link_extraction_selector=selector_response.selectors,
+        link_extraction_pagination_selector=selector_response.pagination_selector,
     )
     if project.status == ProjectStatus.search_params_generated:
         update_payload.status = ProjectStatus.selector_generated
     await update_project(project.id, update_payload)
+
+    logger.info(f"[{job.id}] Starting crawl based on generated selectors.")
+    current_url: str | None = project.source_url
+    found_links_set = set()
+    visited_content_hashes = set()
+    pages_crawled = 0
+
+    while current_url and pages_crawled < project.max_pages_to_crawl:
+        pages_crawled += 1
+        logger.info(f"[{job.id}] Crawling page {pages_crawled}: {current_url}")
+
+        try:
+            html = await scraper.get_content(current_url, clean=True)
+            markdown = html_to_markdown(html)
+        except Exception as e:
+            logger.error(f"Failed to fetch {current_url}: {e}")
+            break
+
+        content_hash = hashlib.md5(markdown.encode()).hexdigest()
+        if content_hash in visited_content_hashes:
+            logger.info(f"[{job.id}] Duplicate page content detected. Ending crawl.")
+            break
+        visited_content_hashes.add(content_hash)
+
+        soup = BeautifulSoup(html, "html.parser")
+
+        # Extract content links
+        for selector in selector_response.selectors:
+            for link in soup.select(selector):
+                if href := link.get("href"):
+                    absolute_url = urljoin(str(current_url), href)  # pyright: ignore[reportArgumentType]
+                    found_links_set.add(absolute_url)
+
+        # Update job progress in real-time
+        await update_job_with_notification(
+            job.id,
+            UpdateBackgroundJob(
+                processed_items=pages_crawled, total_items=len(found_links_set)
+            ),
+        )
+
+        # Find next page link
+        next_page_url = None
+        if selector_response.pagination_selector:
+            if next_page_element := soup.select_one(
+                selector_response.pagination_selector
+            ):
+                if href := next_page_element.get("href"):
+                    next_page_url = urljoin(str(current_url), href)  # pyright: ignore[reportArgumentType]
+
+        if next_page_url == current_url:
+            break
+        current_url = next_page_url
+
     await update_job_with_notification(
         job.id,
         UpdateBackgroundJob(
             status=JobStatus.completed,
-            result=GenerateSelectorResult(selectors=selector_urls),
+            result=GenerateSelectorResult(
+                found_urls=sorted(list(found_links_set)),
+                pagination_selector=selector_response.pagination_selector,
+                selectors=selector_response.selectors,
+            ),
         ),
     )
 
@@ -230,17 +280,26 @@ async def extract_links(job: BackgroundJob, project: Project):
     if not project.source_url:
         raise ValueError("Project must have a source URL")
 
-    """Extract links from a project's source URL."""
     if not isinstance(job.payload, ExtractLinksPayload):
         raise Exception("Invalid payload for extract_links task")
 
     if not project.link_extraction_selector:
         raise Exception("Project has no link_extraction_selector")
 
-    links_to_create = []
-    for url in job.payload.urls:
-        absolute_url = urljoin(project.source_url, url)
-        links_to_create.append(CreateLink(project_id=project.id, url=absolute_url))
+    if not job.payload.urls:
+        logger.warning(f"[{job.id}] Extract links job received no URLs to save.")
+        await update_job_with_notification(
+            job.id,
+            UpdateBackgroundJob(
+                status=JobStatus.completed,
+                result=ExtractLinksResult(links_found=0),
+            ),
+        )
+        return
+
+    links_to_create = [
+        CreateLink(project_id=project.id, url=url) for url in job.payload.urls
+    ]
 
     links = await create_links(links_to_create)
     await send_links_created_notification(job, links)

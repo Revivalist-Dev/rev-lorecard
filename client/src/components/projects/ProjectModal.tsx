@@ -49,6 +49,7 @@ export function ProjectModal({ opened, onClose, project }: ProjectModalProps) {
       source_url: '',
       prompt: '',
       requests_per_minute: 15,
+      max_pages_to_crawl: 20,
       ai_provider_config: { api_provider: '', model_name: '', model_parameters: { temperature: 0.7 } },
       templates: { search_params_generation: '', selector_generation: '', entry_creation: '' },
     },
@@ -178,6 +179,14 @@ export function ProjectModal({ opened, onClose, project }: ProjectModalProps) {
             min={1}
             max={300}
             {...form.getInputProps('requests_per_minute')}
+          />
+          <NumberInput
+            label="Max Pages to Crawl"
+            description="Limit for pagination. Set to 1 to disable."
+            defaultValue={20}
+            min={1}
+            max={100}
+            {...form.getInputProps('max_pages_to_crawl')}
           />
 
           <Accordion variant="separated" defaultValue="templates">

@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import List
+from typing import List, Optional
 
 
 class SelectorResponse(BaseModel):
@@ -10,6 +10,9 @@ class SelectorResponse(BaseModel):
     selectors: List[str] = Field(
         ...,
         description="A list of CSS selectors that target the desired links on the page.",
+    )
+    pagination_selector: Optional[str] = Field(
+        None, description="A CSS selector for the 'next page' link, if any."
     )
 
 

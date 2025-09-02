@@ -65,12 +65,15 @@ class CreateProject(BaseModel):
     templates: ProjectTemplates
     ai_provider_config: AiProviderConfig
     requests_per_minute: int = 15
+    max_pages_to_crawl: int = 20
 
 
 class UpdateProject(BaseModel):
     name: Optional[str] = None
     source_url: Optional[str] = None
     link_extraction_selector: Optional[list[str]] = None
+    link_extraction_pagination_selector: Optional[str] = None
+    max_pages_to_crawl: Optional[int] = None
     templates: Optional[ProjectTemplates] = None
     ai_provider_config: Optional[AiProviderConfig] = None
     requests_per_minute: Optional[int] = None
@@ -81,6 +84,7 @@ class UpdateProject(BaseModel):
 
 class Project(CreateProject):
     link_extraction_selector: Optional[list[str]] = None
+    link_extraction_pagination_selector: Optional[str] = None
     search_params: Optional[SearchParams] = None
     status: ProjectStatus
     created_at: datetime
@@ -89,8 +93,8 @@ class Project(CreateProject):
 
 async def create_project(project: CreateProject) -> Project:
     query = """
-        INSERT INTO "Project" (id, name, source_url, prompt, templates, ai_provider_config, requests_per_minute)
-        VALUES (%s, %s, %s, %s, %s, %s, %s)
+        INSERT INTO "Project" (id, name, source_url, prompt, templates, ai_provider_config, requests_per_minute, max_pages_to_crawl)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
     """
     params = (
         project.id,
@@ -100,6 +104,7 @@ async def create_project(project: CreateProject) -> Project:
         json.dumps(project.templates.model_dump()),
         json.dumps(project.ai_provider_config.model_dump()),
         project.requests_per_minute,
+        project.max_pages_to_crawl,
     )
     await execute_query(query, params)
     return await get_project(project.id)  # pyright: ignore[reportReturnType]

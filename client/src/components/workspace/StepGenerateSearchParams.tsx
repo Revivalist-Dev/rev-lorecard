@@ -80,7 +80,8 @@ export function StepGenerateSearchParams({ project }: StepProps) {
             variant="default"
             onClick={handleGenerate}
             loading={generateSearchParams.isPending || isJobActive}
-            disabled={!form.values.prompt || generateSearchParams.isPending || isJobActive}
+            disabled={!form.values.prompt || generateSearchParams.isPending || isJobActive || isDirty}
+            title={isDirty ? 'You have unsaved changes' : ''}
           >
             {isJobActive ? 'Generating...' : hasBeenGenerated ? 'Re-generate Parameters' : 'Generate Search Parameters'}
           </Button>

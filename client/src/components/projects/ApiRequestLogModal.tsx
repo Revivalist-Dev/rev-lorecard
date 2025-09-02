@@ -1,8 +1,23 @@
-import { useState } from 'react';
-import { Modal, Table, Loader, Alert, Pagination, Group, Text, Tooltip } from '@mantine/core';
-import { IconAlertCircle, IconCircleCheck, IconCircleX } from '@tabler/icons-react';
+import { useState, Fragment } from 'react';
+import {
+  Modal,
+  Table,
+  Loader,
+  Alert,
+  Pagination,
+  Group,
+  Text,
+  Tooltip,
+  ActionIcon,
+  Collapse,
+  Code,
+  Stack,
+  Box,
+} from '@mantine/core';
+import { IconAlertCircle, IconCircleCheck, IconCircleX, IconChevronRight } from '@tabler/icons-react';
 import { useProjectApiRequestLogs } from '../../hooks/useProjectApiRequestLogs';
 import { formatDate } from '../../utils/formatDate';
+import type { ApiRequestLog } from '../../types';
 
 interface ApiRequestLogModalProps {
   opened: boolean;
@@ -11,6 +26,60 @@ interface ApiRequestLogModalProps {
 }
 
 const PAGE_SIZE = 30;
+
+function LogRow({ log }: { log: ApiRequestLog }) {
+  const [opened, setOpened] = useState(false);
+
+  return (
+    <Fragment>
+      <Table.Tr>
+        <Table.Td>
+          <ActionIcon onClick={() => setOpened((o) => !o)} variant="subtle">
+            <IconChevronRight
+              size={16}
+              style={{ transform: opened ? 'rotate(90deg)' : 'none', transition: 'transform 200ms ease' }}
+            />
+          </ActionIcon>
+        </Table.Td>
+        <Table.Td>
+          <Tooltip label={log.error ? 'Failed' : 'Success'}>
+            {log.error ? <IconCircleX color="red" /> : <IconCircleCheck color="green" />}
+          </Tooltip>
+        </Table.Td>
+        <Table.Td>{formatDate(log.timestamp)}</Table.Td>
+        <Table.Td>{log.model_used}</Table.Td>
+        <Table.Td>{log.input_tokens ?? 'N/A'}</Table.Td>
+        <Table.Td>{log.output_tokens ?? 'N/A'}</Table.Td>
+        <Table.Td>{log.calculated_cost?.toFixed(6) ?? 'N/A'}</Table.Td>
+        <Table.Td>{log.latency_ms}</Table.Td>
+      </Table.Tr>
+      <Table.Tr>
+        <Table.Td colSpan={8} style={{ padding: 0, border: 0 }}>
+          <Collapse in={opened}>
+            <Box p="md" bg="dark.6">
+              <Stack>
+                <Text fw={500}>Request Payload</Text>
+                <Code block style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
+                  {JSON.stringify(log.request, null, 2)}
+                </Code>
+                {log.response && (
+                  <>
+                    <Text fw={500} mt="sm">
+                      Response Payload
+                    </Text>
+                    <Code block style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
+                      {JSON.stringify(log.response, null, 2)}
+                    </Code>
+                  </>
+                )}
+              </Stack>
+            </Box>
+          </Collapse>
+        </Table.Td>
+      </Table.Tr>
+    </Fragment>
+  );
+}
 
 export function ApiRequestLogModal({ opened, onClose, projectId }: ApiRequestLogModalProps) {
   const [activePage, setPage] = useState(1);
@@ -36,6 +105,7 @@ export function ApiRequestLogModal({ opened, onClose, projectId }: ApiRequestLog
           <Table striped highlightOnHover withTableBorder>
             <Table.Thead>
               <Table.Tr>
+                <Table.Th style={{ width: 40 }} />
                 <Table.Th>Status</Table.Th>
                 <Table.Th>Timestamp</Table.Th>
                 <Table.Th>Model</Table.Th>
@@ -47,19 +117,7 @@ export function ApiRequestLogModal({ opened, onClose, projectId }: ApiRequestLog
             </Table.Thead>
             <Table.Tbody>
               {logs.map((log) => (
-                <Table.Tr key={log.id}>
-                  <Table.Td>
-                    <Tooltip label={log.error ? 'Failed' : 'Success'}>
-                      {log.error ? <IconCircleX color="red" /> : <IconCircleCheck color="green" />}
-                    </Tooltip>
-                  </Table.Td>
-                  <Table.Td>{formatDate(log.timestamp)}</Table.Td>
-                  <Table.Td>{log.model_used}</Table.Td>
-                  <Table.Td>{log.input_tokens ?? 'N/A'}</Table.Td>
-                  <Table.Td>{log.output_tokens ?? 'N/A'}</Table.Td>
-                  <Table.Td>{log.calculated_cost?.toFixed(6) ?? 'N/A'}</Table.Td>
-                  <Table.Td>{log.latency_ms}</Table.Td>
-                </Table.Tr>
+                <LogRow key={log.id} log={log} />
               ))}
             </Table.Tbody>
           </Table>

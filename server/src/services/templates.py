@@ -22,31 +22,37 @@ def render_prompt(template_str: str, context: Dict[str, Any]) -> str:
 def create_messages_from_template(
     template_str: str, context: dict
 ) -> list[ChatMessage]:
-    """Creates a list of ChatMessage objects from a template string."""
+    """
+    Creates a list of ChatMessage objects from a template string.
+    This version uses a more robust delimiter "--- role: <role>" to avoid
+    conflicts with markdown horizontal rules.
+    """
     messages = []
+    rendered_template = render_prompt(template_str, context)
 
-    template_str = render_prompt(template_str, context)
-
-    # Regex to find all frontmatter blocks and the content that follows them
-    pattern = re.compile(r"^---\s*\n(.*?)\n^---\s*\n(.*?)(?=\n^---|\Z)", re.S | re.M)
-    matches = pattern.findall(template_str)
+    # The pattern now looks for "--- role: <rolename>" at the beginning of a line,
+    # capturing the role and all content until the next such delimiter or the end of the string.
+    pattern = re.compile(
+        r"^---\s*role:\s*(\w+)\s*\n(.*?)(?=\n^---\s*role:|\Z)", re.S | re.M
+    )
+    matches = pattern.findall(rendered_template)
 
     if not matches:
-        # If no frontmatter is found, treat the whole template as a single user message
-        if template_str.strip():
-            content = render_prompt(template_str, context)
-            messages.append(ChatMessage(role="user", content=content))
+        # If no delimiters are found, treat the whole template as a single user message.
+        # This provides backward compatibility for simple, single-message prompts.
+        if rendered_template.strip():
+            messages.append(ChatMessage(role="user", content=rendered_template.strip()))
         return messages
 
-    for frontmatter_str, content_str in matches:
-        role: Literal["system", "user", "assistant"] = "user"  # Default role
-        # simple regex to extract role
-        role_match = re.search(r"role:\s*(\w+)", frontmatter_str)
-        if role_match:
-            role = role_match.group(1)  # pyright: ignore[reportAssignmentType]
+    for role_str, content_str in matches:
+        role: Literal["system", "user", "assistant"] = "user"
+        cleaned_role = role_str.strip().lower()
 
-        if content_str.strip():
-            rendered_content = render_prompt(content_str.strip(), context)
-            messages.append(ChatMessage(role=role, content=rendered_content))
+        if cleaned_role in ("system", "user", "assistant"):
+            role = cleaned_role  # pyright: ignore[reportAssignmentType]
+
+        content = content_str.strip()
+        if content:
+            messages.append(ChatMessage(role=role, content=content))
 
     return messages

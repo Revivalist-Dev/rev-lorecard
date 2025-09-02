@@ -6,7 +6,11 @@ from uuid import UUID, uuid4
 
 from db.connection import execute_query, fetch_query, fetchrow_query
 from db.common import PaginatedResponse, PaginationMeta
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
+
+from logging_config import get_logger
+
+logger = get_logger(__name__)
 
 
 class JobStatus(str, Enum):
@@ -58,9 +62,10 @@ TaskPayload = Union[
 ]
 
 
-# Results
 class GenerateSelectorResult(BaseModel):
-    selectors: Dict[str, List[str]]
+    selectors: List[str]
+    found_urls: List[str]
+    pagination_selector: Optional[str] = None
 
 
 class ExtractLinksResult(BaseModel):
@@ -118,9 +123,13 @@ class BackgroundJob(CreateBackgroundJob):
 
 
 def _deserialize_job(db_row: Dict[str, Any]) -> BackgroundJob:
-    """Deserialize a database row into a BackgroundJob model."""
+    """
+    Deserialize a database row into a BackgroundJob model,
+    gracefully handling parsing errors for payload and result.
+    """
     task_name = db_row["task_name"]
 
+    # --- Gracefully handle payload deserialization ---
     payload_map = {
         TaskName.GENERATE_SELECTOR: GenerateSelectorPayload,
         TaskName.EXTRACT_LINKS: ExtractLinksPayload,
@@ -128,9 +137,14 @@ def _deserialize_job(db_row: Dict[str, Any]) -> BackgroundJob:
         TaskName.GENERATE_SEARCH_PARAMS: GenerateSearchParamsPayload,
     }
     if db_row.get("payload") is not None:
-        payload_model: BaseModel = payload_map[task_name]
-        db_row["payload"] = payload_model.model_validate(db_row["payload"])
+        try:
+            payload_model: BaseModel = payload_map[task_name]
+            db_row["payload"] = payload_model.model_validate(db_row["payload"])
+        except (ValidationError, KeyError) as e:
+            logger.warning(f"Failed to parse payload for job {db_row['id']}: {e}")
+            db_row["payload"] = None  # Set to None on failure
 
+    # --- Gracefully handle result deserialization ---
     result_map = {
         TaskName.GENERATE_SELECTOR: GenerateSelectorResult,
         TaskName.EXTRACT_LINKS: ExtractLinksResult,
@@ -138,8 +152,12 @@ def _deserialize_job(db_row: Dict[str, Any]) -> BackgroundJob:
         TaskName.GENERATE_SEARCH_PARAMS: GenerateSearchParamsResult,
     }
     if db_row.get("result") is not None:
-        result_model: BaseModel = result_map[task_name]
-        db_row["result"] = result_model.model_validate(db_row["result"])
+        try:
+            result_model: BaseModel = result_map[task_name]
+            db_row["result"] = result_model.model_validate(db_row["result"])
+        except (ValidationError, KeyError) as e:
+            logger.warning(f"Failed to parse result for job {db_row['id']}: {e}")
+            db_row["result"] = None  # Set to None on failure
 
     return BackgroundJob(**db_row)
 
