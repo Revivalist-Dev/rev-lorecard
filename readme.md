@@ -57,8 +57,6 @@ Choose the option that best fits your needs.
 
 ### Option 1: Quick Start with Docker (Recommended for Users)
 
-This is the fastest way to run the application. It uses the pre-built image from GitHub and does not require you to download the source code.
-
 **1. Create a directory and `.env` file**
 First, create a folder on your computer for the application's data. Inside that folder, create a file named `.env` and add your API key.
 
