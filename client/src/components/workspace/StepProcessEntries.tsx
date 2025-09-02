@@ -7,6 +7,8 @@ import type { Project } from '../../types';
 import { JobStatusIndicator } from '../common/JobStatusIndicator';
 import { useSearchParams } from 'react-router-dom';
 import { useModals } from '@mantine/modals';
+import apiClient from '../../services/api';
+import { notifications } from '@mantine/notifications';
 
 interface StepProps {
   project: Project;
@@ -26,6 +28,7 @@ export function StepProcessEntries({ project }: StepProps) {
   const [searchParams, setSearchParams] = useSearchParams();
   const pageFromUrl = parseInt(searchParams.get(URL_PARAM_KEY) || '1', 10);
   const [activePage, setPage] = useState(isNaN(pageFromUrl) ? 1 : pageFromUrl);
+  const [isFetchingCount, setIsFetchingCount] = useState(false);
   const modals = useModals();
 
   const startGeneration = useProcessProjectEntriesJob();
@@ -58,28 +61,52 @@ export function StepProcessEntries({ project }: StepProps) {
   const isDone = project.status === 'completed' || project.status === 'failed';
   const hasIncompleteLinks = totalItems > 0 && links.some((link) => link.status !== 'completed');
 
-  const handleStart = () => {
-    modals.openConfirmModal({
-      title: 'Confirm Generation',
-      centered: true,
-      children: (
-        <Stack>
-          <Text size="sm">
-            You are about to process approximately <strong>{totalItems}</strong> links.
-          </Text>
-          <Text size="sm">
-            This will make up to {totalItems} API calls to the <strong>{project.ai_provider_config.model_name}</strong>{' '}
-            model.
-          </Text>
-          <Text size="sm" fw={700}>
-            Are you sure you want to proceed?
-          </Text>
-        </Stack>
-      ),
-      labels: { confirm: 'Start Generation', cancel: 'Cancel' },
-      confirmProps: { color: 'blue' },
-      onConfirm: () => startGeneration.mutate({ project_id: project.id }),
-    });
+  const handleStart = async () => {
+    setIsFetchingCount(true);
+    try {
+      const response = await apiClient.get<{ data: {count: number} }>(`/projects/${project.id}/links/processable-count`);
+      const processableCount = response.data.data.count;
+
+      if (processableCount === 0) {
+        notifications.show({
+          title: 'No Links to Process',
+          message: 'All links for this project have already been processed.',
+          color: 'blue',
+        });
+        return;
+      }
+
+      modals.openConfirmModal({
+        title: 'Confirm Generation',
+        centered: true,
+        children: (
+          <Stack>
+            <Text size="sm">
+              You are about to process <strong>{processableCount}</strong> pending or failed links.
+            </Text>
+            <Text size="sm">
+              This will make up to {processableCount} API calls to the{' '}
+              <strong>{project.ai_provider_config.model_name}</strong> model. This can be a costly operation.
+            </Text>
+            <Text size="sm" fw={700}>
+              Are you sure you want to proceed?
+            </Text>
+          </Stack>
+        ),
+        labels: { confirm: 'Start Generation', cancel: 'Cancel' },
+        confirmProps: { color: 'blue' },
+        onConfirm: () => startGeneration.mutate({ project_id: project.id }),
+      });
+    } catch (error) {
+      console.error('Failed to fetch processable links count', error);
+      notifications.show({
+        title: 'Error',
+        message: 'Could not retrieve the number of links to process. Please try again.',
+        color: 'red',
+      });
+    } finally {
+      setIsFetchingCount(false);
+    }
   };
 
   let buttonText = 'Start Generation';
@@ -111,8 +138,8 @@ export function StepProcessEntries({ project }: StepProps) {
       <Group justify="flex-end">
         <Button
           onClick={handleStart}
-          loading={startGeneration.isPending || isJobActive}
-          disabled={startGeneration.isPending || isJobActive || (isDone && !hasIncompleteLinks)}
+          loading={startGeneration.isPending || isJobActive || isFetchingCount}
+          disabled={startGeneration.isPending || isJobActive || (isDone && !hasIncompleteLinks) || isFetchingCount}
         >
           {buttonText}
         </Button>

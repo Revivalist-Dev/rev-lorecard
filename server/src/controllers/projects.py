@@ -1,6 +1,7 @@
 from litestar import Controller, get, post, patch, delete
 from litestar.exceptions import NotFoundException
 from litestar.params import Body
+from pydantic import BaseModel
 
 from logging_config import get_logger
 from db.projects import (
@@ -15,6 +16,7 @@ from db.projects import (
 )
 from db.links import (
     Link,
+    count_processable_links_by_project as db_count_processable_links_by_project,
     list_links_by_project_paginated as db_list_links_by_project_paginated,
 )
 from db.lorebook_entries import (
@@ -29,6 +31,10 @@ from db.api_request_logs import (
 from db.common import PaginatedResponse, SingleResponse
 
 logger = get_logger(__name__)
+
+
+class CountResponse(BaseModel):
+    count: int
 
 
 class ProjectController(Controller):
@@ -58,6 +64,13 @@ class ProjectController(Controller):
         """List all links for a project with pagination."""
         logger.debug(f"Listing links for project {project_id}")
         return await db_list_links_by_project_paginated(project_id, limit, offset)
+
+    @get("/{project_id:str}/links/processable-count")
+    async def get_processable_links_count(self, project_id: str) -> SingleResponse[CountResponse]:
+        """Get the count of processable (pending or failed) links for a project."""
+        logger.debug(f"Counting processable links for project {project_id}")
+        count = await db_count_processable_links_by_project(project_id)
+        return SingleResponse(data=CountResponse(count=count))
 
     @get("/{project_id:str}/entries")
     async def list_project_entries(

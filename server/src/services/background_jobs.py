@@ -433,8 +433,27 @@ async def process_project_entries(job: BackgroundJob, project: Project):
     scraper = Scraper()
     pending_links = await get_processable_links_for_project(project.id)
     total_links = len(pending_links)
+
+    # If there are no links to process, complete the job successfully.
     if not total_links:
-        raise Exception("No pending links found for project")
+        logger.warning(
+            f"[{job.id}] No pending or failed links found to process. Marking job as complete."
+        )
+        await update_project(project.id, UpdateProject(status=ProjectStatus.completed))
+        await update_job_with_notification(
+            job.id,
+            UpdateBackgroundJob(
+                status=JobStatus.completed,
+                progress=100,
+                total_items=0,
+                processed_items=0,
+                result=ProcessProjectEntriesResult(
+                    entries_created=0,
+                    entries_failed=0,
+                ),
+            ),
+        )
+        return
 
     processed_count = 0
     failed_count = 0
