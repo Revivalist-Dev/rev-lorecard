@@ -1,0 +1,9 @@
+services:
+  app:
+    environment:
+      - PORT=${PORT:-3000}
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      - DATABASE_TYPE=sqlite
+      - DATABASE_URL=/app/server/data/${SQLITE_DB_NAME:-lorebook_creator.db}
+    volumes:
+      - ./data:/app/server/data

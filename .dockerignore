@@ -1,0 +1,40 @@
+# Git
+.git
+.gitignore
+
+# Docker
+Dockerfile
+.dockerignore
+docker-compose.yml
+
+# IDE/Editor files
+.vscode
+.idea
+*.code-workspace
+
+# Local environment files
+.env
+server/.env
+client/.env.local
+
+# Python artifacts
+__pycache__
+.pytest_cache
+*.pyc
+.venv
+
+# Node artifacts
+node_modules
+client/node_modules
+client/dist
+client/dist-ssr
+client/npm-debug.log*
+client/yarn-debug.log*
+client/yarn-error.log*
+client/pnpm-debug.log*
+client/lerna-debug.log*
+
+# Other
+repomix-output.xml
+*.db
+*.db-journal

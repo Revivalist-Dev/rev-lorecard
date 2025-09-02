@@ -1,0 +1,17 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "${PORT:-3000}:${PORT:-3000}"
+    environment:
+      - PORT=${PORT:-3000}
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+
+      # --- Default to SQLite ---
+      - DATABASE_TYPE=${DATABASE_TYPE:-sqlite}
+      - DATABASE_URL=/app/server/data/${SQLITE_DB_NAME:-lorebook_creator.db}
+    volumes:
+      - ./data:/app/server/data

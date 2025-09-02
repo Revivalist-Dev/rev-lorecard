@@ -1,0 +1,25 @@
+# docker-compose.postgres.yml (Override for PostgreSQL)
+
+services:
+  app:
+    depends_on:
+      - db
+    environment:
+      - DATABASE_TYPE=postgres
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-user}:${POSTGRES_PASSWORD:-password}@db:5432/${POSTGRES_DB:-lorebook_creator}
+
+  db:
+    image: postgres:13
+    container_name: lorebook_creator_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
+      POSTGRES_DB: ${POSTGRES_DB:-lorebook_creator}
+    ports:
+      - "5432:5432"
+    volumes:
+      - lorebook_creator_postgres_data:/var/lib/postgresql/data
+
+volumes:
+  lorebook_creator_postgres_data:

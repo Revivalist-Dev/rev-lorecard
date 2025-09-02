@@ -1,3 +1,11 @@
 repomix-output.xml
 *.db
 *.db-journal
+
+# Environment files
+.env
+server/.env
+client/.env.local
+
+# Local data
+data/
