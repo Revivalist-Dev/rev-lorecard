@@ -134,6 +134,16 @@ async def generate_selector(job: BackgroundJob, project: Project):
     await update_project(project.id, update_payload)
 
     logger.info(f"[{job.id}] Starting crawl based on generated selectors.")
+
+    await update_job_with_notification(
+        job.id,
+        UpdateBackgroundJob(
+            total_items=project.max_pages_to_crawl,
+            processed_items=0,
+            progress=0,
+        ),
+    )
+
     current_url: str | None = project.source_url
     found_links_set = set()
     visited_content_hashes = set()
@@ -166,10 +176,12 @@ async def generate_selector(job: BackgroundJob, project: Project):
                     found_links_set.add(absolute_url)
 
         # Update job progress in real-time
+        progress = (pages_crawled / project.max_pages_to_crawl) * 100
         await update_job_with_notification(
             job.id,
             UpdateBackgroundJob(
-                processed_items=pages_crawled, total_items=len(found_links_set)
+                processed_items=pages_crawled,
+                progress=progress,
             ),
         )
 
@@ -190,6 +202,8 @@ async def generate_selector(job: BackgroundJob, project: Project):
         job.id,
         UpdateBackgroundJob(
             status=JobStatus.completed,
+            progress=100,
+            processed_items=pages_crawled,
             result=GenerateSelectorResult(
                 found_urls=sorted(list(found_links_set)),
                 pagination_selector=selector_response.pagination_selector,

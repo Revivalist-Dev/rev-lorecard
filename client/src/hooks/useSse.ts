@@ -28,7 +28,6 @@ export function useSse(projectId: string | undefined) {
 
     // --- JOB STATUS UPDATES ---
     eventSource.addEventListener('job_status_update', (event) => {
-      console.log('Received job_status_update:', event.data);
       const updatedJob: BackgroundJob = JSON.parse(event.data);
       const queryKey = ['jobs', updatedJob.project_id];
 
@@ -54,7 +53,6 @@ export function useSse(projectId: string | undefined) {
     });
 
     eventSource.addEventListener('link_updated', (event) => {
-      console.log('Received link_updated:', event.data);
       const updatedLink: Link = JSON.parse(event.data);
       const queryKey = ['links', updatedLink.project_id];
 
@@ -71,7 +69,7 @@ export function useSse(projectId: string | undefined) {
     });
 
     // After bulk creation, it's simplest to just refetch the links list.
-    eventSource.addEventListener('links_created', (event) => {
+    eventSource.addEventListener('links_created', () => {
       queryClient.invalidateQueries({ queryKey: ['links', projectId] });
     });
 
