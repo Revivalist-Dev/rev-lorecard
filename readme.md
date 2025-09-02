@@ -1,8 +1,8 @@
 # Lorebook Creator
 
-A web application to automatically create structured lorebooks from online sources using AI.
+A web application to automatically create structured lorebooks from URL using AI.
 
-## Screenshot & Videos
+## Screenshots & Videos
 
 <details>
   <summary>Main Workflow</summary>
@@ -45,7 +45,12 @@ https://github.com/user-attachments/assets/1812776a-19e2-42c7-9b0b-00356ebab724
   ![Completed Lorebook](showcase/complete.png)
 </details>
 
-## How to Run the Application
+## Some notes
+- This is not a deepresearch, it doesn't make a web search. You need to give a URL that has multiple links. _Fandom:category_ pages are perfect for the app. For example, you can give [Oblivion Skill Books](https://elderscrolls.fandom.com/wiki/Category:Oblivion:_Skill_Books). So this is going to extract all books and navigate one by one and create a lorebook for each book.
+- You can see check all API request logs on API Requests tab. You can also see the project analytics on Project Analytics tab.
+- Currently, I'm only supporting openrouter because it is enough for me. However if I saw a need to add another API, I will add it.
+
+## How to Install and Run the Application
 
 Choose the option that best fits your needs.
 
