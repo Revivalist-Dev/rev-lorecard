@@ -8,8 +8,9 @@ A web application to automatically create structured lorebooks from online sourc
   <summary>Main Workflow</summary>
   
   *A video demonstrating the main workflow of creating a lorebook from a URL.*
+
+https://github.com/user-attachments/assets/1812776a-19e2-42c7-9b0b-00356ebab724
   
-  <video src="https://github.com/bmen25124/lorebook-creator/raw/main/showcase/main-workflow-1.5x.mp4" width="800"></video>
 </details>
 
 <details>
