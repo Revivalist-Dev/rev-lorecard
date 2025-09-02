@@ -7,6 +7,7 @@ from litestar.testing import AsyncTestClient
 
 from db.connection import set_db_connection, close_database
 from db.database import PostgresDB, SQLiteDB, AsyncDB
+from db.migrations import apply_migrations
 from main import create_app
 
 if sys.platform == "win32":
@@ -36,21 +37,16 @@ async def db(db_type: str, postgres_container: PostgresContainer, tmp_path_facto
         raise ValueError(f"Unsupported db_type: {db_type}")
 
     await db_instance.connect()
+    db_type = "postgres" if isinstance(db_instance, PostgresDB) else "sqlite"
+    await apply_migrations(db_instance, db_type)
     set_db_connection(db_instance)
     yield db_instance
     await close_database()
 
 
-@pytest_asyncio.fixture(scope="session", autouse=True)
-async def setup_database(db: AsyncDB):
-    schema_path = (
-        "src/schema.sql" if isinstance(db, PostgresDB) else "src/schema.sqlite.sql"
-    )
-    await db.init_db(schema_path)
-
-
-@pytest_asyncio.fixture(scope="session")
+@pytest_asyncio.fixture(scope="function")
 async def client_test(db: AsyncDB):
     app = create_app()
-    async with AsyncTestClient(app) as client:
-        yield client
+    async with db.transaction():
+        async with AsyncTestClient(app) as client:
+            yield client

@@ -2,6 +2,7 @@ import os
 from typing import Optional
 
 from db.database import AsyncDB, PostgresDB, SQLiteDB
+from db.migrations import apply_migrations
 from logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -35,7 +36,7 @@ async def init_database():
     if db:
         return
 
-    db_type = os.getenv("DATABASE_TYPE", "postgres").lower()
+    db_type = os.getenv("DATABASE_TYPE", "sqlite").lower()
     logger.info(f"Initializing database of type: {db_type}")
 
     if db_type == "postgres":
@@ -43,21 +44,14 @@ async def init_database():
             "DATABASE_URL", "postgresql://user:password@localhost:5432/lorebook_creator"
         )
         db = PostgresDB(db_url)
-        schema_path = "src/schema.sql"
     elif db_type == "sqlite":
         db_url = os.environ.get("DATABASE_URL", "lorebook_creator.db")
         db = SQLiteDB(db_url)
-        schema_path = "src/schema.sqlite.sql"
     else:
         raise ValueError(f"Unsupported DATABASE_TYPE: {db_type}")
 
     await db.connect()
-    initialized = await db.is_initialized()
-    if not initialized:
-        logger.info("Database tables not found, creating schema.")
-        await db.init_db(schema_path)
-    else:
-        logger.info("Database already initialized.")
+    await apply_migrations(db, db_type)
 
 
 async def close_database():

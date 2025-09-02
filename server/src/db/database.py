@@ -1,4 +1,3 @@
-import os
 import json
 from uuid import UUID
 from datetime import datetime
@@ -47,14 +46,6 @@ class AsyncDB(ABC):
         pass
 
     @abstractmethod
-    async def init_db(self, schema_path: str):
-        pass
-
-    @abstractmethod
-    async def is_initialized(self) -> bool:
-        pass
-
-    @abstractmethod
     async def get_and_lock_pending_background_job(self) -> Optional[Dict[str, Any]]:
         pass
 
@@ -62,6 +53,11 @@ class AsyncDB(ABC):
     def transaction(self) -> AbstractAsyncContextManager["AsyncDBTransaction"]:
         """Provides a transactional context."""
         raise NotImplementedError
+
+    @abstractmethod
+    async def executescript(self, script: str) -> None:
+        """Executes a multi-statement SQL script."""
+        pass
 
 
 class AsyncDBTransaction(ABC):
@@ -171,15 +167,6 @@ class PostgresDB(AsyncDB):
                 await cur.execute(sql.SQL(query), self._process_params(params))
                 return await cur.fetchone()
 
-    async def init_db(self, schema_path: str):
-        with open(schema_path, "r") as f:
-            schema: LiteralString = f.read()  # pyright: ignore[reportAssignmentType]
-        await self.execute(schema)
-
-    async def is_initialized(self) -> bool:
-        res = await self.fetch_one("SELECT to_regclass('public.\"Project\"')")
-        return res is not None and res["to_regclass"] is not None
-
     async def get_and_lock_pending_background_job(self) -> Optional[Dict[str, Any]]:
         query = """
             WITH oldest_pending AS (
@@ -196,6 +183,10 @@ class PostgresDB(AsyncDB):
             RETURNING *;
         """
         return await self.fetch_one(query)
+
+    async def executescript(self, script: str) -> None:
+        # psycopg can execute multi-statement scripts with a single execute call
+        await self.execute(script)  # pyright: ignore[reportArgumentType]
 
     @asynccontextmanager
     async def transaction(self) -> AsyncGenerator[_PostgresTransaction, None]:
@@ -336,23 +327,6 @@ class SQLiteDB(AsyncDB):
             row = await cursor.fetchone()
             return self._process_result(dict(row) if row else None)
 
-    async def init_db(self, schema_path: str):
-        if not os.path.exists(schema_path):
-            raise FileNotFoundError(f"SQLite schema file not found at {schema_path}")
-
-        with open(schema_path, "r") as f:
-            schema_sqlite = f.read()
-
-        if self._conn:
-            await self._conn.executescript(schema_sqlite)
-            await self._conn.commit()
-
-    async def is_initialized(self) -> bool:
-        res = await self.fetch_one(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name='Project'"
-        )
-        return res is not None
-
     async def get_and_lock_pending_background_job(self) -> Optional[Dict[str, Any]]:
         if not self._conn:
             raise ConnectionError("Database is not connected")
@@ -380,6 +354,12 @@ class SQLiteDB(AsyncDB):
                 RETURNING *
             """
             return await tx.fetch_one(update_query, (job_id,))
+
+    async def executescript(self, script: str) -> None:
+        if not self._conn:
+            raise ConnectionError("Database is not connected")
+        await self._conn.executescript(script)
+        await self._conn.commit()
 
     @asynccontextmanager
     async def transaction(self) -> AsyncGenerator[_SQLiteTransaction, None]:
