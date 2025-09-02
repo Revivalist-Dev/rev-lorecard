@@ -13,14 +13,12 @@ db: Optional[AsyncDB] = None
 async def get_db_connection() -> AsyncDB:
     """
     Returns the global database connection instance.
-    Initializes the database connection if it doesn't exist.
+    Raises an exception if the database has not been initialized.
     """
-    global db
     if db is None:
-        await init_database()
-
-    if db is None:  # check again after potential initialization
-        raise ConnectionError("Database could not be initialized.")
+        raise ConnectionError(
+            "Database has not been initialized. Call init_database() first."
+        )
     return db
 
 

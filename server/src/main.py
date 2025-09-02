@@ -3,6 +3,7 @@ from pathlib import Path
 import sys
 from dotenv import load_dotenv
 from logging_config import get_logger, setup_logging
+import os
 
 import uvicorn
 from litestar import Litestar, asgi, get
@@ -29,6 +30,7 @@ from exceptions import (
     validation_exception_handler,
     value_error_exception_handler,
 )
+from db.connection import init_database
 from db.global_templates import create_global_template, get_global_template
 from db.global_templates import CreateGlobalTemplate
 import default_templates
@@ -140,19 +142,31 @@ def create_app():
 
 app = create_app()
 
-if sys.platform == "win32":
-    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
-if __name__ == "__main__":
+async def main():
+    """Main function to orchestrate application startup."""
     load_dotenv()
     setup_logging()
-    logger.info("Starting worker thread")
 
-    def run_worker_in_loop():
-        asyncio.run(run_worker())
+    logger.info("Initializing database...")
+    await init_database()
+    logger.info("Database initialization complete.")
 
-    worker_thread = threading.Thread(target=run_worker_in_loop, daemon=True)
+    logger.info("Starting worker thread...")
+    worker_thread = threading.Thread(
+        target=lambda: asyncio.run(run_worker()), daemon=True
+    )
     worker_thread.start()
 
-    logger.info("Starting API server")
-    uvicorn.run(app, host="0.0.0.0", port=3000)
+    port = int(os.getenv("PORT", 3000))
+    config = uvicorn.Config(app, host="0.0.0.0", port=port, log_config=None)
+    server = uvicorn.Server(config)
+
+    logger.info(f"Starting API server on http://0.0.0.0:{port}")
+    await server.serve()
+
+
+if __name__ == "__main__":
+    if sys.platform == "win32":
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+    asyncio.run(main())
