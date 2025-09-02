@@ -1,11 +1,27 @@
-import { AppShell, Burger, Group, Title, NavLink, Box } from '@mantine/core';
+import { AppShell, Burger, Group, Title, NavLink, Box, Text, Anchor } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { Link, Outlet, useLocation } from 'react-router-dom';
 import { IconHome } from '@tabler/icons-react';
+import { useQuery } from '@tanstack/react-query';
+import apiClient from '../../services/api';
+
+interface AppInfo {
+  version: string;
+}
+
+const fetchAppInfo = async (): Promise<AppInfo> => {
+  const response = await apiClient.get('/info');
+  return response.data;
+};
 
 export function AppLayout() {
   const [opened, { toggle }] = useDisclosure();
   const { pathname } = useLocation();
+  const { data: appInfo } = useQuery({
+    queryKey: ['appInfo'],
+    queryFn: fetchAppInfo,
+    staleTime: Infinity,
+  });
 
   return (
     <AppShell
@@ -43,6 +59,16 @@ export function AppLayout() {
 
       <AppShell.Main>
         <Outlet />
+        <Box component="footer" p="md" mt="xl" style={{ textAlign: 'center' }}>
+          <Text c="dimmed" size="xs">
+            Lorebook Creator
+            {appInfo?.version && ` - Version: ${appInfo.version}`}
+            {' | '}
+            <Anchor href="https://github.com/bmen25124/lorebook-creator" target="_blank" c="dimmed" size="xs">
+              GitHub
+            </Anchor>
+          </Text>
+        </Box>
       </AppShell.Main>
     </AppShell>
   );

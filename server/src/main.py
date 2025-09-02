@@ -2,6 +2,7 @@ import asyncio
 from pathlib import Path
 import sys
 from dotenv import load_dotenv
+from db.background_jobs import reset_in_progress_jobs_to_pending
 from logging_config import get_logger, setup_logging
 import os
 
@@ -15,6 +16,7 @@ from litestar.types import Receive, Scope, Send
 from litestar.file_system import BaseLocalFileSystem
 from litestar.response.file import ASGIFileResponse
 import threading
+from pydantic import BaseModel
 
 from worker import run_worker
 from controllers.api_request_logs import ApiRequestLogController
@@ -22,7 +24,9 @@ from controllers.providers import ProviderController
 from controllers.sse import SSEController
 from controllers.projects import ProjectController
 from controllers.lorebook_entries import LorebookEntryController
-from controllers.background_jobs import BackgroundJobController
+from controllers.background_jobs import (
+    BackgroundJobController,
+)
 from controllers.analytics import AnalyticsController
 from controllers.global_templates import GlobalTemplateController
 from exceptions import (
@@ -75,6 +79,12 @@ async def create_default_templates():
             logger.info(f"Created default template: {template.name}")
 
 
+async def recover_stale_jobs():
+    """Resets 'in_progress' jobs to 'pending' on startup."""
+    logger.info("Checking for stale jobs to recover...")
+    await reset_in_progress_jobs_to_pending()
+
+
 CLIENT_BUILD_DIR = Path(__file__).parent.parent.parent / "client" / "dist"
 assets_app = StaticFiles(
     is_html_mode=False,
@@ -103,6 +113,16 @@ async def spa_fallback(path: str | None = None) -> ASGIFileResponse:
     )
 
 
+class AppInfo(BaseModel):
+    version: str
+
+
+@get(path="/info", sync_to_thread=False)
+async def get_app_info() -> AppInfo:
+    """Returns basic application information, like the version."""
+    return AppInfo(version=os.getenv("APP_VERSION", "development"))
+
+
 def create_app():
     api_router = Router(
         path="/api",
@@ -112,6 +132,7 @@ def create_app():
             ValueError: value_error_exception_handler,
         },
         route_handlers=[
+            get_app_info,
             ApiRequestLogController,
             ProviderController,
             SSEController,
@@ -135,7 +156,7 @@ def create_app():
             serve_assets,
             spa_fallback,
         ],
-        on_startup=[create_default_templates],
+        on_startup=[create_default_templates, recover_stale_jobs],
         static_files_config=None,
     )
 

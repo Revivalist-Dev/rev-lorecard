@@ -19,12 +19,16 @@ FROM python:3.10-slim
 
 WORKDIR /app
 
+# Argument to receive the version from the build command
+ARG APP_VERSION=development
+
 # Set environment variables for non-interactive installs and defaults
 ENV PYTHONDONTWRITEBYTECODE 1
 ENV PYTHONUNBUFFERED 1
 ENV PORT=3000
 ENV DATABASE_TYPE=sqlite
 ENV DATABASE_URL=lorebook_creator.db
+ENV APP_VERSION=${APP_VERSION}
 
 # Install uv, the Python package manager
 RUN pip install uv

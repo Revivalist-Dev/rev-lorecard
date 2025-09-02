@@ -278,3 +278,18 @@ async def delete_background_job(job_id: UUID) -> None:
     db = await get_db_connection()
     query = 'DELETE FROM "BackgroundJob" WHERE id = %s'
     await db.execute(query, (job_id,))
+
+
+async def reset_in_progress_jobs_to_pending():
+    """
+    Resets any jobs that were 'in_progress' or 'cancelling' back to 'pending'.
+    This is useful for recovering from an unexpected application shutdown.
+    """
+    db = await get_db_connection()
+    query = """
+        UPDATE "BackgroundJob"
+        SET status = 'pending'
+        WHERE status IN ('in_progress', 'cancelling')
+    """
+    await db.execute(query)
+    logger.info("Reset stale 'in_progress' and 'cancelling' jobs to 'pending'.")
