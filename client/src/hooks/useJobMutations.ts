@@ -1,11 +1,36 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import apiClient from '../services/api';
-import type { BackgroundJob, SingleResponse } from '../types';
+import type { BackgroundJob, PaginatedResponse, SingleResponse } from '../types';
 import { notifications } from '@mantine/notifications';
 
 interface CreateJobPayload {
   project_id: string;
 }
+
+const optimisticallyAddNewJob = (queryClient: ReturnType<typeof useQueryClient>, newJob: BackgroundJob) => {
+  const projectId = newJob.project_id;
+  const queryKey = ['jobs', projectId];
+
+  // Immediately update the 'jobs' query cache
+  queryClient.setQueryData<PaginatedResponse<BackgroundJob>>(queryKey, (oldData) => {
+    // If there's no old data, create a new structure
+    if (!oldData) {
+      return {
+        data: [newJob],
+        meta: { current_page: 1, per_page: 200, total_items: 1 },
+      };
+    }
+
+    return {
+      ...oldData,
+      data: [newJob, ...oldData.data],
+      meta: {
+        ...oldData.meta,
+        total_items: oldData.meta.total_items + 1,
+      },
+    };
+  });
+};
 
 const createJob =
   (endpoint: string) =>
@@ -19,10 +44,13 @@ const useJobMutation = (endpoint: string, notificationTitle: string) => {
 
   return useMutation({
     mutationFn: createJob(endpoint),
-    onSuccess: (data) => {
-      const projectId = data.data.project_id;
-      // Invalidate the project query to refetch its status and related jobs
-      queryClient.invalidateQueries({ queryKey: ['project', projectId] });
+    onSuccess: (response) => {
+      const newJob = response.data;
+
+      optimisticallyAddNewJob(queryClient, newJob);
+
+      queryClient.invalidateQueries({ queryKey: ['project', newJob.project_id] });
+
       notifications.show({
         title: notificationTitle,
         message: 'The background job has been started successfully.',
@@ -46,7 +74,7 @@ export const useGenerateSelectorJob = () => useJobMutation('generate-selector', 
 export const useProcessProjectEntriesJob = () =>
   useJobMutation('process-project-entries', 'Lorebook Generation Started');
 
-// The extract-links job has a different payload
+// The extract-links job has a different payload but can use the same logic
 interface ExtractLinksPayload {
   project_id: string;
   urls: string[];
@@ -60,9 +88,13 @@ export const useExtractLinksJob = () => {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: createExtractLinksJob,
-    onSuccess: (data) => {
-      const projectId = data.data.project_id;
-      queryClient.invalidateQueries({ queryKey: ['project', projectId] });
+    onSuccess: (response) => {
+      const newJob = response.data;
+
+      optimisticallyAddNewJob(queryClient, newJob);
+
+      queryClient.invalidateQueries({ queryKey: ['project', newJob.project_id] });
+
       notifications.show({
         title: 'Link Extraction Started',
         message: 'The links are being saved to the project.',

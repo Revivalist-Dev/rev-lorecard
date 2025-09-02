@@ -1,4 +1,3 @@
-// client/src/hooks/useProjectAnalytics.ts
 import { useQuery } from '@tanstack/react-query';
 import apiClient from '../services/api';
 import type { ProjectAnalytics, SingleResponse } from '../types';

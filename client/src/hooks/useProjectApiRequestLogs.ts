@@ -1,4 +1,3 @@
-// client/src/hooks/useProjectApiRequestLogs.ts
 import { useQuery } from '@tanstack/react-query';
 import apiClient from '../services/api';
 import type { ApiRequestLog, PaginatedResponse } from '../types';

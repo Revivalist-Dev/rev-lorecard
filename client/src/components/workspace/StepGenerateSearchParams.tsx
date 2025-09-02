@@ -59,6 +59,7 @@ export function StepGenerateSearchParams({ project }: StepProps) {
 
   const hasBeenGenerated = !!project.search_params;
   const isDirty = form.isDirty();
+  const isJobActive = job?.status === 'pending' || job?.status === 'in_progress';
 
   return (
     <form onSubmit={form.onSubmit(handleSaveChanges)}>
@@ -78,10 +79,10 @@ export function StepGenerateSearchParams({ project }: StepProps) {
           <Button
             variant="default"
             onClick={handleGenerate}
-            loading={generateSearchParams.isPending}
-            disabled={!form.values.prompt}
+            loading={generateSearchParams.isPending || isJobActive}
+            disabled={!form.values.prompt || generateSearchParams.isPending || isJobActive}
           >
-            {hasBeenGenerated ? 'Re-generate Parameters' : 'Generate Search Parameters'}
+            {isJobActive ? 'Generating...' : hasBeenGenerated ? 'Re-generate Parameters' : 'Generate Search Parameters'}
           </Button>
           {isDirty && (
             <Button type="submit" loading={updateProjectMutation.isPending}>

@@ -72,19 +72,14 @@ async def update_job_with_notification(
 async def send_job_status_notification(job: BackgroundJob):
     """Send SSE notification about job status change."""
     try:
-        if job.task_name in [
-            TaskName.GENERATE_SELECTOR,
-            TaskName.EXTRACT_LINKS,
-            TaskName.PROCESS_PROJECT_ENTRIES,
-        ]:
-            # Fetch the latest job state to include progress
-            latest_job = await get_background_job(job.id)
-            if latest_job:
-                await SSEController.send_event_to_project(
-                    project_id=job.project_id,
-                    event_type="job_status_update",
-                    data=latest_job.model_dump(),
-                )
+        # Fetch the latest job state to include progress
+        latest_job = await get_background_job(job.id)
+        if latest_job:
+            await SSEController.send_event_to_project(
+                project_id=job.project_id,
+                event_type="job_status_update",
+                data=latest_job.model_dump(),
+            )
     except Exception as e:
         logger.error(f"Error sending SSE notification: {e}", exc_info=True)
 

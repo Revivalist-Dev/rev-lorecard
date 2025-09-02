@@ -20,6 +20,7 @@ export function StepGenerateSelector({ project }: StepProps) {
   const isUnlocked = !!project.search_params;
   const isProcessed = project.status !== 'draft' && project.status !== 'search_params_generated';
   const selectorResult = latestSelectorJob?.result as { selectors: Record<string, string[]> } | undefined;
+  const isJobActive = latestSelectorJob?.status === 'pending' || latestSelectorJob?.status === 'in_progress';
 
   if (!isUnlocked) {
     return <Text c="dimmed">Complete the previous step to generate selectors.</Text>;
@@ -42,8 +43,12 @@ export function StepGenerateSelector({ project }: StepProps) {
       </Paper>
 
       <Group justify="flex-end">
-        <Button onClick={handleGenerate} loading={generateSelector.isPending}>
-          {isProcessed ? 'Re-generate Selector' : 'Generate Selector'}
+        <Button
+          onClick={handleGenerate}
+          loading={generateSelector.isPending || isJobActive}
+          disabled={generateSelector.isPending || isJobActive}
+        >
+          {isJobActive ? 'Generation in Progress...' : isProcessed ? 'Re-generate Selector' : 'Generate Selector'}
         </Button>
       </Group>
 

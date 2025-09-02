@@ -53,6 +53,8 @@ export function ProjectDetailPage() {
 
   const project = projectResponse?.data;
 
+  const highestReachableStep = project ? statusToStepIndex[project.status] : 0;
+
   const stepFromUrl = searchParams.get('step') as StepIdentifier;
   const activeStep =
     stepFromUrl && stepIdentifiers.includes(stepFromUrl)
@@ -90,6 +92,11 @@ export function ProjectDetailPage() {
     return <Text>Project not found.</Text>;
   }
 
+  const futureStepStyle = (stepIndex: number): React.CSSProperties => ({
+    opacity: stepIndex > highestReachableStep ? 0.5 : 1,
+    transition: 'opacity 300ms ease', // Optional: for a smooth transition
+  });
+
   return (
     <>
       <ApiRequestLogModal opened={logsModalOpened} onClose={closeLogsModal} projectId={project.id} />
@@ -116,19 +123,19 @@ export function ProjectDetailPage() {
 
         <Paper withBorder p="xl" mt="lg" radius="md">
           <Stepper active={activeStep} onStepClick={handleStepClick}>
-            <Stepper.Step label="Step 1" description="Search Params">
+            <Stepper.Step label="Step 1" description="Search Params" style={futureStepStyle(0)}>
               <StepGenerateSearchParams project={project} />
             </Stepper.Step>
-            <Stepper.Step label="Step 2" description="Generate Selector">
+            <Stepper.Step label="Step 2" description="Generate Selector" style={futureStepStyle(1)}>
               <StepGenerateSelector project={project} />
             </Stepper.Step>
-            <Stepper.Step label="Step 3" description="Extract Links">
+            <Stepper.Step label="Step 3" description="Extract Links" style={futureStepStyle(2)}>
               <StepExtractLinks project={project} />
             </Stepper.Step>
-            <Stepper.Step label="Step 4" description="Generate Entries">
+            <Stepper.Step label="Step 4" description="Generate Entries" style={futureStepStyle(3)}>
               <StepProcessEntries project={project} />
             </Stepper.Step>
-            <Stepper.Step label="Completed" description="Review & Download">
+            <Stepper.Step label="Completed" description="Review & Download" style={futureStepStyle(4)}>
               <StepCompletedView project={project} />
             </Stepper.Step>
           </Stepper>

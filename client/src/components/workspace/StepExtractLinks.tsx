@@ -85,6 +85,8 @@ export function StepExtractLinks({ project }: StepProps) {
     extractLinks.mutate({ project_id: project.id, urls: selectedUrls });
   };
 
+  const isJobActive = latestExtractLinksJob?.status === 'pending' || latestExtractLinksJob?.status === 'in_progress';
+
   if (project.status === 'draft' || project.status === 'search_params_generated') {
     return <Text c="dimmed">Complete the previous step to extract links.</Text>;
   }
@@ -175,9 +177,11 @@ export function StepExtractLinks({ project }: StepProps) {
       <Group justify="flex-end">
         <Button
           onClick={handleSaveLinks}
-          loading={extractLinks.isPending}
-          disabled={selectedUrls.length === 0}
-        >{`Save ${selectedUrls.length} Links`}</Button>
+          loading={extractLinks.isPending || isJobActive}
+          disabled={selectedUrls.length === 0 || extractLinks.isPending || isJobActive}
+        >
+          {isJobActive ? 'Saving...' : `Save ${selectedUrls.length} Links`}
+        </Button>
       </Group>
 
       <JobStatusIndicator job={latestExtractLinksJob} title="Link Extraction Job Status" />

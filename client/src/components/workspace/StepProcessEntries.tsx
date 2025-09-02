@@ -56,12 +56,12 @@ export function StepProcessEntries({ project }: StepProps) {
   const links = linksResponse?.data || [];
   const totalItems = linksResponse?.meta.total_items || 0;
   const totalPages = Math.ceil(totalItems / PAGE_SIZE);
-  const isProcessing = project.status === 'processing';
+  const isJobActive = processingJob?.status === 'pending' || processingJob?.status === 'in_progress';
   const isDone = project.status === 'completed' || project.status === 'failed';
   const hasIncompleteLinks = totalItems > 0 && links.some((link) => link.status !== 'completed');
 
   let buttonText = 'Start Generation';
-  if (isProcessing) {
+  if (isJobActive) {
     buttonText = 'Processing...';
   } else if (project.status === 'links_extracted') {
     buttonText = 'Start Generation';
@@ -89,8 +89,8 @@ export function StepProcessEntries({ project }: StepProps) {
       <Group justify="flex-end">
         <Button
           onClick={handleStart}
-          loading={startGeneration.isPending || isProcessing}
-          disabled={startGeneration.isPending || isProcessing || (isDone && !hasIncompleteLinks)}
+          loading={startGeneration.isPending || isJobActive}
+          disabled={startGeneration.isPending || isJobActive || (isDone && !hasIncompleteLinks)}
         >
           {buttonText}
         </Button>
@@ -105,7 +105,7 @@ export function StepProcessEntries({ project }: StepProps) {
             <Text fw={500}>Status:</Text>
             <Badge color={statusColors[processingJob.status]}>{processingJob.status}</Badge>
           </Group>
-          <Progress value={processingJob.progress || 0} striped animated={isProcessing} />
+          <Progress value={processingJob.progress || 0} striped animated={isJobActive} />
           <Text c="dimmed" size="sm">
             {processingJob.processed_items || 0} / {processingJob.total_items || links.length} links processed
           </Text>

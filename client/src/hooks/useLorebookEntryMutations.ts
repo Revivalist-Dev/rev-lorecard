@@ -1,4 +1,3 @@
-// client/src/hooks/useLorebookEntryMutations.ts
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import apiClient from '../services/api';
 import { notifications } from '@mantine/notifications';

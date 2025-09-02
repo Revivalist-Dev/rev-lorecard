@@ -1,4 +1,3 @@
-// client/src/hooks/useProjectEntries.ts
 import { useQuery } from '@tanstack/react-query';
 import apiClient from '../services/api';
 import type { LorebookEntry, PaginatedResponse } from '../types';

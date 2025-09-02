@@ -11,6 +11,8 @@ import '@mantine/notifications/styles.css';
 import './index.css';
 
 const queryClient = new QueryClient();
+// @ts-ignore
+window.__TANSTACK_QUERY_CLIENT__ = queryClient;
 
 const theme = createTheme({
   colors: {

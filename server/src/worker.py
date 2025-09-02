@@ -79,13 +79,13 @@ async def run_worker():
                         await update_background_job(
                             job.id, UpdateBackgroundJob(status=JobStatus.pending)
                         )
-                        await asyncio.sleep(5)
+                        await asyncio.sleep(2)
                 else:
                     logger.debug("No pending jobs found. Still polling.")
-                    await asyncio.sleep(5)
+                    await asyncio.sleep(2)
             else:
                 await asyncio.sleep(1)
 
         except Exception as e:
             logger.error(f"Worker main loop encountered an error: {e}", exc_info=True)
-            await asyncio.sleep(10)
+            await asyncio.sleep(4)
