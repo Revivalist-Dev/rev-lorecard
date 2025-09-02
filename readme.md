@@ -1,13 +1,13 @@
 # Lorebook Creator
 
-A web application to automatically create structured lorebooks from URL using AI.
+A web application to automatically create structured lorebooks from a URL using AI.
 
 ## Screenshots & Videos
 
 <details>
   <summary>Main Workflow</summary>
   
-  *A video demonstrating the main workflow of creating a lorebook from a URL.*
+  *A video demonstrating the main workflow of creating a lorebook from a URL*
 
 https://github.com/user-attachments/assets/1812776a-19e2-42c7-9b0b-00356ebab724
   
@@ -46,10 +46,10 @@ https://github.com/user-attachments/assets/1812776a-19e2-42c7-9b0b-00356ebab724
 </details>
 
 ## Some notes
-- This is not a deepresearch, it doesn't make a web search. You need to give a URL that has multiple links. _Fandom:category_ pages are perfect for the app. For example, you can give [Oblivion Skill Books](https://elderscrolls.fandom.com/wiki/Category:Oblivion:_Skill_Books). So this is going to extract all books and navigate one by one and create a lorebook for each book.
-- You can edit all prompts by using LLMs.
-- You can see all API request logs on API Requests modal. You can also see the project analytics on Project Analytics modal.
-- Currently, I'm only supporting openrouter because it is enough for me. However if I saw a need to add another API, I will add it.
+- This is not deep research; it doesn't involve a web search. You need to give a URL that has multiple links. _Fandom:category_ pages are perfect for the app. For example, you can give [Oblivion Skill Books](https://elderscrolls.fandom.com/wiki/Category:Oblivion:_Skill_Books). So this is going to extract all books and navigate one by one, and create a lorebook for each book.
+- You can edit all prompts.
+- You can see all API request logs on the API Requests modal. You can also see the project analytics on the Project Analytics modal.
+- Currently, I'm only supporting openrouter because it is enough for me. However, if I see a need to add another API, I will add it.
 
 ## How to Install and Run the Application
 
@@ -154,7 +154,7 @@ Simply double-click the `start.bat` file or run it from your terminal:
 ```bash
 .\start.bat
 ```
-The first time you run it, the script will guide you through setting up your configuration (`.env` file), install all dependencies, build the client, and start the server.
+The first time you run it, the script will guide you through setting up your configuration (`.env` file), installing all dependencies, build the client, and start the server.
 
 ---
 
