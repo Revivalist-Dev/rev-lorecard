@@ -47,9 +47,14 @@ https://github.com/user-attachments/assets/1812776a-19e2-42c7-9b0b-00356ebab724
 
 ## Some notes
 - This is not deep research; it doesn't involve a web search. You need to give a URL that has multiple links. _Fandom:category_ pages are perfect for the app. For example, you can give [Oblivion Skill Books](https://elderscrolls.fandom.com/wiki/Category:Oblivion:_Skill_Books). So this is going to extract all books and navigate one by one, and create a lorebook for each book.
-- You can edit all prompts.
 - You can see all API request logs on the API Requests modal. You can also see the project analytics on the Project Analytics modal.
 - Currently, I'm only supporting openrouter because it is enough for me. However, if I see a need to add another API, I will add it.
+- You can edit all prompts.
+
+### Input token usage by steps
+1. **Search Params:** Single LLM request. This is a very simple operation. Input token is very low.
+2. **Generate Selector:** Single LLM request. This is a bit more complex because we giving [cleaned html](https://github.com/bmen25124/lorebook-creator/blob/4ee1c3335cdece08b25795020ceca4f8a37bdcc4/server/src/services/scraper.py#L8) to LLM. Since it is a HTML, token usage is high compared to others.
+3. **Generate Entries:** Request count = link count. We are giving [cleaned html -> markdown](https://github.com/bmen25124/lorebook-creator/blob/4ee1c3335cdece08b25795020ceca4f8a37bdcc4/server/src/services/scraper.py#L111) to LLM. So token usage shouldn't be too high unless the page is very long. But if there are many links, token usage will be high.
 
 ## How to Install and Run the Application
 
