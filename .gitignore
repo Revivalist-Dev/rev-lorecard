@@ -1,1 +1,3 @@
 repomix-output.xml
+*.db
+*.db-journal
