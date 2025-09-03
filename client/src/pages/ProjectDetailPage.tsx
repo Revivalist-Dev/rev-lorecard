@@ -3,8 +3,8 @@ import { useParams, useSearchParams } from 'react-router-dom';
 import type { ProjectStatus } from '../types';
 import { IconAlertCircle, IconChartBar, IconFileText, IconPencil } from '@tabler/icons-react';
 import { StepGenerateSearchParams } from '../components/workspace/StepGenerateSearchParams';
-import { StepGenerateSelector } from '../components/workspace/StepGenerateSelector';
-import { StepExtractLinks } from '../components/workspace/StepExtractLinks';
+import { ManageSourcesStep } from '../components/workspace/ManageSourcesStep';
+import { StepConfirmLinks } from '../components/workspace/StepConfirmLinks';
 import { StepProcessEntries } from '../components/workspace/StepProcessEntries';
 import { useProject } from '../hooks/useProjects';
 import { useSse } from '../hooks/useSse';
@@ -15,12 +15,12 @@ import { ProjectAnalyticsModal } from '../components/projects/ProjectAnalyticsMo
 import { ProjectModal } from '../components/projects/ProjectModal';
 import { useEffect } from 'react';
 
-const stepIdentifiers = ['search-params', 'selector', 'links', 'entries', 'completed'] as const;
+const stepIdentifiers = ['search-params', 'sources', 'links', 'entries', 'completed'] as const;
 type StepIdentifier = (typeof stepIdentifiers)[number];
 
 const stepIdentifierToIndex: Record<StepIdentifier, number> = {
   'search-params': 0,
-  selector: 1,
+  sources: 1,
   links: 2,
   entries: 3,
   completed: 4,
@@ -76,7 +76,6 @@ export function ProjectDetailPage() {
   };
 
   if (isLoading && !projectResponse) {
-    // Show loader only on initial load
     return <Loader />;
   }
 
@@ -94,7 +93,7 @@ export function ProjectDetailPage() {
 
   const futureStepStyle = (stepIndex: number): React.CSSProperties => ({
     opacity: stepIndex > highestReachableStep ? 0.5 : 1,
-    transition: 'opacity 300ms ease', // Optional: for a smooth transition
+    transition: 'opacity 300ms ease',
   });
 
   return (
@@ -126,11 +125,11 @@ export function ProjectDetailPage() {
             <Stepper.Step label="Step 1" description="Search Params" style={futureStepStyle(0)}>
               <StepGenerateSearchParams project={project} />
             </Stepper.Step>
-            <Stepper.Step label="Step 2" description="Generate Selector" style={futureStepStyle(1)}>
-              <StepGenerateSelector project={project} />
+            <Stepper.Step label="Step 2" description="Manage Sources & Crawl" style={futureStepStyle(1)}>
+              <ManageSourcesStep project={project} />
             </Stepper.Step>
-            <Stepper.Step label="Step 3" description="Extract Links" style={futureStepStyle(2)}>
-              <StepExtractLinks project={project} />
+            <Stepper.Step label="Step 3" description="Confirm Links" style={futureStepStyle(2)}>
+              <StepConfirmLinks project={project} />
             </Stepper.Step>
             <Stepper.Step label="Step 4" description="Generate Entries" style={futureStepStyle(3)}>
               <StepProcessEntries project={project} />

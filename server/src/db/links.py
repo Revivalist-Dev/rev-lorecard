@@ -15,6 +15,7 @@ class LinkStatus(str, Enum):
     processing = "processing"
     completed = "completed"
     failed = "failed"
+    skipped = "skipped"
 
 
 class CreateLink(BaseModel):
@@ -29,6 +30,7 @@ class UpdateLink(BaseModel):
 
     status: Optional[LinkStatus] = None
     error_message: Optional[str] = None
+    skip_reason: Optional[str] = None
     lorebook_entry_id: Optional[UUID] = None
     raw_content: Optional[str] = None
 
@@ -39,6 +41,7 @@ class Link(CreateLink):
     id: UUID
     status: LinkStatus
     error_message: Optional[str] = None
+    skip_reason: Optional[str] = None
     lorebook_entry_id: Optional[UUID] = None
     created_at: datetime
     raw_content: Optional[str] = None
@@ -73,6 +76,21 @@ async def get_link(link_id: UUID) -> Link | None:
     query = 'SELECT * FROM "Link" WHERE id = %s'
     result = await db.fetch_one(query, (link_id,))
     return Link(**result) if result else None
+
+
+async def get_existing_links_by_urls(project_id: str, urls: List[str]) -> List[str]:
+    """
+    Given a list of URLs, return the subset that already exists for the project.
+    """
+    if not urls:
+        return []
+    db = await get_db_connection()
+    # Create a placeholder string like (%s, %s, %s)
+    placeholders = ", ".join(["%s"] * len(urls))
+    query = f'SELECT url FROM "Link" WHERE project_id = %s AND url IN ({placeholders})'
+    params = (project_id, *urls)
+    results = await db.fetch_all(query, params)  # pyright: ignore[reportArgumentType]
+    return [row["url"] for row in results] if results else []
 
 
 async def count_links_by_project(project_id: str) -> int:
@@ -142,3 +160,9 @@ async def update_link(link_id: UUID, link_update: UpdateLink) -> Link | None:
 
     await db.execute(query, tuple(params))
     return await get_link(link_id)
+
+
+async def reset_processing_links_to_pending() -> None:
+    db = await get_db_connection()
+    query = "UPDATE \"Link\" SET status = 'pending' WHERE status = 'processing'"
+    await db.execute(query)

@@ -300,9 +300,10 @@ class SQLiteDB(AsyncDB):
     async def execute(self, query: str, params: Optional[tuple] = None) -> None:
         if not self._conn:
             raise ConnectionError("Database is not connected")
-        await self._conn.execute(
+        async with self._conn.execute(
             query.replace("%s", "?"), self._process_params(params) or ()
-        )
+        ):
+            pass
         await self._conn.commit()
 
     async def fetch_all(
@@ -358,7 +359,8 @@ class SQLiteDB(AsyncDB):
     async def executescript(self, script: str) -> None:
         if not self._conn:
             raise ConnectionError("Database is not connected")
-        await self._conn.executescript(script)
+        async with self._conn.executescript(script):
+            pass
         await self._conn.commit()
 
     @asynccontextmanager

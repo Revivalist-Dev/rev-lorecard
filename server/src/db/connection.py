@@ -2,7 +2,7 @@ import os
 from typing import Optional
 
 from db.database import AsyncDB, PostgresDB, SQLiteDB
-from db.migrations import apply_migrations
+from db.migration_runner import apply_migrations
 from logging_config import get_logger
 
 logger = get_logger(__name__)

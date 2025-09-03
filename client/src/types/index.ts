@@ -29,21 +29,29 @@ export type ProjectStatus =
 export interface Project {
   id: string;
   name: string;
-  source_url?: string;
   prompt?: string;
   templates: ProjectTemplates;
   ai_provider_config: AiProviderConfig;
   requests_per_minute: number;
-  max_pages_to_crawl: number;
-  link_extraction_selector?: string[];
-  link_extraction_pagination_selector?: string;
   search_params?: SearchParams;
   status: ProjectStatus;
   created_at: string;
   updated_at: string;
 }
 
-export type LinkStatus = 'pending' | 'processing' | 'completed' | 'failed';
+export interface ProjectSource {
+  id: string; // UUID
+  project_id: string;
+  url: string;
+  link_extraction_selector?: string[];
+  link_extraction_pagination_selector?: string;
+  max_pages_to_crawl: number;
+  last_crawled_at?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export type LinkStatus = 'pending' | 'processing' | 'completed' | 'failed' | 'skipped';
 
 export interface Link {
   id: string; // UUID
@@ -51,6 +59,7 @@ export interface Link {
   url: string;
   status: LinkStatus;
   error_message?: string;
+  skip_reason?: string;
   lorebook_entry_id?: string; // UUID
   created_at: string;
   raw_content?: string;
@@ -74,7 +83,12 @@ export interface UpdateLorebookEntryPayload {
 }
 
 export type JobStatus = 'pending' | 'in_progress' | 'completed' | 'failed' | 'cancelling' | 'canceled';
-export type TaskName = 'generate_selector' | 'extract_links' | 'process_project_entries' | 'generate_search_params';
+export type TaskName =
+  | 'generate_selector'
+  | 'confirm_links'
+  | 'process_project_entries'
+  | 'generate_search_params'
+  | 'rescan_links';
 
 export interface BackgroundJob {
   id: string; // UUID
@@ -126,12 +140,10 @@ export interface GlobalTemplate {
 export interface CreateProjectPayload {
   id: string;
   name: string;
-  source_url?: string;
   prompt?: string;
   templates: ProjectTemplates;
   ai_provider_config: AiProviderConfig;
   requests_per_minute: number;
-  max_pages_to_crawl: number;
 }
 
 export interface ProjectAnalytics {

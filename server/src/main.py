@@ -3,6 +3,8 @@ from pathlib import Path
 import sys
 from dotenv import load_dotenv
 from db.background_jobs import reset_in_progress_jobs_to_pending
+from db.common import CreateGlobalTemplate
+from db.links import reset_processing_links_to_pending
 from logging_config import get_logger, setup_logging
 import os
 
@@ -23,6 +25,7 @@ from controllers.api_request_logs import ApiRequestLogController
 from controllers.providers import ProviderController
 from controllers.sse import SSEController
 from controllers.projects import ProjectController
+from controllers.sources import SourceController
 from controllers.lorebook_entries import LorebookEntryController
 from controllers.background_jobs import (
     BackgroundJobController,
@@ -37,7 +40,6 @@ from exceptions import (
 )
 from db.connection import init_database
 from db.global_templates import create_global_template, get_global_template
-from db.global_templates import CreateGlobalTemplate
 import default_templates
 
 import providers.openrouter  # noqa: F401
@@ -80,10 +82,11 @@ async def create_default_templates():
             logger.info(f"Created default template: {template.name}")
 
 
-async def recover_stale_jobs():
-    """Resets 'in_progress' jobs to 'pending' on startup."""
+async def recover_stale_datas():
+    """Resets any datas that were 'in_progress' back to 'pending'."""
     logger.info("Checking for stale jobs to recover...")
     await reset_in_progress_jobs_to_pending()
+    await reset_processing_links_to_pending()
 
 
 CLIENT_BUILD_DIR = Path(__file__).parent.parent.parent / "client" / "dist"
@@ -139,6 +142,7 @@ def create_app():
             ProviderController,
             SSEController,
             ProjectController,
+            SourceController,
             LorebookEntryController,
             BackgroundJobController,
             AnalyticsController,
@@ -158,7 +162,7 @@ def create_app():
             serve_assets,
             spa_fallback,
         ],
-        on_startup=[create_default_templates, recover_stale_jobs],
+        on_startup=[create_default_templates, recover_stale_datas],
         static_files_config=None,
     )
 

@@ -2,13 +2,13 @@ from uuid import UUID
 from litestar import Controller, get, post
 from litestar.exceptions import NotFoundException, HTTPException
 from litestar.params import Body
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from logging_config import get_logger
 from db.background_jobs import (
     BackgroundJob,
     CreateBackgroundJob,
-    ExtractLinksPayload,
+    ConfirmLinksPayload,
     GenerateSearchParamsPayload,
     GenerateSelectorPayload,
     ProcessProjectEntriesPayload,
@@ -30,7 +30,12 @@ class CreateJobForProjectPayload(BaseModel):
     project_id: str
 
 
-class ExtractLinksJobPayload(BaseModel):
+class CreateJobForSourcePayload(BaseModel):
+    project_id: str
+    source_ids: list[UUID] = Field(..., min_length=1)
+
+
+class ConfirmLinksJobPayload(BaseModel):
     project_id: str
     urls: list[str]
 
@@ -85,38 +90,34 @@ class BackgroundJobController(Controller):
 
     @post("/generate-selector")
     async def create_generate_selector_job(
-        self, data: CreateJobForProjectPayload = Body()
+        self, data: CreateJobForSourcePayload = Body()
     ) -> SingleResponse[BackgroundJob]:
-        """Create a job to generate the CSS selector for a project."""
-        logger.debug(f"Creating generate_selector job for project {data.project_id}")
-        project = await db_get_project(data.project_id)
-        if not project:
-            raise NotFoundException(f"Project '{data.project_id}' not found.")
-
+        """Create a job to generate the CSS selector for project sources."""
+        logger.debug(f"Creating generate_selector job for sources {data.source_ids}")
         job = await db_create_background_job(
             CreateBackgroundJob(
                 task_name=TaskName.GENERATE_SELECTOR,
                 project_id=data.project_id,
-                payload=GenerateSelectorPayload(),
+                payload=GenerateSelectorPayload(source_ids=data.source_ids),
             )
         )
         return SingleResponse(data=job)
 
-    @post("/extract-links")
-    async def create_extract_links_job(
-        self, data: ExtractLinksJobPayload = Body()
+    @post("/confirm-links")
+    async def create_confirm_links_job(
+        self, data: ConfirmLinksJobPayload = Body()
     ) -> SingleResponse[BackgroundJob]:
-        """Create a job to extract links for a project."""
-        logger.debug(f"Creating extract_links job for project {data.project_id}")
+        """Create a job to confirm and save links for a project."""
+        logger.debug(f"Creating confirm_links job for project {data.project_id}")
         project = await db_get_project(data.project_id)
         if not project:
             raise NotFoundException(f"Project '{data.project_id}' not found.")
 
         job = await db_create_background_job(
             CreateBackgroundJob(
-                task_name=TaskName.EXTRACT_LINKS,
+                task_name=TaskName.CONFIRM_LINKS,
                 project_id=data.project_id,
-                payload=ExtractLinksPayload(urls=data.urls),
+                payload=ConfirmLinksPayload(urls=data.urls),
             )
         )
         return SingleResponse(data=job)
@@ -159,6 +160,22 @@ class BackgroundJobController(Controller):
                 task_name=TaskName.GENERATE_SEARCH_PARAMS,
                 project_id=data.project_id,
                 payload=GenerateSearchParamsPayload(),
+            )
+        )
+        return SingleResponse(data=job)
+
+    @post("/rescan-links")
+    async def create_rescan_links_job(
+        self, data: CreateJobForSourcePayload = Body()
+    ) -> SingleResponse[BackgroundJob]:
+        """Create a job to rescan links for specific sources."""
+        logger.debug(f"Creating rescan_links job for sources {data.source_ids}")
+        # Basic validation to ensure sources exist and have selectors can be added here
+        job = await db_create_background_job(
+            CreateBackgroundJob(
+                task_name=TaskName.RESCAN_LINKS,
+                project_id=data.project_id,
+                payload=GenerateSelectorPayload(source_ids=data.source_ids),
             )
         )
         return SingleResponse(data=job)

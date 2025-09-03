@@ -60,20 +60,14 @@ class ProjectStatus(str, Enum):
 class CreateProject(BaseModel):
     id: str
     name: str
-    source_url: Optional[str] = None
     prompt: Optional[str] = None
     templates: ProjectTemplates
     ai_provider_config: AiProviderConfig
     requests_per_minute: int = 15
-    max_pages_to_crawl: int = 20
 
 
 class UpdateProject(BaseModel):
     name: Optional[str] = None
-    source_url: Optional[str] = None
-    link_extraction_selector: Optional[list[str]] = None
-    link_extraction_pagination_selector: Optional[str] = None
-    max_pages_to_crawl: Optional[int] = None
     templates: Optional[ProjectTemplates] = None
     ai_provider_config: Optional[AiProviderConfig] = None
     requests_per_minute: Optional[int] = None
@@ -83,8 +77,6 @@ class UpdateProject(BaseModel):
 
 
 class Project(CreateProject):
-    link_extraction_selector: Optional[list[str]] = None
-    link_extraction_pagination_selector: Optional[str] = None
     search_params: Optional[SearchParams] = None
     status: ProjectStatus
     created_at: datetime
@@ -94,19 +86,17 @@ class Project(CreateProject):
 async def create_project(project: CreateProject) -> Project:
     db = await get_db_connection()
     query = """
-        INSERT INTO "Project" (id, name, source_url, prompt, templates, ai_provider_config, requests_per_minute, max_pages_to_crawl)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+        INSERT INTO "Project" (id, name, prompt, templates, ai_provider_config, requests_per_minute)
+        VALUES (%s, %s, %s, %s, %s, %s)
         RETURNING *
     """
     params = (
         project.id,
         project.name,
-        project.source_url,
         project.prompt,
         json.dumps(project.templates.model_dump()),
         json.dumps(project.ai_provider_config.model_dump()),
         project.requests_per_minute,
-        project.max_pages_to_crawl,
     )
     result = await db.fetch_one(query, params)
     if not result:

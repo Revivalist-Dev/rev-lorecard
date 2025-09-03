@@ -7,7 +7,7 @@ from litestar.testing import AsyncTestClient
 
 from db.connection import set_db_connection, close_database
 from db.database import PostgresDB, SQLiteDB, AsyncDB
-from db.migrations import apply_migrations
+from db.migration_runner import apply_migrations
 from main import create_app
 
 if sys.platform == "win32":
