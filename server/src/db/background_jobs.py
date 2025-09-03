@@ -66,7 +66,8 @@ TaskPayload = Union[
 
 class GenerateSelectorResult(BaseModel):
     selectors: Dict[str, list[str]]  # source_id -> selectors
-    found_urls: List[str]
+    new_urls: List[str]
+    existing_urls: List[str]
     pagination_selectors: Dict[str, Optional[str]]  # source_id -> pagination_selector
 
 

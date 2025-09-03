@@ -71,7 +71,6 @@ export function ProjectDetailPage() {
   }, [project, searchParams, setSearchParams]);
 
   const handleStepClick = (stepIndex: number) => {
-    if (stepIndex > highestReachableStep) return;
     const newIdentifier = stepIndexToIdentifier[stepIndex];
     setSearchParams({ step: newIdentifier }, { replace: true });
   };
@@ -91,6 +90,11 @@ export function ProjectDetailPage() {
   if (!project) {
     return <Text>Project not found.</Text>;
   }
+
+  const futureStepStyle = (stepIndex: number): React.CSSProperties => ({
+    opacity: stepIndex > highestReachableStep ? 0.5 : 1,
+    transition: 'opacity 300ms ease',
+  });
 
   return (
     <>
@@ -118,19 +122,19 @@ export function ProjectDetailPage() {
 
         <Paper withBorder p="xl" mt="lg" radius="md">
           <Stepper active={activeStep} onStepClick={handleStepClick}>
-            <Stepper.Step label="Step 1" description="Search Params">
+            <Stepper.Step label="Step 1" description="Search Params" style={futureStepStyle(0)}>
               <StepGenerateSearchParams project={project} />
             </Stepper.Step>
-            <Stepper.Step label="Step 2" description="Manage Sources & Crawl">
+            <Stepper.Step label="Step 2" description="Manage Sources & Crawl" style={futureStepStyle(1)}>
               <ManageSourcesStep project={project} />
             </Stepper.Step>
-            <Stepper.Step label="Step 3" description="Confirm Links">
+            <Stepper.Step label="Step 3" description="Confirm Links" style={futureStepStyle(2)}>
               <StepConfirmLinks project={project} />
             </Stepper.Step>
-            <Stepper.Step label="Step 4" description="Generate Entries">
+            <Stepper.Step label="Step 4" description="Generate Entries" style={futureStepStyle(3)}>
               <StepProcessEntries project={project} />
             </Stepper.Step>
-            <Stepper.Step label="Completed" description="Review & Download">
+            <Stepper.Step label="Completed" description="Review & Download" style={futureStepStyle(4)}>
               <StepCompletedView project={project} />
             </Stepper.Step>
           </Stepper>

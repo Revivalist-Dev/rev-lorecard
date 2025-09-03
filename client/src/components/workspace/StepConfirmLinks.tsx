@@ -16,9 +16,11 @@ import {
   Tooltip,
   TextInput,
   Grid,
+  Divider,
+  Flex,
 } from '@mantine/core';
 import { useConfirmLinksJob } from '../../hooks/useJobMutations';
-import { useLatestJob, useProjectJobs } from '../../hooks/useProjectJobs';
+import { useLatestJob } from '../../hooks/useProjectJobs';
 import type { Project } from '../../types';
 import { JobStatusIndicator } from '../common/JobStatusIndicator';
 import { useProjectLinks } from '../../hooks/useProjectLinks';
@@ -41,14 +43,14 @@ const statusColors: Record<string, string> = {
 };
 
 export function StepConfirmLinks({ project }: StepProps) {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const [searchParams, _setSearchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const pageFromUrl = parseInt(searchParams.get(URL_PARAM_KEY) || '1', 10);
-  const [activePage, setPage] = useState(isNaN(pageFromUrl) ? 1 : pageFromUrl);
 
   const confirmLinks = useConfirmLinksJob();
   const { job: latestConfirmLinksJob } = useLatestJob(project.id, 'confirm_links');
-  const { data: allJobsResponse } = useProjectJobs(project.id);
+  const { job: latestCrawlJob } = useLatestJob(project.id, 'generate_selector');
+  const { job: latestRescanJob } = useLatestJob(project.id, 'rescan_links');
+
   const { data: savedLinksResponse, isLoading: isLoadingSavedLinks } = useProjectLinks(project.id, {
     page: 1,
     pageSize: 1,
@@ -57,40 +59,54 @@ export function StepConfirmLinks({ project }: StepProps) {
   const [selectedUrls, setSelectedUrls] = useState<string[]>([]);
   const [filterText, setFilterText] = useState('');
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [showExisting, setShowExisting] = useState(false);
 
-  const unconfirmedUrls = useMemo(() => {
-    if (!allJobsResponse) return [];
-    const latestConfirmJobDate = latestConfirmLinksJob?.created_at
+  // Determine the most recent crawl/rescan job to check for new links
+  const relevantCrawlJob = useMemo(() => {
+    if (!latestCrawlJob && !latestRescanJob) return null;
+    if (latestCrawlJob && !latestRescanJob) return latestCrawlJob;
+    if (!latestCrawlJob && latestRescanJob) return latestRescanJob;
+    return new Date(latestCrawlJob!.created_at) > new Date(latestRescanJob!.created_at)
+      ? latestCrawlJob
+      : latestRescanJob;
+  }, [latestCrawlJob, latestRescanJob]);
+
+  const { newlyFoundUrls, existingUrlsFoundAgain } = useMemo(() => {
+    const lastConfirmDate = latestConfirmLinksJob?.created_at
       ? new Date(latestConfirmLinksJob.created_at)
       : new Date(0);
 
-    const recentCrawlJobs = allJobsResponse.data.filter(
-      (job) =>
-        (job.task_name === 'generate_selector' || job.task_name === 'rescan_links') &&
-        job.status === 'completed' &&
-        new Date(job.created_at) > latestConfirmJobDate
-    );
-
-    const urlSet = new Set<string>();
-    for (const job of recentCrawlJobs) {
-      const urls = (job.result as { found_urls: string[] })?.found_urls || [];
-      for (const url of urls) {
-        urlSet.add(url);
-      }
+    // Only consider the crawl job if it's completed and more recent than the last confirmation
+    if (
+      !relevantCrawlJob ||
+      relevantCrawlJob.status !== 'completed' ||
+      new Date(relevantCrawlJob.created_at) < lastConfirmDate
+    ) {
+      return { newlyFoundUrls: [], existingUrlsFoundAgain: [] };
     }
-    return Array.from(urlSet);
-  }, [allJobsResponse, latestConfirmLinksJob]);
+
+    const result = relevantCrawlJob.result as { new_urls: string[]; existing_urls: string[] };
+    return {
+      newlyFoundUrls: result?.new_urls || [],
+      existingUrlsFoundAgain: result?.existing_urls || [],
+    };
+  }, [relevantCrawlJob, latestConfirmLinksJob]);
 
   useEffect(() => {
-    setSelectedUrls(unconfirmedUrls);
-  }, [unconfirmedUrls]);
+    setSelectedUrls(newlyFoundUrls);
+  }, [newlyFoundUrls]);
 
-  const filteredUrls = useMemo(
-    () => unconfirmedUrls.filter((url) => url.toLowerCase().includes(filterText.toLowerCase())),
-    [unconfirmedUrls, filterText]
+  const filteredNewUrls = useMemo(
+    () => newlyFoundUrls.filter((url) => url.toLowerCase().includes(filterText.toLowerCase())),
+    [newlyFoundUrls, filterText]
+  );
+  const filteredExistingUrls = useMemo(
+    () => existingUrlsFoundAgain.filter((url) => url.toLowerCase().includes(filterText.toLowerCase())),
+    [existingUrlsFoundAgain, filterText]
   );
 
-  const showSelectionUI = unconfirmedUrls.length > 0;
+  const visibleUrls = showExisting ? [...filteredNewUrls, ...filteredExistingUrls] : filteredNewUrls;
+  const showSelectionUI = newlyFoundUrls.length > 0 || existingUrlsFoundAgain.length > 0;
 
   if (project.status === 'draft' || project.status === 'search_params_generated') {
     return <Text c="dimmed">Complete the previous steps to review links.</Text>;
@@ -103,26 +119,28 @@ export function StepConfirmLinks({ project }: StepProps) {
 
   // VIEW 1: Show selection UI if there are unconfirmed links from a crawl
   if (showSelectionUI) {
-    const totalPages = Math.ceil(filteredUrls.length / PAGE_SIZE);
-    const paginatedUrls = filteredUrls.slice((activePage - 1) * PAGE_SIZE, activePage * PAGE_SIZE);
+    const totalPages = Math.ceil(visibleUrls.length / PAGE_SIZE);
+    const paginatedUrls = visibleUrls.slice((pageFromUrl - 1) * PAGE_SIZE, pageFromUrl * PAGE_SIZE);
 
     return (
       <Stack>
         <Text>
-          New links have been found. Review the list and uncheck any you wish to exclude, then save them to the project.
+          {newlyFoundUrls.length > 0
+            ? `Found ${newlyFoundUrls.length} new links. Review the list and uncheck any you wish to exclude, then save them.`
+            : 'No new links found. All discovered links are already saved to the project.'}
         </Text>
         <Grid gutter="xl">
           <Grid.Col span={{ base: 12, md: 6 }}>
             <Paper withBorder p="md">
               <Group justify="space-between" mb="sm">
                 <Title order={5}>
-                  Found Links ({selectedUrls.length} / {unconfirmedUrls.length} selected)
+                  New Links Found ({selectedUrls.length} / {newlyFoundUrls.length} selected)
                 </Title>
                 <Checkbox
-                  label="Select / Deselect All"
-                  checked={selectedUrls.length === unconfirmedUrls.length && unconfirmedUrls.length > 0}
-                  indeterminate={selectedUrls.length > 0 && selectedUrls.length < unconfirmedUrls.length}
-                  onChange={(event) => setSelectedUrls(event.currentTarget.checked ? unconfirmedUrls : [])}
+                  label="Select / Deselect All New"
+                  checked={selectedUrls.length === newlyFoundUrls.length && newlyFoundUrls.length > 0}
+                  indeterminate={selectedUrls.length > 0 && selectedUrls.length < newlyFoundUrls.length}
+                  onChange={(event) => setSelectedUrls(event.currentTarget.checked ? newlyFoundUrls : [])}
                 />
               </Group>
               <TextInput
@@ -135,17 +153,45 @@ export function StepConfirmLinks({ project }: StepProps) {
               <ScrollArea h={400}>
                 <Checkbox.Group value={selectedUrls} onChange={setSelectedUrls}>
                   <Stack gap="xs">
-                    {paginatedUrls.map((url) => (
-                      <Checkbox key={url} value={url} label={url} onMouseEnter={() => setPreviewUrl(url)} />
-                    ))}
+                    {paginatedUrls.map((url) => {
+                      const isExisting = !newlyFoundUrls.includes(url);
+                      return (
+                        <Checkbox
+                          key={url}
+                          value={url}
+                          onMouseEnter={() => setPreviewUrl(url)}
+                          disabled={isExisting}
+                          label={
+                            <Flex justify="space-between" w="100%" gap="md">
+                              <Text truncate>{url}</Text>
+                              {isExisting && (
+                                <Badge variant="light" color="gray" size="sm">
+                                  Saved
+                                </Badge>
+                              )}
+                            </Flex>
+                          }
+                        />
+                      );
+                    })}
                   </Stack>
                 </Checkbox.Group>
               </ScrollArea>
               {totalPages > 1 && (
                 <Group justify="center" mt="md">
-                  <Pagination value={activePage} onChange={setPage} total={totalPages} />
+                  <Pagination
+                    value={pageFromUrl}
+                    onChange={(p) => setSearchParams({ [URL_PARAM_KEY]: p.toString() })}
+                    total={totalPages}
+                  />
                 </Group>
               )}
+              <Divider my="md" />
+              <Checkbox
+                label={`Show ${existingUrlsFoundAgain.length} already saved links`}
+                checked={showExisting}
+                onChange={(e) => setShowExisting(e.currentTarget.checked)}
+              />
             </Paper>
           </Grid.Col>
           <Grid.Col span={{ base: 12, md: 6 }}>
@@ -167,7 +213,7 @@ export function StepConfirmLinks({ project }: StepProps) {
             loading={confirmLinks.isPending || isJobActive}
             disabled={selectedUrls.length === 0 || confirmLinks.isPending || isJobActive}
           >
-            {isJobActive ? 'Saving...' : `Confirm and Save ${selectedUrls.length} Links`}
+            {isJobActive ? 'Saving...' : `Confirm and Save ${selectedUrls.length} New Links`}
           </Button>
         </Group>
 
@@ -176,7 +222,7 @@ export function StepConfirmLinks({ project }: StepProps) {
     );
   }
 
-  // VIEW 2: If no new links are pending, show the results table of saved links.
+  // VIEW 2: If no new links are pending confirmation, show the results table of all saved links.
   if (isLoadingSavedLinks && !savedLinksResponse) {
     return (
       <Center p="xl">

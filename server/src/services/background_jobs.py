@@ -26,6 +26,7 @@ from db.links import (
     LinkStatus,
     UpdateLink,
     create_links,
+    get_existing_links_by_urls,
     get_link,
     get_processable_links_for_project,
     update_link,
@@ -146,7 +147,7 @@ async def generate_selector(job: BackgroundJob, project: Project):
     source_ids = job.payload.source_ids
     total_sources = len(source_ids)
     processed_sources = 0
-    all_found_urls = set()
+    all_found_urls_set = set()
     all_selectors: dict[str, list[str]] = {}
     all_pagination_selectors: dict[str, Optional[str]] = {}
 
@@ -243,7 +244,7 @@ async def generate_selector(job: BackgroundJob, project: Project):
             )
 
         source_urls = await _crawl_one_source(job.id, updated_source)
-        all_found_urls.update(source_urls)
+        all_found_urls_set.update(source_urls)
         all_selectors[str(source.id)] = updated_source.link_extraction_selector or []
         all_pagination_selectors[str(source.id)] = (
             updated_source.link_extraction_pagination_selector
@@ -258,12 +259,18 @@ async def generate_selector(job: BackgroundJob, project: Project):
             ),
         )
 
+    all_found_urls = sorted(list(all_found_urls_set))
+    existing_urls_in_db = await get_existing_links_by_urls(project.id, all_found_urls)
+    existing_urls_set = set(existing_urls_in_db)
+    new_urls = [url for url in all_found_urls if url not in existing_urls_set]
+
     await update_job_with_notification(
         job.id,
         UpdateBackgroundJob(
             status=JobStatus.completed,
             result=GenerateSelectorResult(
-                found_urls=sorted(list(all_found_urls)),
+                new_urls=new_urls,
+                existing_urls=sorted(list(existing_urls_set)),
                 selectors=all_selectors,
                 pagination_selectors=all_pagination_selectors,
             ),
@@ -279,7 +286,7 @@ async def rescan_links(job: BackgroundJob, project: Project):
     source_ids = job.payload.source_ids
     total_sources = len(source_ids)
     processed_sources = 0
-    all_found_urls = set()
+    all_found_urls_set = set()
     all_selectors: dict[str, list[str]] = {}
     all_pagination_selectors: dict[str, Optional[str]] = {}
 
@@ -301,7 +308,7 @@ async def rescan_links(job: BackgroundJob, project: Project):
             continue
 
         source_urls = await _crawl_one_source(job.id, source)
-        all_found_urls.update(source_urls)
+        all_found_urls_set.update(source_urls)
         all_selectors[str(source.id)] = source.link_extraction_selector
         all_pagination_selectors[str(source.id)] = (
             source.link_extraction_pagination_selector
@@ -316,12 +323,18 @@ async def rescan_links(job: BackgroundJob, project: Project):
             ),
         )
 
+    all_found_urls = sorted(list(all_found_urls_set))
+    existing_urls_in_db = await get_existing_links_by_urls(project.id, all_found_urls)
+    existing_urls_set = set(existing_urls_in_db)
+    new_urls = [url for url in all_found_urls if url not in existing_urls_set]
+
     await update_job_with_notification(
         job.id,
         UpdateBackgroundJob(
             status=JobStatus.completed,
             result=GenerateSelectorResult(
-                found_urls=sorted(list(all_found_urls)),
+                new_urls=new_urls,
+                existing_urls=sorted(list(existing_urls_set)),
                 selectors=all_selectors,
                 pagination_selectors=all_pagination_selectors,
             ),

@@ -40,6 +40,7 @@ const linkStatusColors: Record<LinkStatus, string> = {
   processing: 'yellow',
   completed: 'green',
   failed: 'red',
+  skipped: 'yellow',
 };
 
 const jobStatusColors: Record<JobStatus, string> = {

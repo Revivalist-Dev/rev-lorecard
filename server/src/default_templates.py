@@ -85,12 +85,10 @@ Analyze the following source content (extracted from {{source.url}}) and create 
 **Step 1: Validate the Content**
 - First, determine if the content provided meets the criteria above.
 - If it **meets** the criteria, set `valid` to `true` and proceed to Step 2.
-- If it **does not meet** the criteria, set `valid` to `false`, provide a brief `reason` for why it was skipped (e.g., "Content is a list, not a detailed article."), and set `entry` to `null`.
+- If it **does not meet** the criteria, set `valid` to `false`, provide a 1-2 sentence `reason` for why it was skipped (e.g., "Content is a list, not a detailed article."), and set `entry` to `null`.
 
 **Step 2: Create the Lorebook Entry (only if valid is true)**
 - If the content is valid, create an `entry` object.
-- Extract a concise `title`, relevant `keywords`, and a well-structured `content` summary suitable for an RP context.
-- The `content` should be informative, stand on its own, and be 100-400 words. Use markdown for formatting.
 
 Purpose: {{project.search_params.purpose}}
 Guidelines:: {{project.search_params.extraction_notes}}
@@ -108,8 +106,8 @@ A Lorebook is a collection of entries used to provide an AI with consistent, con
 
 **Standard Entry Structure:**
 - `title`: A concise, descriptive title for the entry (e.g., "Aragorn", "The One Ring").
-- `keywords`: A list of keywords that cause this entry to be injected into the AI's context. Always includes the name and common aliases.
-- `content`: A well-written, factual summary of the subject in an encyclopedic, in-universe tone.
+- `keywords`: A list of keywords that cause this entry to be injected into the AI's context. Always includes the name and common aliases. 1-4 strong keywords.
+- `content`: A well-written, factual summary of the subject in an encyclopedic, in-universe tone. Be 100-400 words. Use markdown for formatting.
 
 **Example Entry:**
 {
