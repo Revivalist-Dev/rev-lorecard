@@ -9,7 +9,7 @@ A web application to automatically create structured lorebooks from a URL using 
   
   *A video demonstrating the main workflow of creating a lorebook from a URL*
 
-https://github.com/user-attachments/assets/1812776a-19e2-42c7-9b0b-00356ebab724
+https://github.com/user-attachments/assets/6cf2aca6-2d5d-40e8-9021-2a91b6056323
   
 </details>
 
