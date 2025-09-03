@@ -199,4 +199,4 @@ Now, open the new `.env` file and add your `OPENROUTER_API_KEY`.
 ### Accessing the App
 
 Once running, the application will be available at:
-**[http://localhost:3000](http://localhost:3000)**
+**[http://127.0.0.1:3000/](http://127.0.0.1:3000/)**
