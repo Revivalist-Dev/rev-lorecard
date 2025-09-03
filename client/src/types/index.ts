@@ -85,7 +85,7 @@ export interface UpdateLorebookEntryPayload {
 export type JobStatus = 'pending' | 'in_progress' | 'completed' | 'failed' | 'cancelling' | 'canceled';
 export type TaskName =
   | 'generate_selector'
-  | 'extract_links'
+  | 'confirm_links'
   | 'process_project_entries'
   | 'generate_search_params'
   | 'rescan_links';

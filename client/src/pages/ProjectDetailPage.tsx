@@ -4,7 +4,7 @@ import type { ProjectStatus } from '../types';
 import { IconAlertCircle, IconChartBar, IconFileText, IconPencil } from '@tabler/icons-react';
 import { StepGenerateSearchParams } from '../components/workspace/StepGenerateSearchParams';
 import { ManageSourcesStep } from '../components/workspace/ManageSourcesStep';
-import { StepExtractLinks } from '../components/workspace/StepExtractLinks';
+import { StepConfirmLinks } from '../components/workspace/StepConfirmLinks';
 import { StepProcessEntries } from '../components/workspace/StepProcessEntries';
 import { useProject } from '../hooks/useProjects';
 import { useSse } from '../hooks/useSse';
@@ -125,7 +125,7 @@ export function ProjectDetailPage() {
               <ManageSourcesStep project={project} />
             </Stepper.Step>
             <Stepper.Step label="Step 3" description="Confirm Links">
-              <StepExtractLinks project={project} />
+              <StepConfirmLinks project={project} />
             </Stepper.Step>
             <Stepper.Step label="Step 4" description="Generate Entries">
               <StepProcessEntries project={project} />

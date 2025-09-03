@@ -79,28 +79,28 @@ export const useProcessProjectEntriesJob = () =>
   useJobMutation<CreateJobForProjectPayload>('process-project-entries', 'Lorebook Generation Started');
 export const useRescanLinksJob = () => useJobMutation<CreateJobForSourcePayload>('rescan-links', 'Link Rescan Started');
 
-// Re-introduce the extract-links job for the confirmation step.
-interface ExtractLinksPayload {
+// The confirm-links job for the confirmation step.
+interface ConfirmLinksPayload {
   project_id: string;
   urls: string[];
 }
-const createExtractLinksJob = async (payload: ExtractLinksPayload): Promise<SingleResponse<BackgroundJob>> => {
-  const response = await apiClient.post('/jobs/extract-links', payload);
+const createConfirmLinksJob = async (payload: ConfirmLinksPayload): Promise<SingleResponse<BackgroundJob>> => {
+  const response = await apiClient.post('/jobs/confirm-links', payload);
   return response.data;
 };
 
-export const useExtractLinksJob = () => {
+export const useConfirmLinksJob = () => {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: createExtractLinksJob,
+    mutationFn: createConfirmLinksJob,
     onSuccess: (response) => {
       const newJob = response.data;
       optimisticallyAddNewJob(queryClient, newJob);
       queryClient.invalidateQueries({ queryKey: ['project', newJob.project_id] });
       queryClient.invalidateQueries({ queryKey: ['links', newJob.project_id] });
       notifications.show({
-        title: 'Link Saving Started',
-        message: 'The selected links are being saved to the project.',
+        title: 'Link Confirmation Started',
+        message: 'The selected links are being confirmed and saved to the project.',
         color: 'blue',
       });
     },
@@ -108,7 +108,7 @@ export const useExtractLinksJob = () => {
     onError: (error: any) => {
       notifications.show({
         title: 'Error',
-        message: `Failed to save links: ${error.response?.data?.detail || error.message}`,
+        message: `Failed to confirm links: ${error.response?.data?.detail || error.message}`,
         color: 'red',
       });
     },

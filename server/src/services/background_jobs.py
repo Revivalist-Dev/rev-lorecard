@@ -8,8 +8,8 @@ from urllib.parse import urljoin
 from bs4 import BeautifulSoup
 from db.background_jobs import (
     BackgroundJob,
-    ExtractLinksPayload,
-    ExtractLinksResult,
+    ConfirmLinksPayload,
+    ConfirmLinksResult,
     GenerateSelectorPayload,
     GenerateSelectorResult,
     GenerateSearchParamsResult,
@@ -406,17 +406,17 @@ async def generate_search_params(job: BackgroundJob, project: Project):
     )
 
 
-async def extract_links(job: BackgroundJob, project: Project):
-    if not isinstance(job.payload, ExtractLinksPayload):
-        raise Exception("Invalid payload for extract_links task")
+async def confirm_links(job: BackgroundJob, project: Project):
+    if not isinstance(job.payload, ConfirmLinksPayload):
+        raise Exception("Invalid payload for confirm_links task")
 
     if not job.payload.urls:
-        logger.warning(f"[{job.id}] Extract links job received no URLs to save.")
+        logger.warning(f"[{job.id}] Confirm links job received no URLs to save.")
         await update_job_with_notification(
             job.id,
             UpdateBackgroundJob(
                 status=JobStatus.completed,
-                result=ExtractLinksResult(links_found=0),
+                result=ConfirmLinksResult(links_saved=0),
             ),
         )
         return
@@ -435,7 +435,7 @@ async def extract_links(job: BackgroundJob, project: Project):
         job.id,
         UpdateBackgroundJob(
             status=JobStatus.completed,
-            result=ExtractLinksResult(links_found=len(links_to_create)),
+            result=ConfirmLinksResult(links_saved=len(links_to_create)),
         ),
     )
 
@@ -691,8 +691,8 @@ async def process_background_job(id: UUID):
             await generate_selector(job, project)
         elif job.task_name == TaskName.RESCAN_LINKS:
             await rescan_links(job, project)
-        elif job.task_name == TaskName.EXTRACT_LINKS:
-            await extract_links(job, project)
+        elif job.task_name == TaskName.CONFIRM_LINKS:
+            await confirm_links(job, project)
         elif job.task_name == TaskName.PROCESS_PROJECT_ENTRIES:
             await process_project_entries(job, project)
         elif job.task_name == TaskName.GENERATE_SEARCH_PARAMS:

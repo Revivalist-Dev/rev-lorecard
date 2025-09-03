@@ -193,12 +193,12 @@ async def test_generate_search_params_job_with_test_client(
 
 
 @pytest.mark.asyncio
-async def test_extract_links_job_with_test_client(
+async def test_confirm_links_job_with_test_client(
     client_test: AsyncTestClient,
     real_project_payload: CreateProject,
 ):
     """
-    End-to-end test for the EXTRACT_LINKS job using the AsyncTestClient.
+    End-to-end test for the CONFIRM_LINKS job using the AsyncTestClient.
     """
     project_id = real_project_payload.id
     test_links = [
@@ -220,9 +220,9 @@ async def test_extract_links_job_with_test_client(
     )
     assert response.status_code == 200
 
-    # 3. Start the 'extract_links' job
+    # 3. Start the 'confirm_links' job
     response = await client_test.post(
-        "/api/jobs/extract-links",
+        "/api/jobs/confirm-links",
         json={"project_id": project_id, "urls": test_links},
     )
     assert response.status_code == 201
@@ -236,7 +236,7 @@ async def test_extract_links_job_with_test_client(
     assert response.status_code == 200
     job_data = response.json()["data"]
     assert job_data["status"] == "completed"
-    assert job_data["result"]["links_found"] == len(test_links)
+    assert job_data["result"]["links_saved"] == len(test_links)
 
     # 6. Verify the project was updated
     response = await client_test.get(f"/api/projects/{project_id}")
@@ -277,14 +277,14 @@ async def test_process_project_entries_job_with_test_client(
     )
     assert response.status_code == 201
 
-    # 2. Create links by calling the extract-links job first
+    # 2. Create links by calling the confirm-links job first
     response = await client_test.post(
-        "/api/jobs/extract-links",
+        "/api/jobs/confirm-links",
         json={"project_id": project_id, "urls": test_links},
     )
     assert response.status_code == 201
-    extract_links_job_id = response.json()["data"]["id"]
-    await process_background_job(extract_links_job_id)
+    confirm_links_job_id = response.json()["data"]["id"]
+    await process_background_job(confirm_links_job_id)
 
     # Verify links were created
     response = await client_test.get(f"/api/projects/{project_id}/links")

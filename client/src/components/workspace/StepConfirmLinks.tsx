@@ -17,7 +17,7 @@ import {
   TextInput,
   Grid,
 } from '@mantine/core';
-import { useExtractLinksJob } from '../../hooks/useJobMutations';
+import { useConfirmLinksJob } from '../../hooks/useJobMutations';
 import { useLatestJob, useProjectJobs } from '../../hooks/useProjectJobs';
 import type { Project } from '../../types';
 import { JobStatusIndicator } from '../common/JobStatusIndicator';
@@ -40,14 +40,14 @@ const statusColors: Record<string, string> = {
   skipped: 'yellow',
 };
 
-export function StepExtractLinks({ project }: StepProps) {
+export function StepConfirmLinks({ project }: StepProps) {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [searchParams, _setSearchParams] = useSearchParams();
   const pageFromUrl = parseInt(searchParams.get(URL_PARAM_KEY) || '1', 10);
   const [activePage, setPage] = useState(isNaN(pageFromUrl) ? 1 : pageFromUrl);
 
-  const extractLinks = useExtractLinksJob();
-  const { job: latestExtractLinksJob } = useLatestJob(project.id, 'extract_links');
+  const confirmLinks = useConfirmLinksJob();
+  const { job: latestConfirmLinksJob } = useLatestJob(project.id, 'confirm_links');
   const { data: allJobsResponse } = useProjectJobs(project.id);
   const { data: savedLinksResponse, isLoading: isLoadingSavedLinks } = useProjectLinks(project.id, {
     page: 1,
@@ -60,8 +60,8 @@ export function StepExtractLinks({ project }: StepProps) {
 
   const unconfirmedUrls = useMemo(() => {
     if (!allJobsResponse) return [];
-    const latestConfirmJobDate = latestExtractLinksJob?.created_at
-      ? new Date(latestExtractLinksJob.created_at)
+    const latestConfirmJobDate = latestConfirmLinksJob?.created_at
+      ? new Date(latestConfirmLinksJob.created_at)
       : new Date(0);
 
     const recentCrawlJobs = allJobsResponse.data.filter(
@@ -79,7 +79,7 @@ export function StepExtractLinks({ project }: StepProps) {
       }
     }
     return Array.from(urlSet);
-  }, [allJobsResponse, latestExtractLinksJob]);
+  }, [allJobsResponse, latestConfirmLinksJob]);
 
   useEffect(() => {
     setSelectedUrls(unconfirmedUrls);
@@ -97,9 +97,9 @@ export function StepExtractLinks({ project }: StepProps) {
   }
 
   const handleSaveLinks = () => {
-    extractLinks.mutate({ project_id: project.id, urls: selectedUrls });
+    confirmLinks.mutate({ project_id: project.id, urls: selectedUrls });
   };
-  const isJobActive = latestExtractLinksJob?.status === 'pending' || latestExtractLinksJob?.status === 'in_progress';
+  const isJobActive = latestConfirmLinksJob?.status === 'pending' || latestConfirmLinksJob?.status === 'in_progress';
 
   // VIEW 1: Show selection UI if there are unconfirmed links from a crawl
   if (showSelectionUI) {
@@ -164,14 +164,14 @@ export function StepExtractLinks({ project }: StepProps) {
         <Group justify="flex-end">
           <Button
             onClick={handleSaveLinks}
-            loading={extractLinks.isPending || isJobActive}
-            disabled={selectedUrls.length === 0 || extractLinks.isPending || isJobActive}
+            loading={confirmLinks.isPending || isJobActive}
+            disabled={selectedUrls.length === 0 || confirmLinks.isPending || isJobActive}
           >
             {isJobActive ? 'Saving...' : `Confirm and Save ${selectedUrls.length} Links`}
           </Button>
         </Group>
 
-        <JobStatusIndicator job={latestExtractLinksJob} title="Link Saving Job Status" />
+        <JobStatusIndicator job={latestConfirmLinksJob} title="Link Confirmation Job Status" />
       </Stack>
     );
   }

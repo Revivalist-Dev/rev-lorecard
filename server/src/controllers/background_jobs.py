@@ -8,7 +8,7 @@ from logging_config import get_logger
 from db.background_jobs import (
     BackgroundJob,
     CreateBackgroundJob,
-    ExtractLinksPayload,
+    ConfirmLinksPayload,
     GenerateSearchParamsPayload,
     GenerateSelectorPayload,
     ProcessProjectEntriesPayload,
@@ -35,7 +35,7 @@ class CreateJobForSourcePayload(BaseModel):
     source_ids: list[UUID] = Field(..., min_length=1)
 
 
-class ExtractLinksJobPayload(BaseModel):
+class ConfirmLinksJobPayload(BaseModel):
     project_id: str
     urls: list[str]
 
@@ -103,21 +103,21 @@ class BackgroundJobController(Controller):
         )
         return SingleResponse(data=job)
 
-    @post("/extract-links")
-    async def create_extract_links_job(
-        self, data: ExtractLinksJobPayload = Body()
+    @post("/confirm-links")
+    async def create_confirm_links_job(
+        self, data: ConfirmLinksJobPayload = Body()
     ) -> SingleResponse[BackgroundJob]:
-        """Create a job to extract links for a project."""
-        logger.debug(f"Creating extract_links job for project {data.project_id}")
+        """Create a job to confirm and save links for a project."""
+        logger.debug(f"Creating confirm_links job for project {data.project_id}")
         project = await db_get_project(data.project_id)
         if not project:
             raise NotFoundException(f"Project '{data.project_id}' not found.")
 
         job = await db_create_background_job(
             CreateBackgroundJob(
-                task_name=TaskName.EXTRACT_LINKS,
+                task_name=TaskName.CONFIRM_LINKS,
                 project_id=data.project_id,
-                payload=ExtractLinksPayload(urls=data.urls),
+                payload=ConfirmLinksPayload(urls=data.urls),
             )
         )
         return SingleResponse(data=job)
