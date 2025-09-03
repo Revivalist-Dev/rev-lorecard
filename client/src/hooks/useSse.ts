@@ -57,23 +57,16 @@ export function useSse(projectId: string | undefined) {
 
     eventSource.addEventListener('link_updated', (event) => {
       const updatedLink: Link = JSON.parse(event.data);
-      const queryKey = ['links', updatedLink.project_id];
-
-      // Update the specific link in any paginated cache it might exist in
-      queryClient.setQueriesData<PaginatedResponse<Link>>({ queryKey }, (oldData) => {
-        if (!oldData) return undefined;
-        const linkIndex = oldData.data.findIndex((link) => link.id === updatedLink.id);
-        if (linkIndex === -1) return oldData;
-
-        const newData = [...oldData.data];
-        newData[linkIndex] = updatedLink;
-        return { ...oldData, data: newData };
-      });
+      queryClient.invalidateQueries({ queryKey: ['links', updatedLink.project_id] });
     });
 
     // After bulk creation, it's simplest to just refetch the links list.
-    eventSource.addEventListener('links_created', () => {
-      queryClient.invalidateQueries({ queryKey: ['links', projectId] });
+    eventSource.addEventListener('links_created', (event) => {
+      const data = JSON.parse(event.data);
+      const projectId = data?.links[0]?.project_id;
+      if (projectId) {
+        queryClient.invalidateQueries({ queryKey: ['links', projectId] });
+      }
     });
 
     // When a new entry is created, we invalidate the entries query to refetch the list.
