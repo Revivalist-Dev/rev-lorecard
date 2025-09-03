@@ -29,16 +29,24 @@ export type ProjectStatus =
 export interface Project {
   id: string;
   name: string;
-  source_url?: string;
   prompt?: string;
   templates: ProjectTemplates;
   ai_provider_config: AiProviderConfig;
   requests_per_minute: number;
-  max_pages_to_crawl: number;
-  link_extraction_selector?: string[];
-  link_extraction_pagination_selector?: string;
   search_params?: SearchParams;
   status: ProjectStatus;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProjectSource {
+  id: string; // UUID
+  project_id: string;
+  url: string;
+  link_extraction_selector?: string[];
+  link_extraction_pagination_selector?: string;
+  max_pages_to_crawl: number;
+  last_crawled_at?: string;
   created_at: string;
   updated_at: string;
 }
@@ -132,12 +140,10 @@ export interface GlobalTemplate {
 export interface CreateProjectPayload {
   id: string;
   name: string;
-  source_url?: string;
   prompt?: string;
   templates: ProjectTemplates;
   ai_provider_config: AiProviderConfig;
   requests_per_minute: number;
-  max_pages_to_crawl: number;
 }
 
 export interface ProjectAnalytics {

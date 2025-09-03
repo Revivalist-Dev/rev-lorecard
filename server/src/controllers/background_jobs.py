@@ -2,7 +2,7 @@ from uuid import UUID
 from litestar import Controller, get, post
 from litestar.exceptions import NotFoundException, HTTPException
 from litestar.params import Body
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from logging_config import get_logger
 from db.background_jobs import (
@@ -28,6 +28,11 @@ logger = get_logger(__name__)
 
 class CreateJobForProjectPayload(BaseModel):
     project_id: str
+
+
+class CreateJobForSourcePayload(BaseModel):
+    project_id: str
+    source_ids: list[UUID] = Field(..., min_length=1)
 
 
 class ExtractLinksJobPayload(BaseModel):
@@ -85,19 +90,15 @@ class BackgroundJobController(Controller):
 
     @post("/generate-selector")
     async def create_generate_selector_job(
-        self, data: CreateJobForProjectPayload = Body()
+        self, data: CreateJobForSourcePayload = Body()
     ) -> SingleResponse[BackgroundJob]:
-        """Create a job to generate the CSS selector for a project."""
-        logger.debug(f"Creating generate_selector job for project {data.project_id}")
-        project = await db_get_project(data.project_id)
-        if not project:
-            raise NotFoundException(f"Project '{data.project_id}' not found.")
-
+        """Create a job to generate the CSS selector for project sources."""
+        logger.debug(f"Creating generate_selector job for sources {data.source_ids}")
         job = await db_create_background_job(
             CreateBackgroundJob(
                 task_name=TaskName.GENERATE_SELECTOR,
                 project_id=data.project_id,
-                payload=GenerateSelectorPayload(),
+                payload=GenerateSelectorPayload(source_ids=data.source_ids),
             )
         )
         return SingleResponse(data=job)
@@ -165,25 +166,16 @@ class BackgroundJobController(Controller):
 
     @post("/rescan-links")
     async def create_rescan_links_job(
-        self, data: CreateJobForProjectPayload = Body()
+        self, data: CreateJobForSourcePayload = Body()
     ) -> SingleResponse[BackgroundJob]:
-        """Create a job to rescan links using existing selectors for a project."""
-        logger.debug(f"Creating rescan_links job for project {data.project_id}")
-        project = await db_get_project(data.project_id)
-        if not project:
-            raise NotFoundException(f"Project '{data.project_id}' not found.")
-
-        if not project.link_extraction_selector:
-            raise HTTPException(
-                status_code=400,
-                detail="Project has no selectors to use for rescanning. Please generate them first.",
-            )
-
+        """Create a job to rescan links for specific sources."""
+        logger.debug(f"Creating rescan_links job for sources {data.source_ids}")
+        # Basic validation to ensure sources exist and have selectors can be added here
         job = await db_create_background_job(
             CreateBackgroundJob(
                 task_name=TaskName.RESCAN_LINKS,
                 project_id=data.project_id,
-                payload=GenerateSelectorPayload(),
+                payload=GenerateSelectorPayload(source_ids=data.source_ids),
             )
         )
         return SingleResponse(data=job)

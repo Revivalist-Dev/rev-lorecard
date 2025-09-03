@@ -1,6 +1,7 @@
 import os
 import re
 from typing import List, Tuple
+from db.migrations.data_migrations import DATA_MIGRATIONS
 from logging_config import get_logger
 from db.database import AsyncDB
 
@@ -53,7 +54,7 @@ def get_available_migrations(db_type: str) -> List[Tuple[int, str, str]]:
 
 
 async def apply_migrations(db: AsyncDB, db_type: str):
-    """Applies all pending migrations."""
+    """Applies all pending schema and data migrations."""
     current_version = await get_current_version(db, db_type)
     available_migrations = get_available_migrations(db_type)
 
@@ -72,13 +73,23 @@ async def apply_migrations(db: AsyncDB, db_type: str):
         with open(path, "r") as f:
             script = f.read()
 
-        async with db.transaction():
+        # Run schema and data migration within a single transaction for atomicity
+        async with db.transaction() as tx:
+            # 1. Apply schema migration
             if db_type == "sqlite":
                 await db.executescript(script)
             else:
                 await db.execute(script)  # pyright: ignore[reportArgumentType]
 
-            await db.execute(
+            # 2. Check for and run corresponding data migration
+            if version in DATA_MIGRATIONS:
+                logger.info(f"Running data migration for version {version}...")
+                data_migration_func = DATA_MIGRATIONS[version]
+                await data_migration_func(db)  # Pass the transaction object
+                logger.info(f"Data migration for version {version} completed.")
+
+            # 3. Record the migration version
+            await tx.execute(
                 "INSERT INTO schema_migrations (version) VALUES (%s)", (version,)
             )
         logger.info(f"Successfully applied migration {name}.")

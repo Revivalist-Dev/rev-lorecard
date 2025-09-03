@@ -1,9 +1,9 @@
 from datetime import datetime
 from typing import Optional, List, Any
 
-from db.common import PaginatedResponse, PaginationMeta
+from db.common import CreateGlobalTemplate, PaginatedResponse, PaginationMeta
 from db.connection import get_db_connection
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 
 class GlobalTemplate(BaseModel):
@@ -12,12 +12,6 @@ class GlobalTemplate(BaseModel):
     content: str
     created_at: datetime
     updated_at: datetime
-
-
-class CreateGlobalTemplate(BaseModel):
-    id: str = Field(..., description="The unique identifier for the template.")
-    name: str = Field(..., description="The unique name for the template.")
-    content: str = Field(..., description="The content of the template.")
 
 
 class UpdateGlobalTemplate(BaseModel):

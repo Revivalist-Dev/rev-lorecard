@@ -17,3 +17,9 @@ class PaginatedResponse(BaseModel, Generic[T]):
 
 class SingleResponse(BaseModel, Generic[T]):
     data: T
+
+
+class CreateGlobalTemplate(BaseModel):
+    id: str = Field(..., description="The unique identifier for the template.")
+    name: str = Field(..., description="The unique name for the template.")
+    content: str = Field(..., description="The content of the template.")

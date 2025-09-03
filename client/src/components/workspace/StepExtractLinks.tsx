@@ -14,17 +14,16 @@ import {
   Table,
   Badge,
   Tooltip,
-  Grid,
   TextInput,
-  Alert,
+  Grid,
 } from '@mantine/core';
 import { useExtractLinksJob } from '../../hooks/useJobMutations';
-import { useLatestJob } from '../../hooks/useProjectJobs';
-import type { BackgroundJob, Project } from '../../types';
+import { useLatestJob, useProjectJobs } from '../../hooks/useProjectJobs';
+import type { Project } from '../../types';
 import { JobStatusIndicator } from '../common/JobStatusIndicator';
 import { useProjectLinks } from '../../hooks/useProjectLinks';
 import { useSearchParams } from 'react-router-dom';
-import { IconInfoCircle, IconSearch } from '@tabler/icons-react';
+import { IconSearch } from '@tabler/icons-react';
 
 interface StepProps {
   project: Project;
@@ -42,96 +41,88 @@ const statusColors: Record<string, string> = {
 };
 
 export function StepExtractLinks({ project }: StepProps) {
-  const [searchParams, setSearchParams] = useSearchParams();
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [searchParams, _setSearchParams] = useSearchParams();
   const pageFromUrl = parseInt(searchParams.get(URL_PARAM_KEY) || '1', 10);
   const [activePage, setPage] = useState(isNaN(pageFromUrl) ? 1 : pageFromUrl);
 
   const extractLinks = useExtractLinksJob();
-  const { job: latestSelectorJob } = useLatestJob(project.id, 'generate_selector');
-  const { job: latestRescanJob } = useLatestJob(project.id, 'rescan_links');
   const { job: latestExtractLinksJob } = useLatestJob(project.id, 'extract_links');
+  const { data: allJobsResponse } = useProjectJobs(project.id);
+  const { data: savedLinksResponse, isLoading: isLoadingSavedLinks } = useProjectLinks(project.id, {
+    page: 1,
+    pageSize: 1,
+  });
 
-  // Determine which job (selector generation or rescan) is the most recent source of URLs.
-  const mostRecentCrawlJob = useMemo(() => {
-    const jobs = [latestSelectorJob, latestRescanJob].filter((j): j is BackgroundJob => !!j);
-    if (jobs.length === 0) return null;
-    return jobs.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0];
-  }, [latestSelectorJob, latestRescanJob]);
-
-  const allUrls = useMemo(
-    () => (mostRecentCrawlJob?.result as { found_urls: string[] } | undefined)?.found_urls || [],
-    [mostRecentCrawlJob]
-  );
   const [selectedUrls, setSelectedUrls] = useState<string[]>([]);
   const [filterText, setFilterText] = useState('');
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
-  const { data: savedLinksResponse, isLoading: isLoadingSavedLinks } = useProjectLinks(project.id, {
-    page: activePage,
-    pageSize: PAGE_SIZE,
-  });
+  const unconfirmedUrls = useMemo(() => {
+    if (!allJobsResponse) return [];
+    const latestConfirmJobDate = latestExtractLinksJob?.created_at
+      ? new Date(latestExtractLinksJob.created_at)
+      : new Date(0);
 
-  const hasNewLinksToProcess = useMemo(() => {
-    if (!mostRecentCrawlJob) return false;
-    // If an extract links job has never run, or if the latest crawl job is newer,
-    // then we have new links to process.
-    if (!latestExtractLinksJob) return true;
-    return new Date(mostRecentCrawlJob.created_at) > new Date(latestExtractLinksJob.created_at);
-  }, [mostRecentCrawlJob, latestExtractLinksJob]);
+    const recentCrawlJobs = allJobsResponse.data.filter(
+      (job) =>
+        (job.task_name === 'generate_selector' || job.task_name === 'rescan_links') &&
+        job.status === 'completed' &&
+        new Date(job.created_at) > latestConfirmJobDate
+    );
 
-  const showSelectionUI = project.status === 'selector_generated' || (hasNewLinksToProcess && allUrls.length > 0);
-
-  const filteredUrls = useMemo(
-    () => allUrls.filter((url) => url.toLowerCase().includes(filterText.toLowerCase())),
-    [allUrls, filterText]
-  );
+    const urlSet = new Set<string>();
+    for (const job of recentCrawlJobs) {
+      const urls = (job.result as { found_urls: string[] })?.found_urls || [];
+      for (const url of urls) {
+        urlSet.add(url);
+      }
+    }
+    return Array.from(urlSet);
+  }, [allJobsResponse, latestExtractLinksJob]);
 
   useEffect(() => {
-    // Automatically select all found URLs when the selection UI is shown
-    if (showSelectionUI) {
-      setSelectedUrls(allUrls);
-    }
-  }, [showSelectionUI, allUrls]);
+    setSelectedUrls(unconfirmedUrls);
+  }, [unconfirmedUrls]);
+
+  const filteredUrls = useMemo(
+    () => unconfirmedUrls.filter((url) => url.toLowerCase().includes(filterText.toLowerCase())),
+    [unconfirmedUrls, filterText]
+  );
+
+  const showSelectionUI = unconfirmedUrls.length > 0;
+
+  if (project.status === 'draft' || project.status === 'search_params_generated') {
+    return <Text c="dimmed">Complete the previous steps to review links.</Text>;
+  }
 
   const handleSaveLinks = () => {
     extractLinks.mutate({ project_id: project.id, urls: selectedUrls });
   };
-
   const isJobActive = latestExtractLinksJob?.status === 'pending' || latestExtractLinksJob?.status === 'in_progress';
 
-  if (project.status === 'draft' || project.status === 'search_params_generated') {
-    return <Text c="dimmed">Complete the previous step to extract links.</Text>;
-  }
-
-  // VIEW 1: Show the selection UI if it's the first time or if new links are available.
+  // VIEW 1: Show selection UI if there are unconfirmed links from a crawl
   if (showSelectionUI) {
     const totalPages = Math.ceil(filteredUrls.length / PAGE_SIZE);
     const paginatedUrls = filteredUrls.slice((activePage - 1) * PAGE_SIZE, activePage * PAGE_SIZE);
 
     return (
       <Stack>
-        {hasNewLinksToProcess && project.status !== 'selector_generated' && (
-          <Alert icon={<IconInfoCircle size="1rem" />} title="New Links Found" color="blue">
-            You have re-run the selector generation or link rescan. Review and save the new set of links below to
-            continue. This will add to the existing links for this project.
-          </Alert>
-        )}
         <Text>
-          Review the links found by the crawler. Uncheck any links you wish to exclude. Hover over a link to see a live
-          preview.
+          New links have been found. Review the list and uncheck any you wish to exclude, then save them to the project.
         </Text>
         <Grid gutter="xl">
           <Grid.Col span={{ base: 12, md: 6 }}>
             <Paper withBorder p="md">
               <Group justify="space-between" mb="sm">
                 <Title order={5}>
-                  Found Links ({selectedUrls.length} / {allUrls.length} selected)
+                  Found Links ({selectedUrls.length} / {unconfirmedUrls.length} selected)
                 </Title>
                 <Checkbox
                   label="Select / Deselect All"
-                  checked={selectedUrls.length === allUrls.length && allUrls.length > 0}
-                  indeterminate={selectedUrls.length > 0 && selectedUrls.length < allUrls.length}
-                  onChange={(event) => setSelectedUrls(event.currentTarget.checked ? allUrls : [])}
+                  checked={selectedUrls.length === unconfirmedUrls.length && unconfirmedUrls.length > 0}
+                  indeterminate={selectedUrls.length > 0 && selectedUrls.length < unconfirmedUrls.length}
+                  onChange={(event) => setSelectedUrls(event.currentTarget.checked ? unconfirmedUrls : [])}
                 />
               </Group>
               <TextInput
@@ -176,7 +167,7 @@ export function StepExtractLinks({ project }: StepProps) {
             loading={extractLinks.isPending || isJobActive}
             disabled={selectedUrls.length === 0 || extractLinks.isPending || isJobActive}
           >
-            {isJobActive ? 'Saving...' : `Save ${selectedUrls.length} Links`}
+            {isJobActive ? 'Saving...' : `Confirm and Save ${selectedUrls.length} Links`}
           </Button>
         </Group>
 
@@ -186,20 +177,52 @@ export function StepExtractLinks({ project }: StepProps) {
   }
 
   // VIEW 2: If no new links are pending, show the results table of saved links.
-  if (isLoadingSavedLinks) {
+  if (isLoadingSavedLinks && !savedLinksResponse) {
     return (
       <Center p="xl">
         <Loader />
       </Center>
     );
   }
-  const links = savedLinksResponse?.data || [];
-  const totalItems = savedLinksResponse?.meta.total_items || 0;
+
+  const hasSavedLinks = (savedLinksResponse?.meta.total_items || 0) > 0;
+
+  if (!hasSavedLinks) {
+    return (
+      <Text c="dimmed">
+        No links have been found or saved for this project yet. Go back to the previous step to crawl a source.
+      </Text>
+    );
+  }
+
+  return <SavedLinksView project={project} />;
+}
+
+function SavedLinksView({ project }: StepProps) {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const pageFromUrl = parseInt(searchParams.get(URL_PARAM_KEY) || '1', 10);
+  const { data: linksResponse, isLoading } = useProjectLinks(project.id, {
+    page: pageFromUrl,
+    pageSize: PAGE_SIZE,
+  });
+
+  if (isLoading) {
+    return (
+      <Center p="xl">
+        <Loader />
+      </Center>
+    );
+  }
+
+  const links = linksResponse?.data || [];
+  const totalItems = linksResponse?.meta.total_items || 0;
   const totalPages = Math.ceil(totalItems / PAGE_SIZE);
 
   return (
     <Stack>
-      <Text>The links for this project have been saved. You can review them below.</Text>
+      <Text>
+        All found links have been saved. The next step will process all links with a "pending" or "failed" status.
+      </Text>
       <Table mt="md" striped highlightOnHover withTableBorder>
         <Table.Thead>
           <Table.Tr>
@@ -214,7 +237,12 @@ export function StepExtractLinks({ project }: StepProps) {
                 <Text truncate>{link.url}</Text>
               </Table.Td>
               <Table.Td>
-                <Tooltip label={link.skip_reason} disabled={!link.skip_reason} multiline w={220}>
+                <Tooltip
+                  label={link.skip_reason || link.error_message}
+                  disabled={!link.skip_reason && !link.error_message}
+                  multiline
+                  w={220}
+                >
                   <Badge color={statusColors[link.status]} variant="light">
                     {link.status}
                   </Badge>
@@ -225,15 +253,14 @@ export function StepExtractLinks({ project }: StepProps) {
         </Table.Tbody>
       </Table>
       {totalPages > 1 && (
-        <Group justify="center" mt="md">
+        <Center mt="md">
           <Pagination
             value={pageFromUrl}
             onChange={(p) => setSearchParams({ [URL_PARAM_KEY]: p.toString() })}
             total={totalPages}
           />
-        </Group>
+        </Center>
       )}
-      <JobStatusIndicator job={latestExtractLinksJob} title="Link Saving Job Status" />
     </Stack>
   );
 }

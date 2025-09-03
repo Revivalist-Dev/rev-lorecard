@@ -41,7 +41,7 @@ PARALLEL_LIMITS = {
 
 # Payloads
 class GenerateSelectorPayload(BaseModel):
-    pass
+    source_ids: List[UUID]
 
 
 class ExtractLinksPayload(BaseModel):
@@ -65,9 +65,9 @@ TaskPayload = Union[
 
 
 class GenerateSelectorResult(BaseModel):
-    selectors: List[str]
+    selectors: Dict[str, list[str]]  # source_id -> selectors
     found_urls: List[str]
-    pagination_selector: Optional[str] = None
+    pagination_selectors: Dict[str, Optional[str]]  # source_id -> pagination_selector
 
 
 class ExtractLinksResult(BaseModel):

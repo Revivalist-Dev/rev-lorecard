@@ -3,24 +3,26 @@ import apiClient from '../services/api';
 import type { BackgroundJob, PaginatedResponse, SingleResponse } from '../types';
 import { notifications } from '@mantine/notifications';
 
-interface CreateJobPayload {
+interface CreateJobForProjectPayload {
   project_id: string;
+}
+
+interface CreateJobForSourcePayload {
+  project_id: string;
+  source_ids: string[];
 }
 
 const optimisticallyAddNewJob = (queryClient: ReturnType<typeof useQueryClient>, newJob: BackgroundJob) => {
   const projectId = newJob.project_id;
   const queryKey = ['jobs', projectId];
 
-  // Immediately update the 'jobs' query cache
   queryClient.setQueryData<PaginatedResponse<BackgroundJob>>(queryKey, (oldData) => {
-    // If there's no old data, create a new structure
     if (!oldData) {
       return {
         data: [newJob],
         meta: { current_page: 1, per_page: 200, total_items: 1 },
       };
     }
-
     return {
       ...oldData,
       data: [newJob, ...oldData.data],
@@ -33,24 +35,25 @@ const optimisticallyAddNewJob = (queryClient: ReturnType<typeof useQueryClient>,
 };
 
 const createJob =
-  (endpoint: string) =>
-  async (payload: CreateJobPayload): Promise<SingleResponse<BackgroundJob>> => {
+  <T extends CreateJobForProjectPayload | CreateJobForSourcePayload>(endpoint: string) =>
+  async (payload: T): Promise<SingleResponse<BackgroundJob>> => {
     const response = await apiClient.post(`/jobs/${endpoint}`, payload);
     return response.data;
   };
 
-const useJobMutation = (endpoint: string, notificationTitle: string) => {
+const useJobMutation = <T extends CreateJobForProjectPayload | CreateJobForSourcePayload>(
+  endpoint: string,
+  notificationTitle: string
+) => {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: createJob(endpoint),
+    mutationFn: createJob<T>(endpoint),
     onSuccess: (response) => {
       const newJob = response.data;
-
       optimisticallyAddNewJob(queryClient, newJob);
-
       queryClient.invalidateQueries({ queryKey: ['project', newJob.project_id] });
-
+      queryClient.invalidateQueries({ queryKey: ['sources', newJob.project_id] });
       notifications.show({
         title: notificationTitle,
         message: 'The background job has been started successfully.',
@@ -69,12 +72,14 @@ const useJobMutation = (endpoint: string, notificationTitle: string) => {
 };
 
 export const useGenerateSearchParamsJob = () =>
-  useJobMutation('generate-search-params', 'Search Parameter Generation Started');
-export const useGenerateSelectorJob = () => useJobMutation('generate-selector', 'Selector Generation Started');
+  useJobMutation<CreateJobForProjectPayload>('generate-search-params', 'Search Parameter Generation Started');
+export const useGenerateSelectorJob = () =>
+  useJobMutation<CreateJobForSourcePayload>('generate-selector', 'Selector Generation & Crawl Started');
 export const useProcessProjectEntriesJob = () =>
-  useJobMutation('process-project-entries', 'Lorebook Generation Started');
+  useJobMutation<CreateJobForProjectPayload>('process-project-entries', 'Lorebook Generation Started');
+export const useRescanLinksJob = () => useJobMutation<CreateJobForSourcePayload>('rescan-links', 'Link Rescan Started');
 
-// The extract-links job has a different payload but can use the same logic
+// Re-introduce the extract-links job for the confirmation step.
 interface ExtractLinksPayload {
   project_id: string;
   urls: string[];
@@ -90,14 +95,12 @@ export const useExtractLinksJob = () => {
     mutationFn: createExtractLinksJob,
     onSuccess: (response) => {
       const newJob = response.data;
-
       optimisticallyAddNewJob(queryClient, newJob);
-
       queryClient.invalidateQueries({ queryKey: ['project', newJob.project_id] });
-
+      queryClient.invalidateQueries({ queryKey: ['links', newJob.project_id] });
       notifications.show({
-        title: 'Link Extraction Started',
-        message: 'The links are being saved to the project.',
+        title: 'Link Saving Started',
+        message: 'The selected links are being saved to the project.',
         color: 'blue',
       });
     },
@@ -105,7 +108,7 @@ export const useExtractLinksJob = () => {
     onError: (error: any) => {
       notifications.show({
         title: 'Error',
-        message: `Failed to extract links: ${error.response?.data?.detail || error.message}`,
+        message: `Failed to save links: ${error.response?.data?.detail || error.message}`,
         color: 'red',
       });
     },
@@ -142,5 +145,3 @@ export const useCancelJob = () => {
     },
   });
 };
-
-export const useRescanLinksJob = () => useJobMutation('rescan-links', 'Link Rescan Started');

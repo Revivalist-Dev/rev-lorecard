@@ -3,7 +3,7 @@ selector_prompt = """--- role: system
 ---
 
 --- role: system
-Analyze this HTML content from {{project.source_url}} and identify ONE HIGH-VALUE CSS selector that targets links to content-rich detail pages (e.g., character profiles, item descriptions, location details).
+Analyze this HTML content from {{source.url}} and identify ONE HIGH-VALUE CSS selector that targets links to content-rich detail pages (e.g., character profiles, item descriptions, location details).
 
 Purpose: {{project.search_params.purpose}}
 Extraction Notes: {{project.search_params.extraction_notes}}
@@ -77,7 +77,7 @@ entry_creation_prompt = """--- role: system
 ---
 
 --- role: system
-Analyze the following source content (extracted from {{source_url}}) and create a single, detailed SillyTavern lorebook entry.
+Analyze the following source content (extracted from {{source.url}}) and create a single, detailed SillyTavern lorebook entry.
 
 **CRITERIA FOR VALIDATION:**
 *{{project.search_params.criteria}}*

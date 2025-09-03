@@ -1,6 +1,8 @@
 import asyncio
 import hashlib
 from uuid import UUID
+from datetime import datetime
+from typing import Optional
 
 from urllib.parse import urljoin
 from bs4 import BeautifulSoup
@@ -8,6 +10,7 @@ from db.background_jobs import (
     BackgroundJob,
     ExtractLinksPayload,
     ExtractLinksResult,
+    GenerateSelectorPayload,
     GenerateSelectorResult,
     GenerateSearchParamsResult,
     JobStatus,
@@ -36,6 +39,12 @@ from db.projects import (
     get_project,
     update_project,
 )
+from db.sources import (
+    ProjectSource,
+    UpdateProjectSource,
+    get_project_source,
+    update_project_source,
+)
 from db.global_templates import list_all_global_templates
 from providers.index import (
     ChatCompletionErrorResponse,
@@ -60,38 +69,33 @@ from services.templates import create_messages_from_template
 logger = get_logger(__name__)
 
 
-async def _crawl_for_links(job: BackgroundJob, project: Project) -> None:
-    """Shared logic to crawl a site for links using selectors stored on the project."""
+async def _crawl_one_source(job_id: UUID, source: ProjectSource) -> list[str]:
+    """Crawls a single source URL and returns a list of found links."""
     scraper = Scraper()
 
-    selectors = project.link_extraction_selector
-    pagination_selector = project.link_extraction_pagination_selector
+    selectors = source.link_extraction_selector
+    pagination_selector = source.link_extraction_pagination_selector
 
     if not selectors:
-        raise ValueError("Project must have selectors for crawling.")
+        logger.warning(
+            f"[{job_id}] Source {source.id} has no selectors for crawling. Skipping."
+        )
+        return []
 
-    logger.info(f"[{job.id}] Starting crawl based on selectors: {selectors}")
-
-    await update_job_with_notification(
-        job.id,
-        UpdateBackgroundJob(
-            total_items=project.max_pages_to_crawl,
-            processed_items=0,
-            progress=0,
-        ),
+    logger.info(
+        f"[{job_id}] Starting crawl for source {source.id} using selectors: {selectors}"
     )
 
-    current_url: str | None = project.source_url
-    if not current_url:
-        raise ValueError("Project must have a source URL for crawling.")
-
+    current_url: str | None = source.url
     found_links_set = set()
     visited_content_hashes = set()
     pages_crawled = 0
 
-    while current_url and pages_crawled < project.max_pages_to_crawl:
+    while current_url and pages_crawled < source.max_pages_to_crawl:
         pages_crawled += 1
-        logger.info(f"[{job.id}] Crawling page {pages_crawled}: {current_url}")
+        logger.info(
+            f"[{job_id}] Crawling page {pages_crawled} of source {source.id}: {current_url}"
+        )
 
         try:
             html = await scraper.get_content(current_url, clean=True)
@@ -102,7 +106,9 @@ async def _crawl_for_links(job: BackgroundJob, project: Project) -> None:
 
         content_hash = hashlib.md5(markdown.encode()).hexdigest()
         if content_hash in visited_content_hashes:
-            logger.info(f"[{job.id}] Duplicate page content detected. Ending crawl.")
+            logger.info(
+                f"[{job_id}] Duplicate page content detected for source {source.id}. Ending crawl."
+            )
             break
         visited_content_hashes.add(content_hash)
 
@@ -115,16 +121,6 @@ async def _crawl_for_links(job: BackgroundJob, project: Project) -> None:
                     absolute_url = urljoin(str(current_url), href)  # pyright: ignore[reportArgumentType]
                     found_links_set.add(absolute_url)
 
-        # Update job progress in real-time
-        progress = (pages_crawled / project.max_pages_to_crawl) * 100
-        await update_job_with_notification(
-            job.id,
-            UpdateBackgroundJob(
-                processed_items=pages_crawled,
-                progress=progress,
-            ),
-        )
-
         # Find next page link
         next_page_url = None
         if pagination_selector:
@@ -136,56 +132,85 @@ async def _crawl_for_links(job: BackgroundJob, project: Project) -> None:
             break
         current_url = next_page_url
 
-    await update_job_with_notification(
-        job.id,
-        UpdateBackgroundJob(
-            status=JobStatus.completed,
-            progress=100,
-            processed_items=pages_crawled,
-            result=GenerateSelectorResult(
-                found_urls=sorted(list(found_links_set)),
-                pagination_selector=pagination_selector,
-                selectors=selectors,
-            ),
-        ),
+    await update_project_source(
+        source.id, UpdateProjectSource(last_crawled_at=datetime.now())
     )
+
+    return sorted(list(found_links_set))
 
 
 async def generate_selector(job: BackgroundJob, project: Project):
-    if not project.source_url:
-        raise ValueError("Project must have a source URL")
+    if not isinstance(job.payload, GenerateSelectorPayload):
+        raise TypeError("Invalid payload for generate_selector job.")
 
-    if not project.search_params:
-        raise ValueError("Project must have search params")
+    source_ids = job.payload.source_ids
+    total_sources = len(source_ids)
+    processed_sources = 0
+    all_found_urls = set()
+    all_selectors: dict[str, list[str]] = {}
+    all_pagination_selectors: dict[str, Optional[str]] = {}
 
-    scraper = Scraper()
-    logger.info(f"[{job.id}] Scraping content from {project.source_url}")
-    content = await scraper.get_content(project.source_url, clean=True, pretty=True)
-    provider = providers[project.ai_provider_config.api_provider]
-    logger.info(f"[{job.id}] Generating selector with {provider.__class__.__name__}")
-
-    global_templates = await list_all_global_templates()
-    globals_dict = {gt.name: gt.content for gt in global_templates}
-    context = {
-        "content": content,
-        "project": project.model_dump(),
-        "globals": globals_dict,
-    }
-    response = await provider.generate(
-        ChatCompletionRequest(
-            model=project.ai_provider_config.model_name,
-            messages=create_messages_from_template(
-                project.templates.selector_generation, context
-            ),
-            response_format=ResponseSchema(
-                name="selector_response",
-                schema_value=SelectorResponse.model_json_schema(),
-            ),
-            **project.ai_provider_config.model_parameters,
-        )
+    await update_job_with_notification(
+        job.id,
+        UpdateBackgroundJob(total_items=total_sources, processed_items=0, progress=0),
     )
 
-    if isinstance(response, ChatCompletionErrorResponse):
+    for source_id in source_ids:
+        source = await get_project_source(source_id)
+        if not source:
+            logger.warning(f"[{job.id}] Source {source_id} not found, skipping.")
+            continue
+
+        if not project.search_params:
+            raise ValueError("Project must have search params")
+
+        scraper = Scraper()
+        logger.info(f"[{job.id}] Scraping content from {source.url}")
+        content = await scraper.get_content(source.url, clean=True, pretty=True)
+        provider = providers[project.ai_provider_config.api_provider]
+        logger.info(
+            f"[{job.id}] Generating selector for source {source.id} with {provider.__class__.__name__}"
+        )
+
+        global_templates = await list_all_global_templates()
+        globals_dict = {gt.name: gt.content for gt in global_templates}
+        context = {
+            "content": content,
+            "project": project.model_dump(),
+            "source": source.model_dump(),
+            "globals": globals_dict,
+        }
+        response = await provider.generate(
+            ChatCompletionRequest(
+                model=project.ai_provider_config.model_name,
+                messages=create_messages_from_template(
+                    project.templates.selector_generation, context
+                ),
+                response_format=ResponseSchema(
+                    name="selector_response",
+                    schema_value=SelectorResponse.model_json_schema(),
+                ),
+                **project.ai_provider_config.model_parameters,
+            )
+        )
+
+        if isinstance(response, ChatCompletionErrorResponse):
+            await create_api_request_log(
+                CreateApiRequestLog(
+                    project_id=project.id,
+                    job_id=job.id,
+                    api_provider=project.ai_provider_config.api_provider,
+                    model_used=project.ai_provider_config.model_name,
+                    request=response.raw_request,
+                    response=response.raw_response,
+                    latency_ms=response.latency_ms,
+                    error=True,
+                )
+            )
+            raise Exception(
+                f"Failed to generate selector for source {source.id}: {response.raw_response}"
+            )
+
         await create_api_request_log(
             CreateApiRequestLog(
                 project_id=project.id,
@@ -194,48 +219,114 @@ async def generate_selector(job: BackgroundJob, project: Project):
                 model_used=project.ai_provider_config.model_name,
                 request=response.raw_request,
                 response=response.raw_response,
+                input_tokens=response.usage.prompt_tokens,
+                output_tokens=response.usage.completion_tokens,
+                calculated_cost=response.usage.cost,
                 latency_ms=response.latency_ms,
-                error=True,
             )
         )
-        raise Exception(f"Failed to generate selector: {response.raw_response}")
 
-    await create_api_request_log(
-        CreateApiRequestLog(
-            project_id=project.id,
-            job_id=job.id,
-            api_provider=project.ai_provider_config.api_provider,
-            model_used=project.ai_provider_config.model_name,
-            request=response.raw_request,
-            response=response.raw_response,
-            input_tokens=response.usage.prompt_tokens,
-            output_tokens=response.usage.completion_tokens,
-            calculated_cost=response.usage.cost,
-            latency_ms=response.latency_ms,
+        selector_response = SelectorResponse.model_validate(response.content)
+        update_payload = UpdateProjectSource(
+            link_extraction_selector=selector_response.selectors,
+            link_extraction_pagination_selector=selector_response.pagination_selector,
         )
+        if project.status == ProjectStatus.search_params_generated:
+            await update_project(
+                project.id, UpdateProject(status=ProjectStatus.selector_generated)
+            )
+
+        updated_source = await update_project_source(source.id, update_payload)
+        if not updated_source:
+            raise Exception(
+                f"Failed to update project source {source.id} with new selectors."
+            )
+
+        source_urls = await _crawl_one_source(job.id, updated_source)
+        all_found_urls.update(source_urls)
+        all_selectors[str(source.id)] = updated_source.link_extraction_selector or []
+        all_pagination_selectors[str(source.id)] = (
+            updated_source.link_extraction_pagination_selector
+        )
+
+        processed_sources += 1
+        await update_job_with_notification(
+            job.id,
+            UpdateBackgroundJob(
+                processed_items=processed_sources,
+                progress=(processed_sources / total_sources) * 100,
+            ),
+        )
+
+    await update_job_with_notification(
+        job.id,
+        UpdateBackgroundJob(
+            status=JobStatus.completed,
+            result=GenerateSelectorResult(
+                found_urls=sorted(list(all_found_urls)),
+                selectors=all_selectors,
+                pagination_selectors=all_pagination_selectors,
+            ),
+        ),
     )
-
-    selector_response = SelectorResponse.model_validate(response.content)
-    update_payload = UpdateProject(
-        link_extraction_selector=selector_response.selectors,
-        link_extraction_pagination_selector=selector_response.pagination_selector,
-    )
-    if project.status == ProjectStatus.search_params_generated:
-        update_payload.status = ProjectStatus.selector_generated
-
-    updated_project = await update_project(project.id, update_payload)
-    if not updated_project:
-        raise Exception("Failed to update project with new selectors.")
-
-    await _crawl_for_links(job, updated_project)
 
 
 async def rescan_links(job: BackgroundJob, project: Project):
-    """Process a job to rescan for links using existing selectors."""
-    if not project.link_extraction_selector:
-        raise ValueError("Project does not have selectors to use for rescanning.")
+    """Process a job to rescan for links using existing selectors for multiple sources."""
+    if not isinstance(job.payload, GenerateSelectorPayload):
+        raise TypeError("Invalid payload for rescan_links job.")
 
-    await _crawl_for_links(job, project)
+    source_ids = job.payload.source_ids
+    total_sources = len(source_ids)
+    processed_sources = 0
+    all_found_urls = set()
+    all_selectors: dict[str, list[str]] = {}
+    all_pagination_selectors: dict[str, Optional[str]] = {}
+
+    await update_job_with_notification(
+        job.id,
+        UpdateBackgroundJob(total_items=total_sources, processed_items=0, progress=0),
+    )
+
+    for source_id in source_ids:
+        source = await get_project_source(source_id)
+        if not source:
+            logger.warning(f"[{job.id}] Source {source_id} not found, skipping.")
+            continue
+
+        if not source.link_extraction_selector:
+            logger.warning(
+                f"[{job.id}] Source {source.id} has no selectors, skipping rescan."
+            )
+            continue
+
+        source_urls = await _crawl_one_source(job.id, source)
+        all_found_urls.update(source_urls)
+        all_selectors[str(source.id)] = source.link_extraction_selector
+        all_pagination_selectors[str(source.id)] = (
+            source.link_extraction_pagination_selector
+        )
+
+        processed_sources += 1
+        await update_job_with_notification(
+            job.id,
+            UpdateBackgroundJob(
+                processed_items=processed_sources,
+                progress=(processed_sources / total_sources) * 100,
+            ),
+        )
+
+    await update_job_with_notification(
+        job.id,
+        UpdateBackgroundJob(
+            status=JobStatus.completed,
+            result=GenerateSelectorResult(
+                found_urls=sorted(list(all_found_urls)),
+                selectors=all_selectors,
+                pagination_selectors=all_pagination_selectors,
+            ),
+        ),
+    )
 
 
 async def generate_search_params(job: BackgroundJob, project: Project):
@@ -316,14 +407,8 @@ async def generate_search_params(job: BackgroundJob, project: Project):
 
 
 async def extract_links(job: BackgroundJob, project: Project):
-    if not project.source_url:
-        raise ValueError("Project must have a source URL")
-
     if not isinstance(job.payload, ExtractLinksPayload):
         raise Exception("Invalid payload for extract_links task")
-
-    if not project.link_extraction_selector:
-        raise Exception("Project has no link_extraction_selector")
 
     if not job.payload.urls:
         logger.warning(f"[{job.id}] Extract links job received no URLs to save.")
@@ -374,7 +459,7 @@ async def _process_single_link(
         context = {
             "project": project.model_dump(),
             "content": content,
-            "source_url": link.url,
+            "source": link,
             "globals": globals_dict,
         }
         response = await provider.generate(

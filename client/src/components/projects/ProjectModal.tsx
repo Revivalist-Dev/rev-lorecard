@@ -46,10 +46,8 @@ export function ProjectModal({ opened, onClose, project }: ProjectModalProps) {
     initialValues: {
       id: '',
       name: '',
-      source_url: '',
       prompt: '',
       requests_per_minute: 15,
-      max_pages_to_crawl: 20,
       ai_provider_config: { api_provider: '', model_name: '', model_parameters: { temperature: 0.7 } },
       templates: { search_params_generation: '', selector_generation: '', entry_creation: '' },
     },
@@ -68,7 +66,6 @@ export function ProjectModal({ opened, onClose, project }: ProjectModalProps) {
     if (isEditMode && project) {
       form.setValues({
         ...project,
-        source_url: project.source_url || '',
         prompt: project.prompt || '',
       });
       setSelectedProviderId(project.ai_provider_config.api_provider);
@@ -136,13 +133,9 @@ export function ProjectModal({ opened, onClose, project }: ProjectModalProps) {
             {...form.getInputProps('id')}
             disabled={isEditMode}
           />
-          <TextInput
-            label="Source URL"
-            placeholder="e.g., https://elderscrolls.fandom.com/wiki/Category:Skyrim:_Locations"
-            {...form.getInputProps('source_url')}
-          />
           <Textarea
             label="High-level Prompt"
+            description="A general prompt describing the overall goal of the lorebook."
             placeholder="e.g., 'All major and minor locations in Skyrim'"
             {...form.getInputProps('prompt')}
             autosize
@@ -174,19 +167,11 @@ export function ProjectModal({ opened, onClose, project }: ProjectModalProps) {
 
           <NumberInput
             label="Requests Per Minute"
-            description="Rate limit for AI API calls."
+            description="Rate limit for AI API calls across the entire project."
             defaultValue={15}
             min={1}
             max={300}
             {...form.getInputProps('requests_per_minute')}
-          />
-          <NumberInput
-            label="Max Pages to Crawl"
-            description="Limit for pagination. Set to 1 to disable."
-            defaultValue={20}
-            min={1}
-            max={100}
-            {...form.getInputProps('max_pages_to_crawl')}
           />
 
           <Accordion variant="separated" defaultValue="templates">

@@ -50,6 +50,10 @@ export function useSse(projectId: string | undefined) {
           color: updatedJob.status === 'completed' ? 'green' : 'red',
         });
 
+        if (updatedJob.task_name === 'generate_selector' || updatedJob.task_name === 'rescan_links') {
+          queryClient.invalidateQueries({ queryKey: ['sources', updatedJob.project_id] });
+        }
+
         queryClient.invalidateQueries({ queryKey: ['apiRequestLogs', updatedJob.project_id] });
         queryClient.invalidateQueries({ queryKey: ['projectAnalytics', updatedJob.project_id] });
       }
@@ -60,17 +64,14 @@ export function useSse(projectId: string | undefined) {
       queryClient.invalidateQueries({ queryKey: ['links', updatedLink.project_id] });
     });
 
-    // After bulk creation, it's simplest to just refetch the links list.
     eventSource.addEventListener('links_created', (event) => {
       const data = JSON.parse(event.data);
-      const projectId = data?.links[0]?.project_id;
-      if (projectId) {
-        queryClient.invalidateQueries({ queryKey: ['links', projectId] });
+      const firstLink = data?.links?.[0];
+      if (firstLink?.project_id) {
+        queryClient.invalidateQueries({ queryKey: ['links', firstLink.project_id] });
       }
     });
 
-    // When a new entry is created, we invalidate the entries query to refetch the list.
-    // This ensures pagination and total counts are correct.
     eventSource.addEventListener('entry_created', (event) => {
       const newEntry: LorebookEntry = JSON.parse(event.data);
       queryClient.invalidateQueries({ queryKey: ['entries', newEntry.project_id] });
