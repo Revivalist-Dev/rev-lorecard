@@ -27,6 +27,7 @@ class TaskName(str, Enum):
     EXTRACT_LINKS = "extract_links"
     PROCESS_PROJECT_ENTRIES = "process_project_entries"
     GENERATE_SEARCH_PARAMS = "generate_search_params"
+    RESCAN_LINKS = "rescan_links"
 
 
 PARALLEL_LIMITS = {
@@ -34,6 +35,7 @@ PARALLEL_LIMITS = {
     TaskName.EXTRACT_LINKS: 1,
     TaskName.PROCESS_PROJECT_ENTRIES: 1,
     TaskName.GENERATE_SEARCH_PARAMS: 1,
+    TaskName.RESCAN_LINKS: 1,
 }
 
 
@@ -135,6 +137,7 @@ def _deserialize_job(db_row: Dict[str, Any]) -> BackgroundJob:
         TaskName.EXTRACT_LINKS: ExtractLinksPayload,
         TaskName.PROCESS_PROJECT_ENTRIES: ProcessProjectEntriesPayload,
         TaskName.GENERATE_SEARCH_PARAMS: GenerateSearchParamsPayload,
+        TaskName.RESCAN_LINKS: GenerateSelectorPayload,
     }
     if db_row.get("payload") is not None:
         try:
@@ -150,6 +153,7 @@ def _deserialize_job(db_row: Dict[str, Any]) -> BackgroundJob:
         TaskName.EXTRACT_LINKS: ExtractLinksResult,
         TaskName.PROCESS_PROJECT_ENTRIES: ProcessProjectEntriesResult,
         TaskName.GENERATE_SEARCH_PARAMS: GenerateSearchParamsResult,
+        TaskName.RESCAN_LINKS: GenerateSelectorResult,
     }
     if db_row.get("result") is not None:
         try:

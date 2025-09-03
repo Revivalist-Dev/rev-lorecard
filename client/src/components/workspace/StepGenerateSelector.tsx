@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { Stack, Text, Button, Paper, Code, Group, Accordion, TextInput, NumberInput } from '@mantine/core';
 import { useForm } from '@mantine/form';
-import { useGenerateSelectorJob } from '../../hooks/useJobMutations';
+import { useGenerateSelectorJob, useRescanLinksJob } from '../../hooks/useJobMutations';
 import { useUpdateProject } from '../../hooks/useProjectMutations';
 import { useLatestJob } from '../../hooks/useProjectJobs';
 import type { Project } from '../../types';
@@ -19,8 +19,10 @@ interface FormValues {
 
 export function StepGenerateSelector({ project }: StepProps) {
   const generateSelector = useGenerateSelectorJob();
+  const rescanLinks = useRescanLinksJob();
   const updateProjectMutation = useUpdateProject();
   const { job: latestSelectorJob } = useLatestJob(project.id, 'generate_selector');
+  const { job: latestRescanJob } = useLatestJob(project.id, 'rescan_links');
 
   const form = useForm<FormValues>({
     initialValues: {
@@ -44,6 +46,10 @@ export function StepGenerateSelector({ project }: StepProps) {
     generateSelector.mutate({ project_id: project.id });
   };
 
+  const handleRescan = () => {
+    rescanLinks.mutate({ project_id: project.id });
+  };
+
   const handleSaveChanges = (values: FormValues) => {
     updateProjectMutation.mutate(
       { projectId: project.id, data: values },
@@ -57,11 +63,20 @@ export function StepGenerateSelector({ project }: StepProps) {
   };
 
   const isUnlocked = !!project.search_params;
-  const selectorResult = latestSelectorJob?.result as
+  const hasSelectors = project.link_extraction_selector && project.link_extraction_selector.length > 0;
+  const isSelectorJobActive = latestSelectorJob?.status === 'pending' || latestSelectorJob?.status === 'in_progress';
+  const isRescanJobActive = latestRescanJob?.status === 'pending' || latestRescanJob?.status === 'in_progress';
+  const isAnyJobActive = isSelectorJobActive || isRescanJobActive;
+  const hasUnsavedChanges = form.isDirty();
+
+  // Show the status and result of the most recently run job for this step
+  const mostRecentJob = [latestSelectorJob, latestRescanJob]
+    .filter((job): job is NonNullable<typeof job> => !!job)
+    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0];
+
+  const selectorResult = mostRecentJob?.result as
     | { selectors: string[]; found_urls: string[]; pagination_selector?: string }
     | undefined;
-  const isJobActive = latestSelectorJob?.status === 'pending' || latestSelectorJob?.status === 'in_progress';
-  const hasUnsavedChanges = form.isDirty();
 
   if (!isUnlocked) {
     return <Text c="dimmed">Complete the previous step to generate selectors.</Text>;
@@ -98,18 +113,29 @@ export function StepGenerateSelector({ project }: StepProps) {
               Save Changes
             </Button>
           )}
+          {hasSelectors && (
+            <Button
+              onClick={handleRescan}
+              loading={rescanLinks.isPending || isRescanJobActive}
+              disabled={isAnyJobActive || hasUnsavedChanges}
+              title={hasUnsavedChanges ? 'You have unsaved changes' : 'Rescan for links without calling the AI again.'}
+              variant="light"
+            >
+              {isRescanJobActive ? 'Rescanning...' : 'Rescan Links'}
+            </Button>
+          )}
           <Button
             onClick={handleGenerate}
-            loading={generateSelector.isPending || isJobActive}
-            disabled={generateSelector.isPending || isJobActive || hasUnsavedChanges}
+            loading={generateSelector.isPending || isSelectorJobActive}
+            disabled={isAnyJobActive || hasUnsavedChanges}
             title={hasUnsavedChanges ? 'You have unsaved changes' : ''}
           >
-            {isJobActive ? 'Crawling...' : 'Generate Selectors & Find Links'}
+            {isSelectorJobActive ? 'Crawling...' : hasSelectors ? 'Re-generate & Scan' : 'Generate Selectors & Scan'}
           </Button>
         </Group>
       </form>
 
-      <JobStatusIndicator job={latestSelectorJob} title="Selector Generation & Crawl Status" />
+      <JobStatusIndicator job={mostRecentJob} title="Selector Generation & Crawl Status" />
 
       {selectorResult && (
         <Paper withBorder p="md" mt="md">

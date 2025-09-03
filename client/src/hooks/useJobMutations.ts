@@ -142,3 +142,5 @@ export const useCancelJob = () => {
     },
   });
 };
+
+export const useRescanLinksJob = () => useJobMutation('rescan-links', 'Link Rescan Started');

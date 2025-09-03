@@ -66,7 +66,9 @@ class ProjectController(Controller):
         return await db_list_links_by_project_paginated(project_id, limit, offset)
 
     @get("/{project_id:str}/links/processable-count")
-    async def get_processable_links_count(self, project_id: str) -> SingleResponse[CountResponse]:
+    async def get_processable_links_count(
+        self, project_id: str
+    ) -> SingleResponse[CountResponse]:
         """Get the count of processable (pending or failed) links for a project."""
         logger.debug(f"Counting processable links for project {project_id}")
         count = await db_count_processable_links_by_project(project_id)

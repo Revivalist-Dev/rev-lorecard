@@ -19,7 +19,7 @@ import {
 } from '@mantine/core';
 import { useExtractLinksJob } from '../../hooks/useJobMutations';
 import { useLatestJob } from '../../hooks/useProjectJobs';
-import type { Project } from '../../types';
+import type { BackgroundJob, Project } from '../../types';
 import { JobStatusIndicator } from '../common/JobStatusIndicator';
 import { useProjectLinks } from '../../hooks/useProjectLinks';
 import { useSearchParams } from 'react-router-dom';
@@ -46,11 +46,19 @@ export function StepExtractLinks({ project }: StepProps) {
 
   const extractLinks = useExtractLinksJob();
   const { job: latestSelectorJob } = useLatestJob(project.id, 'generate_selector');
+  const { job: latestRescanJob } = useLatestJob(project.id, 'rescan_links');
   const { job: latestExtractLinksJob } = useLatestJob(project.id, 'extract_links');
 
+  // Determine which job (selector generation or rescan) is the most recent source of URLs.
+  const mostRecentCrawlJob = useMemo(() => {
+    const jobs = [latestSelectorJob, latestRescanJob].filter((j): j is BackgroundJob => !!j);
+    if (jobs.length === 0) return null;
+    return jobs.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0];
+  }, [latestSelectorJob, latestRescanJob]);
+
   const allUrls = useMemo(
-    () => (latestSelectorJob?.result as { found_urls: string[] } | undefined)?.found_urls || [],
-    [latestSelectorJob]
+    () => (mostRecentCrawlJob?.result as { found_urls: string[] } | undefined)?.found_urls || [],
+    [mostRecentCrawlJob]
   );
   const [selectedUrls, setSelectedUrls] = useState<string[]>([]);
   const [filterText, setFilterText] = useState('');
@@ -62,12 +70,12 @@ export function StepExtractLinks({ project }: StepProps) {
   });
 
   const hasNewLinksToProcess = useMemo(() => {
-    if (!latestSelectorJob) return false;
-    // If an extract links job has never run, or if the latest selector job is newer,
+    if (!mostRecentCrawlJob) return false;
+    // If an extract links job has never run, or if the latest crawl job is newer,
     // then we have new links to process.
     if (!latestExtractLinksJob) return true;
-    return new Date(latestSelectorJob.created_at) > new Date(latestExtractLinksJob.created_at);
-  }, [latestSelectorJob, latestExtractLinksJob]);
+    return new Date(mostRecentCrawlJob.created_at) > new Date(latestExtractLinksJob.created_at);
+  }, [mostRecentCrawlJob, latestExtractLinksJob]);
 
   const showSelectionUI = project.status === 'selector_generated' || (hasNewLinksToProcess && allUrls.length > 0);
 
@@ -102,8 +110,8 @@ export function StepExtractLinks({ project }: StepProps) {
       <Stack>
         {hasNewLinksToProcess && project.status !== 'selector_generated' && (
           <Alert icon={<IconInfoCircle size="1rem" />} title="New Links Found" color="blue">
-            You have re-run the selector generation. Review and save the new set of links below to continue. This will
-            replace the previous set of links for this project.
+            You have re-run the selector generation or link rescan. Review and save the new set of links below to
+            continue. This will add to the existing links for this project.
           </Alert>
         )}
         <Text>

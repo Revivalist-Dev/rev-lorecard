@@ -162,3 +162,28 @@ class BackgroundJobController(Controller):
             )
         )
         return SingleResponse(data=job)
+
+    @post("/rescan-links")
+    async def create_rescan_links_job(
+        self, data: CreateJobForProjectPayload = Body()
+    ) -> SingleResponse[BackgroundJob]:
+        """Create a job to rescan links using existing selectors for a project."""
+        logger.debug(f"Creating rescan_links job for project {data.project_id}")
+        project = await db_get_project(data.project_id)
+        if not project:
+            raise NotFoundException(f"Project '{data.project_id}' not found.")
+
+        if not project.link_extraction_selector:
+            raise HTTPException(
+                status_code=400,
+                detail="Project has no selectors to use for rescanning. Please generate them first.",
+            )
+
+        job = await db_create_background_job(
+            CreateBackgroundJob(
+                task_name=TaskName.RESCAN_LINKS,
+                project_id=data.project_id,
+                payload=GenerateSelectorPayload(),
+            )
+        )
+        return SingleResponse(data=job)

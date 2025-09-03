@@ -60,6 +60,97 @@ from services.templates import create_messages_from_template
 logger = get_logger(__name__)
 
 
+async def _crawl_for_links(job: BackgroundJob, project: Project) -> None:
+    """Shared logic to crawl a site for links using selectors stored on the project."""
+    scraper = Scraper()
+
+    selectors = project.link_extraction_selector
+    pagination_selector = project.link_extraction_pagination_selector
+
+    if not selectors:
+        raise ValueError("Project must have selectors for crawling.")
+
+    logger.info(f"[{job.id}] Starting crawl based on selectors: {selectors}")
+
+    await update_job_with_notification(
+        job.id,
+        UpdateBackgroundJob(
+            total_items=project.max_pages_to_crawl,
+            processed_items=0,
+            progress=0,
+        ),
+    )
+
+    current_url: str | None = project.source_url
+    if not current_url:
+        raise ValueError("Project must have a source URL for crawling.")
+
+    found_links_set = set()
+    visited_content_hashes = set()
+    pages_crawled = 0
+
+    while current_url and pages_crawled < project.max_pages_to_crawl:
+        pages_crawled += 1
+        logger.info(f"[{job.id}] Crawling page {pages_crawled}: {current_url}")
+
+        try:
+            html = await scraper.get_content(current_url, clean=True)
+            markdown = html_to_markdown(html)
+        except Exception as e:
+            logger.error(f"Failed to fetch {current_url}: {e}")
+            break
+
+        content_hash = hashlib.md5(markdown.encode()).hexdigest()
+        if content_hash in visited_content_hashes:
+            logger.info(f"[{job.id}] Duplicate page content detected. Ending crawl.")
+            break
+        visited_content_hashes.add(content_hash)
+
+        soup = BeautifulSoup(html, "html.parser")
+
+        # Extract content links
+        for selector in selectors:
+            for link in soup.select(selector):
+                if href := link.get("href"):
+                    absolute_url = urljoin(str(current_url), href)  # pyright: ignore[reportArgumentType]
+                    found_links_set.add(absolute_url)
+
+        # Update job progress in real-time
+        progress = (pages_crawled / project.max_pages_to_crawl) * 100
+        await update_job_with_notification(
+            job.id,
+            UpdateBackgroundJob(
+                processed_items=pages_crawled,
+                progress=progress,
+            ),
+        )
+
+        # Find next page link
+        next_page_url = None
+        if pagination_selector:
+            if next_page_element := soup.select_one(pagination_selector):
+                if href := next_page_element.get("href"):
+                    next_page_url = urljoin(str(current_url), href)  # pyright: ignore[reportArgumentType]
+
+        if next_page_url == current_url:
+            break
+        current_url = next_page_url
+
+    await update_job_with_notification(
+        job.id,
+        UpdateBackgroundJob(
+            status=JobStatus.completed,
+            progress=100,
+            processed_items=pages_crawled,
+            result=GenerateSelectorResult(
+                found_urls=sorted(list(found_links_set)),
+                pagination_selector=pagination_selector,
+                selectors=selectors,
+            ),
+        ),
+    )
+
+
 async def generate_selector(job: BackgroundJob, project: Project):
     if not project.source_url:
         raise ValueError("Project must have a source URL")
@@ -131,86 +222,20 @@ async def generate_selector(job: BackgroundJob, project: Project):
     )
     if project.status == ProjectStatus.search_params_generated:
         update_payload.status = ProjectStatus.selector_generated
-    await update_project(project.id, update_payload)
 
-    logger.info(f"[{job.id}] Starting crawl based on generated selectors.")
+    updated_project = await update_project(project.id, update_payload)
+    if not updated_project:
+        raise Exception("Failed to update project with new selectors.")
 
-    await update_job_with_notification(
-        job.id,
-        UpdateBackgroundJob(
-            total_items=project.max_pages_to_crawl,
-            processed_items=0,
-            progress=0,
-        ),
-    )
+    await _crawl_for_links(job, updated_project)
 
-    current_url: str | None = project.source_url
-    found_links_set = set()
-    visited_content_hashes = set()
-    pages_crawled = 0
 
-    while current_url and pages_crawled < project.max_pages_to_crawl:
-        pages_crawled += 1
-        logger.info(f"[{job.id}] Crawling page {pages_crawled}: {current_url}")
+async def rescan_links(job: BackgroundJob, project: Project):
+    """Process a job to rescan for links using existing selectors."""
+    if not project.link_extraction_selector:
+        raise ValueError("Project does not have selectors to use for rescanning.")
 
-        try:
-            html = await scraper.get_content(current_url, clean=True)
-            markdown = html_to_markdown(html)
-        except Exception as e:
-            logger.error(f"Failed to fetch {current_url}: {e}")
-            break
-
-        content_hash = hashlib.md5(markdown.encode()).hexdigest()
-        if content_hash in visited_content_hashes:
-            logger.info(f"[{job.id}] Duplicate page content detected. Ending crawl.")
-            break
-        visited_content_hashes.add(content_hash)
-
-        soup = BeautifulSoup(html, "html.parser")
-
-        # Extract content links
-        for selector in selector_response.selectors:
-            for link in soup.select(selector):
-                if href := link.get("href"):
-                    absolute_url = urljoin(str(current_url), href)  # pyright: ignore[reportArgumentType]
-                    found_links_set.add(absolute_url)
-
-        # Update job progress in real-time
-        progress = (pages_crawled / project.max_pages_to_crawl) * 100
-        await update_job_with_notification(
-            job.id,
-            UpdateBackgroundJob(
-                processed_items=pages_crawled,
-                progress=progress,
-            ),
-        )
-
-        # Find next page link
-        next_page_url = None
-        if selector_response.pagination_selector:
-            if next_page_element := soup.select_one(
-                selector_response.pagination_selector
-            ):
-                if href := next_page_element.get("href"):
-                    next_page_url = urljoin(str(current_url), href)  # pyright: ignore[reportArgumentType]
-
-        if next_page_url == current_url:
-            break
-        current_url = next_page_url
-
-    await update_job_with_notification(
-        job.id,
-        UpdateBackgroundJob(
-            status=JobStatus.completed,
-            progress=100,
-            processed_items=pages_crawled,
-            result=GenerateSelectorResult(
-                found_urls=sorted(list(found_links_set)),
-                pagination_selector=selector_response.pagination_selector,
-                selectors=selector_response.selectors,
-            ),
-        ),
-    )
+    await _crawl_for_links(job, project)
 
 
 async def generate_search_params(job: BackgroundJob, project: Project):
@@ -558,6 +583,8 @@ async def process_background_job(id: UUID):
     try:
         if job.task_name == TaskName.GENERATE_SELECTOR:
             await generate_selector(job, project)
+        elif job.task_name == TaskName.RESCAN_LINKS:
+            await rescan_links(job, project)
         elif job.task_name == TaskName.EXTRACT_LINKS:
             await extract_links(job, project)
         elif job.task_name == TaskName.PROCESS_PROJECT_ENTRIES:

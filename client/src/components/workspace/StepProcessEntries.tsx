@@ -64,7 +64,9 @@ export function StepProcessEntries({ project }: StepProps) {
   const handleStart = async () => {
     setIsFetchingCount(true);
     try {
-      const response = await apiClient.get<{ data: {count: number} }>(`/projects/${project.id}/links/processable-count`);
+      const response = await apiClient.get<{ data: { count: number } }>(
+        `/projects/${project.id}/links/processable-count`
+      );
       const processableCount = response.data.data.count;
 
       if (processableCount === 0) {

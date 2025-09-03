@@ -37,25 +37,39 @@ search_params_prompt = """--- role: system
 {{globals.lorebook_definition}}
 ---
 
----role: system
-Given the input:
-```
-{{project.prompt}}
-```
+--- role: system
+Based on the user's request, search parameters for creating a lorebook. These parameters will guide the web scraping and content extraction process.
+
+Here are some examples based on different request types:
+
+**Request: "Characters from Lord of the Rings"**
+```json
+{
+  "purpose": "To gather detailed information about characters, including their background, personality, key relationships, and significant actions.",
+  "extraction_notes": "Extract the character's full name, aliases, species, physical description, personality traits, history, and notable relationships or affiliations.",
+  "criteria": "The source page must be a dedicated character profile, biography, or wiki article. Reject list pages or articles that only mention the character in passing."
+}
+
+**Request: "Locations in Skyrim"**
+```json
+{
+  "purpose": "To gather detailed information about locations, including their description, history, and significance within the world.",
+  "extraction_notes": "Extract the location's name, type (e.g., city, ruin, cave), geographical features, key inhabitants, history, and its role in any major events or quests.",
+  "criteria": "The source page must be a dedicated article about the location. Reject pages that only reference the location as part of another topic."
+}
+
+**Request: "Magic system of Harry Potter"**
+```json
+{
+  "purpose": "To gather comprehensive information about a specific concept or system within the lore.",
+  "extraction_notes": "Extract the core rules, principles, limitations, and key examples of the concept. For a magic system, this includes types of spells, casting requirements, and its origins.",
+  "criteria": "The source page must be a detailed article specifically documenting the concept. Reject pages where the concept is only mentioned anecdotally."
+}
 ---
 
-Generate search parameters for creating a lorebook. The parameters should help gather comprehensive and relevant information based on the type of content requested (characters, locations, events, etc.).
-
-Requirements:
-1. Purpose - Clear statement based on request type:
-- For characters: "To gather detailed character information including backgrounds, traits, and relationships"
-- For locations: "To gather detailed information about places, their features, and significance"
-- For other topics: "To gather comprehensive information about the requested subject matter"
-2. Extraction Notes - Guidelines: "Focus extraction on the specific type of content requested. For characters: extract names, aliases, descriptions, personality, history, and relationships. For locations: extract features, history, significance. For other topics: extract key aspects relevant to the subject."
-3. Criteria - Simple validation requirements:
-- For characters: "Page must be specifically created as a character article (e.g., character profile, biography page). Reject pages that only mention or reference the character within other content."
-- For locations: "Page must be specifically created as a location article (e.g., place description, area guide). Reject pages that only mention or reference the location in passing."
-- For other topics: "Page must be specifically created to document the requested subject. Reject pages that only contain references to the subject within broader content."
+--- role: user
+{{project.prompt}}
+---
 """
 
 entry_creation_prompt = """--- role: system
@@ -65,9 +79,13 @@ entry_creation_prompt = """--- role: system
 --- role: system
 Analyze the following source content (extracted from {{source_url}}) and create a single, detailed SillyTavern lorebook entry.
 
+Purpose: {{project.search_params.purpose}}
+Guidelines:: {{project.search_params.extraction_notes}}
+
 Focus on:
+- Read the content and identify the primary subject.
 - A concise, descriptive `name` (e.g., Character Name, Location Name, Concept). If multiple subjects are present, focus on the primary one or create a general entry name.
-- Relevant `triggers` (keywords, including the name and aliases). Use 2-5 strong keywords. Ensure triggers are relevant and likely to appear in conversation.
+- Relevant `keywords` (triggers, including the name and aliases). Use 1-4 strong keywords. Ensure keywords are relevant and likely to appear in conversation.
 - Well-structured `content` summarizing the key information based on the extraction, suitable for RP context. Ensure it's informative and stands on its own. Aim for reasonable length (e.g., 100-400 words). Format using markdown if appropriate (lists, bolding). Exclude conversational filler or meta-commentary.
 
 --- role: user
@@ -75,59 +93,21 @@ Focus on:
 ---
 """
 
-lorebook_definition = """### WORLDINFO (LOREBOOKS)
+lorebook_definition = """### WORLDINFO (LOREBOOK) DEFINITION
 
-**World Info** (often called **Lorebooks**) is a feature used in AI-driven storytelling and role-playing platforms (like SillyTavern, NovelAI, KoboldAI, or Text-generation-webui) to help AI models maintain consistency in fictional worlds. It acts as a dynamic knowledge base that the AI references during interactions to avoid contradictions and keep track of key details.
+A Lorebook is a collection of entries used to provide an AI with consistent, contextual information about a fictional world. Each entry represents a single concept (e.g., a character, location, or item).
 
----
+**Purpose:** To ensure the AI consistently recalls key details about the world during role-playing or storytelling.
 
-### **What is World Info/Lorebooks?**
-- **A structured database**: Stores details about characters, locations, rules, events, or concepts in your fictional world.
-- **Contextual triggers**: Entries activate automatically when specific keywords or phrases appear in the conversation/story.
-- **Prevents "amnesia"**: Ensures the AI remembers critical lore without relying solely on its limited context window.
+**Standard Entry Structure:**
+- `title`: A concise, descriptive title for the entry (e.g., "Aragorn", "The One Ring").
+- `keywords`: A list of keywords that cause this entry to be injected into the AI's context. Always includes the name and common aliases.
+- `content`: A well-written, factual summary of the subject in an encyclopedic, in-universe tone.
 
----
-
-### **How It Works**
-1. **Create Entries**: Define elements (e.g., a character’s backstory, a magic system’s rules).
-2. **Set Triggers**: Link entries to keywords (e.g., mention "Dragonstone" → inject lore about that location).
-3. **Dynamic Injection**: When a trigger word appears in the chat/story, the relevant entry is temporarily added to the AI’s context.
-
----
-
-### **Key Features**
-- **Hierarchy**: Organize entries into categories (e.g., factions, items, timelines).
-- **Priority**: Set which entries take precedence if multiple triggers occur.
-- **Cross-references**: Link entries to each other (e.g., a character entry references their home city).
-- **Formatting**: Use markdown or plain text.
-
----
-
-### **Example Lorebook Entry**
-```plaintext
-Name: Dragonstone Citadel
-Triggers: Dragonstone, Citadel, Obsidian Fortress
-Content:
-  A volcanic fortress built from black obsidian. Home to the ancient Order of Flames,
-  who guard the Eternal Fire—a magical flame that grants visions of the future.
-  The citadel is rumored to be cursed, as its rulers never live past 40 years.
-```
-
----
-
-### **Use Cases**
-1. **Complex Worldbuilding**: Track political factions, religions, or history.
-2. **Character Consistency**: Ensure the AI remembers a character’s motives, secrets, or relationships.
-3. **Magic/Science Systems**: Define rules (e.g., "Magic drains lifeforce" or "Robots cannot harm humans").
-4. **Plot Hooks**: Store hidden clues or foreshadowing for the AI to weave into the narrative.
-
----
-
-### **Best Practices**
-- **Keep entries concise**: AI models process information best in short, clear snippets.
-- **Balance detail**: Too many entries can overwhelm the context window.
-- **Test triggers**: Ensure keywords are unique enough to avoid false activations.
-- **Update dynamically**: Add/remove entries as the story evolves.
-
-Lorebooks are essential for long-term storytelling with AI.
+**Example Entry:**
+{
+  "title": "Dragonstone Citadel",
+  "keywords": ["Dragonstone", "Citadel", "Obsidian Fortress"],
+  "content": "A volcanic fortress built from black obsidian. It is the ancestral seat of House Targaryen and home to the ancient Order of Flames, who guard the Eternal Fire—a magical flame that grants visions of the future. The citadel is rumored to be cursed, as its rulers rarely live past 40 years."
+}
 """
