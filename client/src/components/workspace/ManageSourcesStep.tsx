@@ -8,6 +8,7 @@ import { useProjectSources, useDeleteProjectSource } from '../../hooks/useProjec
 import { ProjectSourceModal } from './ProjectSourceModal';
 import { formatDate } from '../../utils/formatDate';
 import { useGenerateSelectorJob, useRescanLinksJob } from '../../hooks/useJobMutations';
+import { useLatestJob } from '../../hooks/useProjectJobs';
 
 interface StepProps {
   project: Project;
@@ -22,6 +23,13 @@ export function ManageSourcesStep({ project }: StepProps) {
   const deleteSourceMutation = useDeleteProjectSource(project.id);
   const generateAndScanMutation = useGenerateSelectorJob();
   const rescanMutation = useRescanLinksJob();
+
+  const { job: latestGenerateJob } = useLatestJob(project.id, 'generate_selector');
+  const { job: latestRescanJob } = useLatestJob(project.id, 'rescan_links');
+
+  const isGenerateJobActive = latestGenerateJob?.status === 'pending' || latestGenerateJob?.status === 'in_progress';
+  const isRescanJobActive = latestRescanJob?.status === 'pending' || latestRescanJob?.status === 'in_progress';
+  const isAnyCrawlJobActive = isGenerateJobActive || isRescanJobActive;
 
   const handleOpenCreateModal = () => {
     setSelectedSource(null);
@@ -74,18 +82,18 @@ export function ManageSourcesStep({ project }: StepProps) {
         <Group>
           <Button
             leftSection={<IconPlayerPlay size={14} />}
-            disabled={selectedSourceIds.length === 0}
+            disabled={selectedSourceIds.length === 0 || isAnyCrawlJobActive}
             onClick={() => generateAndScanMutation.mutate({ project_id: project.id, source_ids: selectedSourceIds })}
-            loading={generateAndScanMutation.isPending}
+            loading={generateAndScanMutation.isPending || isGenerateJobActive}
           >
             Generate & Scan Selected ({selectedSourceIds.length})
           </Button>
           <Button
             variant="outline"
             leftSection={<IconRefresh size={14} />}
-            disabled={selectedSourceIds.length === 0}
+            disabled={selectedSourceIds.length === 0 || isAnyCrawlJobActive}
             onClick={() => rescanMutation.mutate({ project_id: project.id, source_ids: selectedSourceIds })}
-            loading={rescanMutation.isPending}
+            loading={rescanMutation.isPending || isRescanJobActive}
           >
             Rescan Selected ({selectedSourceIds.length})
           </Button>
