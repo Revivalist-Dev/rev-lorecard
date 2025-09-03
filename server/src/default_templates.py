@@ -79,14 +79,21 @@ entry_creation_prompt = """--- role: system
 --- role: system
 Analyze the following source content (extracted from {{source_url}}) and create a single, detailed SillyTavern lorebook entry.
 
+**CRITERIA FOR VALIDATION:**
+*{{project.search_params.criteria}}*
+
+**Step 1: Validate the Content**
+- First, determine if the content provided meets the criteria above.
+- If it **meets** the criteria, set `valid` to `true` and proceed to Step 2.
+- If it **does not meet** the criteria, set `valid` to `false`, provide a brief `reason` for why it was skipped (e.g., "Content is a list, not a detailed article."), and set `entry` to `null`.
+
+**Step 2: Create the Lorebook Entry (only if valid is true)**
+- If the content is valid, create an `entry` object.
+- Extract a concise `title`, relevant `keywords`, and a well-structured `content` summary suitable for an RP context.
+- The `content` should be informative, stand on its own, and be 100-400 words. Use markdown for formatting.
+
 Purpose: {{project.search_params.purpose}}
 Guidelines:: {{project.search_params.extraction_notes}}
-
-Focus on:
-- Read the content and identify the primary subject.
-- A concise, descriptive `name` (e.g., Character Name, Location Name, Concept). If multiple subjects are present, focus on the primary one or create a general entry name.
-- Relevant `keywords` (triggers, including the name and aliases). Use 1-4 strong keywords. Ensure keywords are relevant and likely to appear in conversation.
-- Well-structured `content` summarizing the key information based on the extraction, suitable for RP context. Ensure it's informative and stands on its own. Aim for reasonable length (e.g., 100-400 words). Format using markdown if appropriate (lists, bolding). Exclude conversational filler or meta-commentary.
 
 --- role: user
 {{content}}

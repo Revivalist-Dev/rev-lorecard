@@ -15,6 +15,7 @@ class LinkStatus(str, Enum):
     processing = "processing"
     completed = "completed"
     failed = "failed"
+    skipped = "skipped"
 
 
 class CreateLink(BaseModel):
@@ -29,6 +30,7 @@ class UpdateLink(BaseModel):
 
     status: Optional[LinkStatus] = None
     error_message: Optional[str] = None
+    skip_reason: Optional[str] = None
     lorebook_entry_id: Optional[UUID] = None
     raw_content: Optional[str] = None
 
@@ -39,6 +41,7 @@ class Link(CreateLink):
     id: UUID
     status: LinkStatus
     error_message: Optional[str] = None
+    skip_reason: Optional[str] = None
     lorebook_entry_id: Optional[UUID] = None
     created_at: datetime
     raw_content: Optional[str] = None

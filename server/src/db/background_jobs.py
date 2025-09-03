@@ -77,6 +77,7 @@ class ExtractLinksResult(BaseModel):
 class ProcessProjectEntriesResult(BaseModel):
     entries_created: int
     entries_failed: int
+    entries_skipped: int
 
 
 class GenerateSearchParamsResult(BaseModel):

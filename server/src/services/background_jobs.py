@@ -422,32 +422,48 @@ async def _process_single_link(
         )
 
         entry_response = LorebookEntryResponse.model_validate(response.content)
-        created_entry = await create_lorebook_entry(
-            CreateLorebookEntry(
-                project_id=project.id,
-                title=entry_response.title,
-                content=entry_response.content,
-                keywords=entry_response.keywords,
-                source_url=link.url,
+
+        if entry_response.valid and entry_response.entry:
+            created_entry = await create_lorebook_entry(
+                CreateLorebookEntry(
+                    project_id=project.id,
+                    title=entry_response.entry.title,
+                    content=entry_response.entry.content,
+                    keywords=entry_response.entry.keywords,
+                    source_url=link.url,
+                )
             )
-        )
-        await update_link(
-            link.id,
-            UpdateLink(
-                status=LinkStatus.completed,
-                lorebook_entry_id=created_entry.id,
-                raw_content=content,
-            ),
-        )
-        await send_link_updated_notification(job, link)
-        await send_entry_created_notification(job, created_entry)
+            await update_link(
+                link.id,
+                UpdateLink(
+                    status=LinkStatus.completed,
+                    lorebook_entry_id=created_entry.id,
+                    raw_content=content,
+                ),
+            )
+            await send_entry_created_notification(job, created_entry)
+        else:
+            # Content is not valid, skip the link
+            await update_link(
+                link.id,
+                UpdateLink(
+                    status=LinkStatus.skipped,
+                    skip_reason=entry_response.reason
+                    or "Content did not meet project criteria.",
+                ),
+            )
+
+        updated_link = await get_link(link.id)
+        if updated_link:
+            await send_link_updated_notification(job, updated_link)
 
     except Exception as e:
         logger.error(f"[{job.id}] Error processing link {link.id}: {e}", exc_info=True)
-        await update_link(
+        updated_link = await update_link(
             link.id, UpdateLink(status=LinkStatus.failed, error_message=str(e))
         )
-        await send_link_updated_notification(job, link)
+        if updated_link:
+            await send_link_updated_notification(job, updated_link)
 
 
 async def process_project_entries(job: BackgroundJob, project: Project):
@@ -475,6 +491,7 @@ async def process_project_entries(job: BackgroundJob, project: Project):
                 result=ProcessProjectEntriesResult(
                     entries_created=0,
                     entries_failed=0,
+                    entries_skipped=0,
                 ),
             ),
         )
@@ -482,6 +499,7 @@ async def process_project_entries(job: BackgroundJob, project: Project):
 
     processed_count = 0
     failed_count = 0
+    skipped_count = 0
 
     if project.status == ProjectStatus.links_extracted:
         await update_project(project.id, UpdateProject(status=ProjectStatus.processing))
@@ -525,10 +543,12 @@ async def process_project_entries(job: BackgroundJob, project: Project):
                 return
 
             await _process_single_link(job, project, link, scraper)
-            nonlocal processed_count, failed_count
+            nonlocal processed_count, failed_count, skipped_count
             processed_count += 1
             updated_link = await get_link(link.id)
-            if updated_link and updated_link.status == LinkStatus.failed:
+            if updated_link and updated_link.status == LinkStatus.skipped:
+                skipped_count += 1
+            elif updated_link and updated_link.status == LinkStatus.failed:
                 failed_count += 1
             progress = (processed_count / total_links) * 100
             await update_job_with_notification(
@@ -559,8 +579,9 @@ async def process_project_entries(job: BackgroundJob, project: Project):
         UpdateBackgroundJob(
             status=JobStatus.completed,
             result=ProcessProjectEntriesResult(
-                entries_created=processed_count - failed_count,
+                entries_created=processed_count - failed_count - skipped_count,
                 entries_failed=failed_count,
+                entries_skipped=skipped_count,
             ),
         ),
     )

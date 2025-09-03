@@ -1,0 +1,1 @@
+ALTER TABLE "Link" ADD COLUMN "skip_reason" TEXT;

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Stack, Text, Button, Group, Progress, Table, Badge, Title, Pagination } from '@mantine/core';
+import { Stack, Text, Button, Group, Progress, Table, Badge, Title, Pagination, Tooltip } from '@mantine/core';
 import { useProcessProjectEntriesJob } from '../../hooks/useJobMutations';
 import { useLatestJob } from '../../hooks/useProjectJobs';
 import { useProjectLinks } from '../../hooks/useProjectLinks';
@@ -22,6 +22,7 @@ const statusColors: Record<string, string> = {
   processing: 'yellow',
   completed: 'green',
   failed: 'red',
+  skipped: 'yellow',
 };
 
 export function StepProcessEntries({ project }: StepProps) {
@@ -179,9 +180,11 @@ export function StepProcessEntries({ project }: StepProps) {
                     <Text truncate>{link.url}</Text>
                   </Table.Td>
                   <Table.Td>
-                    <Badge color={statusColors[link.status]} variant="light">
-                      {link.status}
-                    </Badge>
+                    <Tooltip label={link.skip_reason} disabled={!link.skip_reason} multiline w={220}>
+                      <Badge color={statusColors[link.status]} variant="light">
+                        {link.status}
+                      </Badge>
+                    </Tooltip>
                   </Table.Td>
                 </Table.Tr>
               ))}

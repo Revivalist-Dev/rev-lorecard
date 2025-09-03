@@ -43,7 +43,7 @@ export interface Project {
   updated_at: string;
 }
 
-export type LinkStatus = 'pending' | 'processing' | 'completed' | 'failed';
+export type LinkStatus = 'pending' | 'processing' | 'completed' | 'failed' | 'skipped';
 
 export interface Link {
   id: string; // UUID
@@ -51,6 +51,7 @@ export interface Link {
   url: string;
   status: LinkStatus;
   error_message?: string;
+  skip_reason?: string;
   lorebook_entry_id?: string; // UUID
   created_at: string;
   raw_content?: string;

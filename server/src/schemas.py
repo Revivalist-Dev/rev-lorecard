@@ -16,7 +16,7 @@ class SelectorResponse(BaseModel):
     )
 
 
-class LorebookEntryResponse(BaseModel):
+class LorebookEntryData(BaseModel):
     """
     Represents the expected JSON structure for a lorebook entry.
     """
@@ -26,6 +26,22 @@ class LorebookEntryResponse(BaseModel):
     keywords: List[str] = Field(
         ...,
         description="A list of keywords that can be used to trigger this entry in a roleplay application.",
+    )
+
+
+class LorebookEntryResponse(BaseModel):
+    """
+    Represents the full response from the LLM for entry creation, including validation.
+    """
+
+    valid: bool = Field(
+        ..., description="Whether the content meets the provided criteria."
+    )
+    reason: Optional[str] = Field(
+        None, description="The reason for skipping the entry if it's not valid."
+    )
+    entry: Optional[LorebookEntryData] = Field(
+        None, description="The generated lorebook entry if the content is valid."
     )
 
 

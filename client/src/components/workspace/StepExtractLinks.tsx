@@ -13,6 +13,7 @@ import {
   Pagination,
   Table,
   Badge,
+  Tooltip,
   Grid,
   TextInput,
   Alert,
@@ -37,6 +38,7 @@ const statusColors: Record<string, string> = {
   processing: 'yellow',
   completed: 'green',
   failed: 'red',
+  skipped: 'yellow',
 };
 
 export function StepExtractLinks({ project }: StepProps) {
@@ -212,9 +214,11 @@ export function StepExtractLinks({ project }: StepProps) {
                 <Text truncate>{link.url}</Text>
               </Table.Td>
               <Table.Td>
-                <Badge color={statusColors[link.status]} variant="light">
-                  {link.status}
-                </Badge>
+                <Tooltip label={link.skip_reason} disabled={!link.skip_reason} multiline w={220}>
+                  <Badge color={statusColors[link.status]} variant="light">
+                    {link.status}
+                  </Badge>
+                </Tooltip>
               </Table.Td>
             </Table.Tr>
           ))}
