@@ -97,7 +97,7 @@ Open your terminal in that same folder and choose one of the commands below.
           -e DATABASE_TYPE=sqlite \
           -e DATABASE_URL=/app/server/data/lorebook_creator.db \
           -v "$(pwd)/data:/app/server/data" \
-          ghcr.io/bmen25124/lorebook-creator:v1.2
+          ghcr.io/bmen25124/lorebook-creator:v1.3
         ```
 
     *   **For Windows (Command Prompt):**
@@ -108,7 +108,7 @@ Open your terminal in that same folder and choose one of the commands below.
           -e DATABASE_TYPE=sqlite ^
           -e DATABASE_URL=/app/server/data/lorebook_creator.db ^
           -v "%cd%/data:/app/server/data" ^
-          ghcr.io/bmen25124/lorebook-creator:v1.2
+          ghcr.io/bmen25124/lorebook-creator:v1.3
         ```
         
     *   **For Windows (PowerShell):**
@@ -119,7 +119,7 @@ Open your terminal in that same folder and choose one of the commands below.
           -e DATABASE_TYPE=sqlite `
           -e DATABASE_URL=/app/server/data/lorebook_creator.db `
           -v "${pwd}/data:/app/server/data" `
-          ghcr.io/bmen25124/lorebook-creator:v1.2
+          ghcr.io/bmen25124/lorebook-creator:v1.3
         ```
 
 *   **To run with PostgreSQL (Advanced):**
@@ -141,7 +141,7 @@ Open your terminal in that same folder and choose one of the commands below.
       -e APP_ENV=production \
       -e DATABASE_TYPE=postgres \
       -e DATABASE_URL=postgresql://user:password@lorebook-db:5432/lorebook_creator \
-      ghcr.io/bmen25124/lorebook-creator:v1.2
+      ghcr.io/bmen25124/lorebook-creator:v1.3
     ```
 
 ---
