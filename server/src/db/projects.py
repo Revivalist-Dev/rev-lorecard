@@ -83,6 +83,30 @@ class Project(CreateProject):
     updated_at: datetime
 
 
+def _deserialize_project(row: Optional[Dict[str, Any]]) -> Optional[Project]:
+    """
+    Takes a raw DB row and correctly deserializes JSON string fields
+    before validating with the Pydantic model.
+    """
+    if not row:
+        return None
+
+    # These are the keys that are stored as JSON strings in SQLite
+    json_keys = ["search_params", "templates", "ai_provider_config"]
+
+    for key in json_keys:
+        if key in row and isinstance(row[key], str):
+            try:
+                # This correctly handles 'null', '{}', '[]', etc.
+                row[key] = json.loads(row[key])
+            except (json.JSONDecodeError, TypeError):
+                # If parsing fails, it might be an empty string or malformed data.
+                # Setting it to None is a safe fallback.
+                row[key] = None
+
+    return Project(**row)
+
+
 async def create_project(project: CreateProject) -> Project:
     db = await get_db_connection()
     query = """
@@ -101,7 +125,11 @@ async def create_project(project: CreateProject) -> Project:
     result = await db.fetch_one(query, params)
     if not result:
         raise Exception("Failed to create project")
-    return Project(**result)
+
+    deserialized_project = _deserialize_project(result)
+    if not deserialized_project:
+        raise Exception("Failed to deserialize created project")
+    return deserialized_project
 
 
 async def get_project(project_id: str) -> Project | None:
@@ -109,9 +137,7 @@ async def get_project(project_id: str) -> Project | None:
     db = await get_db_connection()
     query = 'SELECT * FROM "Project" WHERE id = %s'
     result = await db.fetch_one(query, (project_id,))
-    if result and result.get("search_params"):
-        result["search_params"] = SearchParams.model_validate(result["search_params"])
-    return Project(**result) if result else None
+    return _deserialize_project(result)
 
 
 async def count_projects() -> int:
@@ -129,7 +155,8 @@ async def list_projects_paginated(
     db = await get_db_connection()
     query = 'SELECT * FROM "Project" ORDER BY created_at DESC LIMIT %s OFFSET %s'
     results = await db.fetch_all(query, (limit, offset))
-    projects = [Project(**row) for row in results] if results else []
+    projects = [_deserialize_project(row) for row in results if row]
+    projects = [p for p in projects if p]
     total_items = await count_projects()
     current_page = offset // limit + 1
 
@@ -156,7 +183,10 @@ async def update_project(
     for key, value in update_data.items():
         set_clause_parts.append(f'"{key}" = %s')
         if key in ["ai_provider_config", "templates", "search_params"]:
-            params.append(json.dumps(value))
+            if hasattr(value, "model_dump"):
+                params.append(json.dumps(value.model_dump()))
+            else:
+                params.append(json.dumps(value))
         elif isinstance(value, Enum):
             params.append(value.value)
         else:
@@ -170,11 +200,7 @@ async def update_project(
     query = f'UPDATE "Project" SET {set_clause} WHERE id = %s RETURNING *'
 
     result = await db.fetch_one(query, tuple(params))
-    if not result:
-        return None
-    if result.get("search_params"):
-        result["search_params"] = SearchParams.model_validate(result["search_params"])
-    return Project(**result)
+    return _deserialize_project(result)
 
 
 async def delete_project(project_id: str):

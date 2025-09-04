@@ -40,7 +40,7 @@ from exceptions import (
     validation_exception_handler,
     value_error_exception_handler,
 )
-from db.connection import init_database
+from db.connection import close_database, init_database
 from db.global_templates import create_global_template, get_global_template
 import default_templates
 
@@ -211,6 +211,7 @@ def create_app():
             spa_fallback,
         ],
         on_startup=[create_default_templates, recover_stale_datas],
+        on_shutdown=[close_database],
         static_files_config=None,
     )
 

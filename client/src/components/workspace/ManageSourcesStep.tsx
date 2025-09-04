@@ -109,9 +109,7 @@ export function ManageSourcesStep({ project }: StepProps) {
                     <Group justify="space-between">
                       <Group>
                         <Checkbox value={source.id} onClick={(e) => e.stopPropagation()} />
-                        <Text fw={500} truncate maw="50%">
-                          {source.url}
-                        </Text>
+                        <Text fw={500}>{source.url}</Text>
                       </Group>
                       <Group gap="xs">
                         {source.last_crawled_at && <Badge variant="light">Crawled</Badge>}

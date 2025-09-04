@@ -315,6 +315,7 @@ class SQLiteDB(AsyncDB):
             query.replace("%s", "?"), self._process_params(params) or ()
         ) as cursor:
             rows = await cursor.fetchall()
+            await self._conn.commit()
             return self._process_results([dict(row) for row in rows])
 
     async def fetch_one(
@@ -326,6 +327,7 @@ class SQLiteDB(AsyncDB):
             query.replace("%s", "?"), self._process_params(params) or ()
         ) as cursor:
             row = await cursor.fetchone()
+            await self._conn.commit()
             return self._process_result(dict(row) if row else None)
 
     async def get_and_lock_pending_background_job(self) -> Optional[Dict[str, Any]]:
