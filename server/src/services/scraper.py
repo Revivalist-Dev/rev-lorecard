@@ -130,9 +130,13 @@ class Scraper:
         Fetches the content of a URL.
         Returns the HTML content as a string.
         """
-        async with httpx.AsyncClient() as client:
-            response = await client.get(url, timeout=self.timeout)
+        cookies = {"ageVerified": "true"}
+        async with httpx.AsyncClient(follow_redirects=True) as client:
+            response = await client.get(url, timeout=self.timeout, cookies=cookies)
             response.raise_for_status()
+            content_type = response.headers.get("Content-Type", "")
+            if "text/html" not in content_type:
+                raise ValueError(f"Invalid content type: {content_type}")
             html = response.text
             if clean:
                 html = clean_html(html)
