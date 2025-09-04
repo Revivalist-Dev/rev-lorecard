@@ -1,6 +1,10 @@
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Literal, Optional, Union
+from typing import Any, Dict, List, Literal, Optional, Union, Type  # Add Type import
 from pydantic import BaseModel, Field, field_validator
+
+from logging_config import get_logger
+
+logger = get_logger(__name__)
 
 
 class ModelInfo(BaseModel):
@@ -16,6 +20,7 @@ class ProviderInfo(BaseModel):
     id: str
     name: str
     models: List[ModelInfo]
+    configured: bool
 
 
 class ChatMessage(BaseModel):
@@ -134,8 +139,27 @@ class BaseProvider(ABC):
         pass
 
 
-providers: Dict[str, BaseProvider] = {}
+provider_classes: Dict[str, Type[BaseProvider]] = {}
+_provider_instances: Dict[str, BaseProvider] = {}
 
 
-def register_provider(name: str, provider: BaseProvider):
-    providers[name] = provider
+def register_provider(name: str, provider_class: Type[BaseProvider]):
+    """Registers a provider class, to be instantiated later."""
+    provider_classes[name] = provider_class
+
+
+def get_provider(name: str) -> BaseProvider:
+    """
+    Lazily instantiates and returns a provider.
+    This is now the primary way to access a provider instance.
+    """
+    if name not in _provider_instances:
+        if name not in provider_classes:
+            raise ValueError(f"Provider '{name}' is not registered.")
+
+        # The provider is instantiated HERE, on first use.
+        # If an API key is missing, the error will only happen at this point.
+        logger.info(f"Lazily initializing provider: {name}")
+        _provider_instances[name] = provider_classes[name]()
+
+    return _provider_instances[name]

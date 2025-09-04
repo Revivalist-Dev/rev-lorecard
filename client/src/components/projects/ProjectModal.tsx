@@ -81,9 +81,17 @@ export function ProjectModal({ opened, onClose, project }: ProjectModalProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [project, opened, globalTemplates?.data]);
 
-  const providerOptions = providers?.map((p) => ({ value: p.id, label: p.name })) || [];
-  const modelOptions =
-    providers?.find((p) => p.id === selectedProviderId)?.models.map((m) => ({ value: m.id, label: m.name })) || [];
+  const providerOptions =
+    providers?.map((p) => ({
+      value: p.id,
+      label: p.configured ? p.name : `${p.name} (Not Configured)`,
+      disabled: !p.configured,
+    })) || [];
+
+  const selectedProvider = providers?.find((p) => p.id === selectedProviderId);
+  const isSelectedProviderConfigured = selectedProvider?.configured ?? false;
+
+  const modelOptions = selectedProvider?.models.map((m) => ({ value: m.id, label: m.name })) || [];
 
   const handleNameChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const newName = event.currentTarget.value;
@@ -158,9 +166,9 @@ export function ProjectModal({ opened, onClose, project }: ProjectModalProps) {
               label="Model"
               placeholder="Select a model"
               data={modelOptions}
-              disabled={!selectedProviderId || modelOptions.length === 0}
+              disabled={!selectedProviderId || modelOptions.length === 0 || !isSelectedProviderConfigured}
               searchable
-              nothingFoundMessage="No models found"
+              nothingFoundMessage="No models found or provider not configured"
               {...form.getInputProps('ai_provider_config.model_name')}
             />
           </Group>

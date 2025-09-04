@@ -51,6 +51,7 @@ from providers.index import (
     ChatCompletionErrorResponse,
     ChatCompletionRequest,
     ResponseSchema,
+    get_provider,
 )
 from schemas import LorebookEntryResponse, SearchParamsResponse, SelectorResponse
 from services.rate_limiter import (
@@ -63,7 +64,6 @@ from services.rate_limiter import (
 )
 from db.api_request_logs import create_api_request_log, CreateApiRequestLog
 from services.scraper import Scraper, html_to_markdown
-from providers.index import providers
 from logging_config import get_logger
 from services.templates import create_messages_from_template
 
@@ -168,7 +168,7 @@ async def generate_selector(job: BackgroundJob, project: Project):
         scraper = Scraper()
         logger.info(f"[{job.id}] Scraping content from {source.url}")
         content = await scraper.get_content(source.url, clean=True, pretty=True)
-        provider = providers[project.ai_provider_config.api_provider]
+        provider = get_provider(project.ai_provider_config.api_provider)
         logger.info(
             f"[{job.id}] Generating selector for source {source.id} with {provider.__class__.__name__}"
         )
@@ -346,7 +346,7 @@ async def generate_search_params(job: BackgroundJob, project: Project):
     if not project.prompt:
         raise ValueError("Project must have a prompt")
 
-    provider = providers[project.ai_provider_config.api_provider]
+    provider = get_provider(project.ai_provider_config.api_provider)
     logger.info(
         f"[{job.id}] Generating search params with {provider.__class__.__name__}"
     )
@@ -465,7 +465,7 @@ async def _process_single_link(
             if link.raw_content
             else await scraper.get_content(link.url, type="markdown", clean=True)
         )
-        provider = providers[project.ai_provider_config.api_provider]
+        provider = get_provider(project.ai_provider_config.api_provider)
 
         global_templates = await list_all_global_templates()
         globals_dict = {gt.name: gt.content for gt in global_templates}

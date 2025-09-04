@@ -226,4 +226,4 @@ class OpenRouterClient(BaseProvider):
             )
 
 
-register_provider("openrouter", OpenRouterClient())
+register_provider("openrouter", OpenRouterClient)

@@ -358,4 +358,4 @@ class GeminiClient(BaseProvider):
             )
 
 
-register_provider("gemini", GeminiClient())
+register_provider("gemini", GeminiClient)

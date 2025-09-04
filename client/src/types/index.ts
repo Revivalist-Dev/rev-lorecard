@@ -127,6 +127,7 @@ export interface ProviderInfo {
   id: string;
   name: string;
   models: ModelInfo[];
+  configured: boolean;
 }
 
 export interface GlobalTemplate {
