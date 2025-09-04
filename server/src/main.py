@@ -1,7 +1,9 @@
 import asyncio
 from pathlib import Path
 import sys
+from typing import Literal, Optional
 from dotenv import load_dotenv
+import httpx
 from db.background_jobs import reset_in_progress_jobs_to_pending
 from db.common import CreateGlobalTemplate
 from db.links import reset_processing_links_to_pending
@@ -118,13 +120,58 @@ async def spa_fallback(path: str | None = None) -> ASGIFileResponse:
 
 
 class AppInfo(BaseModel):
-    version: str
+    current_version: str
+    latest_version: Optional[str] = None
+    runtime_env: Literal["docker", "source"]
+    update_available: bool
+
+
+async def get_latest_github_version() -> Optional[str]:
+    """Fetches the latest tag name from the GitHub repository."""
+    # Use the /tags endpoint since the repo uses tags, not formal releases
+    repo_url = "https://api.github.com/repos/bmen25124/lorebook-creator/tags"
+    headers = {"Accept": "application/vnd.github.v3+json"}
+    try:
+        async with httpx.AsyncClient() as client:
+            # Get the list of tags; the API returns them in reverse chronological order
+            response = await client.get(repo_url, headers=headers, timeout=5.0)
+            response.raise_for_status()
+            data = response.json()
+            # The latest tag is the first one in the list
+            if data and isinstance(data, list) and len(data) > 0:
+                return data[0].get("name")
+            else:
+                logger.warning("No tags found in the GitHub repository.")
+                return None
+    except httpx.RequestError as e:
+        logger.warning(f"Could not fetch latest version from GitHub: {e}")
+        return None
+    except Exception as e:
+        logger.error(f"An unexpected error occurred while fetching GitHub version: {e}")
+        return None
 
 
 @get(path="/info", sync_to_thread=False)
 async def get_app_info() -> AppInfo:
-    """Returns basic application information, like the version."""
-    return AppInfo(version=os.getenv("APP_VERSION", "development"))
+    """Returns basic application information, including whether an update is available."""
+    current_version = os.getenv("APP_VERSION", "development").split("-")[0]
+    latest_version = await get_latest_github_version()
+    runtime_env = os.getenv("RUNTIME_ENV", "source")
+
+    update_available = False
+    if (
+        current_version != "development"
+        and latest_version
+        and current_version != latest_version
+    ):
+        update_available = True
+
+    return AppInfo(
+        current_version=current_version,
+        latest_version=latest_version,
+        runtime_env=runtime_env,  # pyright: ignore[reportArgumentType]
+        update_available=update_available,
+    )
 
 
 def create_app():

@@ -118,11 +118,19 @@ cd ..
 echo      Client build complete.
 echo.
 
+REM --- 7.5. Set Application Version from Git ---
+echo [7.5/8] Detecting application version...
+set "APP_VERSION=development"
+for /f "tokens=*" %%g in ('git describe --tags --always') do (set "APP_VERSION=%%g")
+echo      Version detected: !APP_VERSION!
+echo.
+
 REM --- 8. Start the server ---
 echo [8/8] Starting the server...
 echo      Using %DATABASE_TYPE% database and running on port %PORT%.
 echo.
 cd server
+REM The APP_VERSION variable is now available to the uv run command
 uv run python src/main.py
 
 endlocal
