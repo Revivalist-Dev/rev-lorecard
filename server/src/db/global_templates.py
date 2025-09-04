@@ -33,7 +33,7 @@ async def create_global_template(
         template.name,
         template.content,
     )
-    result = await db.fetch_one(query, params)
+    result = await db.execute_and_fetch_one(query, params)
     if not result:
         raise Exception("Failed to create global template")
     return GlobalTemplate(**result)
@@ -105,7 +105,7 @@ async def update_global_template(
     set_clause = ", ".join(set_clause_parts)
     query = f'UPDATE "GlobalTemplate" SET {set_clause} WHERE id = %s RETURNING *'
 
-    result = await db.fetch_one(query, tuple(params))
+    result = await db.execute_and_fetch_one(query, tuple(params))
     return GlobalTemplate(**result) if result else None
 
 

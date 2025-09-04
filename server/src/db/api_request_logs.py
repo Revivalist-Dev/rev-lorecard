@@ -58,7 +58,7 @@ async def create_api_request_log(log: CreateApiRequestLog) -> ApiRequestLog:
         log.error,
         log.timestamp,
     )
-    result = await db.fetch_one(query, params)
+    result = await db.execute_and_fetch_one(query, params)
     if not result:
         raise Exception("Failed to create API request log")
     return ApiRequestLog(**result)

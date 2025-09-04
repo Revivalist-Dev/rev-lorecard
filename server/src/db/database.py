@@ -2,7 +2,6 @@ import json
 from uuid import UUID
 from datetime import datetime
 from typing import Optional, Any, List, Dict, AsyncGenerator
-from typing_extensions import LiteralString
 from abc import ABC, abstractmethod
 import aiosqlite
 from psycopg import AsyncConnection, sql
@@ -13,7 +12,33 @@ from logging_config import get_logger
 
 logger = get_logger(__name__)
 
-# --- Abstract Base Class ---
+# --- Abstract Base Classes ---
+
+
+class AsyncDBTransaction(ABC):
+    """Abstract base class for a transaction-bound database interface."""
+
+    @abstractmethod
+    async def execute(self, query: str, params: Optional[tuple] = None) -> None:
+        pass
+
+    @abstractmethod
+    async def fetch_all(
+        self, query: str, params: Optional[tuple] = None
+    ) -> List[Dict[str, Any]]:
+        pass
+
+    @abstractmethod
+    async def fetch_one(
+        self, query: str, params: Optional[tuple] = None
+    ) -> Optional[Dict[str, Any]]:
+        pass
+
+    @abstractmethod
+    async def execute_and_fetch_one(
+        self, query: str, params: Optional[tuple] = None
+    ) -> Optional[Dict[str, Any]]:
+        pass
 
 
 class AsyncDB(ABC):
@@ -28,21 +53,26 @@ class AsyncDB(ABC):
         pass
 
     @abstractmethod
-    async def execute(
-        self, query: LiteralString, params: Optional[tuple] = None
-    ) -> None:
+    async def execute(self, query: str, params: Optional[tuple] = None) -> None:
         pass
 
     @abstractmethod
     async def fetch_all(
-        self, query: LiteralString, params: Optional[tuple] = None
+        self, query: str, params: Optional[tuple] = None
     ) -> List[Dict[str, Any]]:
         pass
 
     @abstractmethod
     async def fetch_one(
-        self, query: LiteralString, params: Optional[tuple] = None
+        self, query: str, params: Optional[tuple] = None
     ) -> Optional[Dict[str, Any]]:
+        pass
+
+    @abstractmethod
+    async def execute_and_fetch_one(
+        self, query: str, params: Optional[tuple] = None
+    ) -> Optional[Dict[str, Any]]:
+        """Executes a query that writes data and returns the first result."""
         pass
 
     @abstractmethod
@@ -50,35 +80,11 @@ class AsyncDB(ABC):
         pass
 
     @abstractmethod
-    def transaction(self) -> AbstractAsyncContextManager["AsyncDBTransaction"]:
-        """Provides a transactional context."""
-        raise NotImplementedError
+    def transaction(self) -> AbstractAsyncContextManager[AsyncDBTransaction]:
+        pass
 
     @abstractmethod
     async def executescript(self, script: str) -> None:
-        """Executes a multi-statement SQL script."""
-        pass
-
-
-class AsyncDBTransaction(ABC):
-    """Abstract base class for a transaction-bound database interface."""
-
-    @abstractmethod
-    async def execute(
-        self, query: LiteralString, params: Optional[tuple] = None
-    ) -> None:
-        pass
-
-    @abstractmethod
-    async def fetch_all(
-        self, query: LiteralString, params: Optional[tuple] = None
-    ) -> List[Dict[str, Any]]:
-        pass
-
-    @abstractmethod
-    async def fetch_one(
-        self, query: LiteralString, params: Optional[tuple] = None
-    ) -> Optional[Dict[str, Any]]:
         pass
 
 
@@ -90,24 +96,29 @@ class _PostgresTransaction(AsyncDBTransaction):
         self._conn = conn
         self._db_instance = db_instance
 
-    async def execute(
-        self, query: LiteralString, params: Optional[tuple] = None
-    ) -> None:
+    async def execute(self, query: str, params: Optional[tuple] = None) -> None:
         async with self._conn.cursor() as cur:
-            await cur.execute(sql.SQL(query), self._db_instance._process_params(params))
+            await cur.execute(sql.SQL(query), self._db_instance._process_params(params))  # pyright: ignore[reportArgumentType]
 
     async def fetch_all(
-        self, query: LiteralString, params: Optional[tuple] = None
+        self, query: str, params: Optional[tuple] = None
     ) -> List[Dict[str, Any]]:
         async with self._conn.cursor(row_factory=dict_row) as cur:
-            await cur.execute(sql.SQL(query), self._db_instance._process_params(params))
+            await cur.execute(sql.SQL(query), self._db_instance._process_params(params))  # pyright: ignore[reportArgumentType]
             return await cur.fetchall()
 
     async def fetch_one(
-        self, query: LiteralString, params: Optional[tuple] = None
+        self, query: str, params: Optional[tuple] = None
     ) -> Optional[Dict[str, Any]]:
         async with self._conn.cursor(row_factory=dict_row) as cur:
-            await cur.execute(sql.SQL(query), self._db_instance._process_params(params))
+            await cur.execute(sql.SQL(query), self._db_instance._process_params(params))  # pyright: ignore[reportArgumentType]
+            return await cur.fetchone()
+
+    async def execute_and_fetch_one(
+        self, query: str, params: Optional[tuple] = None
+    ) -> Optional[Dict[str, Any]]:
+        async with self._conn.cursor(row_factory=dict_row) as cur:
+            await cur.execute(sql.SQL(query), self._db_instance._process_params(params))  # pyright: ignore[reportArgumentType]
             return await cur.fetchone()
 
 
@@ -128,65 +139,57 @@ class PostgresDB(AsyncDB):
             await self._pool.close()
             self._pool = None
 
-    def _process_param(self, p: Any) -> Any:
-        if isinstance(p, dict):
-            return json.dumps(p)
-        if isinstance(p, UUID):
-            return str(p)
-        return p
-
     def _process_params(self, params: Optional[tuple]) -> Optional[tuple]:
-        return tuple(self._process_param(p) for p in params) if params else None
+        if not params:
+            return None
+        processed = []
+        for p in params:
+            if isinstance(p, (dict, list)):
+                processed.append(json.dumps(p))
+            elif isinstance(p, UUID):
+                processed.append(str(p))
+            else:
+                processed.append(p)
+        return tuple(processed)
 
-    async def execute(
-        self, query: LiteralString, params: Optional[tuple] = None
-    ) -> None:
+    async def execute(self, query: str, params: Optional[tuple] = None) -> None:
         if not self._pool:
             raise ConnectionError("Database pool is not initialized")
         async with self._pool.connection() as conn:
             async with conn.cursor() as cur:
-                await cur.execute(sql.SQL(query), self._process_params(params))
+                await cur.execute(sql.SQL(query), self._process_params(params))  # pyright: ignore[reportArgumentType]
 
     async def fetch_all(
-        self, query: LiteralString, params: Optional[tuple] = None
+        self, query: str, params: Optional[tuple] = None
     ) -> List[Dict[str, Any]]:
         if not self._pool:
             raise ConnectionError("Database pool is not initialized")
         async with self._pool.connection() as conn:
             async with conn.cursor(row_factory=dict_row) as cur:
-                await cur.execute(sql.SQL(query), self._process_params(params))
+                await cur.execute(sql.SQL(query), self._process_params(params))  # pyright: ignore[reportArgumentType]
                 return await cur.fetchall()
 
     async def fetch_one(
-        self, query: LiteralString, params: Optional[tuple] = None
+        self, query: str, params: Optional[tuple] = None
     ) -> Optional[Dict[str, Any]]:
         if not self._pool:
             raise ConnectionError("Database pool is not initialized")
         async with self._pool.connection() as conn:
             async with conn.cursor(row_factory=dict_row) as cur:
-                await cur.execute(sql.SQL(query), self._process_params(params))
+                await cur.execute(sql.SQL(query), self._process_params(params))  # pyright: ignore[reportArgumentType]
                 return await cur.fetchone()
 
+    async def execute_and_fetch_one(
+        self, query: str, params: Optional[tuple] = None
+    ) -> Optional[Dict[str, Any]]:
+        return await self.fetch_one(query, params)
+
     async def get_and_lock_pending_background_job(self) -> Optional[Dict[str, Any]]:
-        query = """
-            WITH oldest_pending AS (
-                SELECT id
-                FROM "BackgroundJob"
-                WHERE status = 'pending'
-                ORDER BY created_at
-                LIMIT 1
-                FOR UPDATE SKIP LOCKED
-            )
-            UPDATE "BackgroundJob"
-            SET status = 'in_progress', updated_at = NOW()
-            WHERE id = (SELECT id FROM oldest_pending)
-            RETURNING *;
-        """
+        query = "WITH oldest_pending AS (SELECT id FROM \"BackgroundJob\" WHERE status = 'pending' ORDER BY created_at LIMIT 1 FOR UPDATE SKIP LOCKED) UPDATE \"BackgroundJob\" SET status = 'in_progress', updated_at = NOW() WHERE id = (SELECT id FROM oldest_pending) RETURNING *;"
         return await self.fetch_one(query)
 
     async def executescript(self, script: str) -> None:
-        # psycopg can execute multi-statement scripts with a single execute call
-        await self.execute(script)  # pyright: ignore[reportArgumentType]
+        await self.execute(script)
 
     @asynccontextmanager
     async def transaction(self) -> AsyncGenerator[_PostgresTransaction, None]:
@@ -228,12 +231,44 @@ class _SQLiteTransaction(AsyncDBTransaction):
             row = await cursor.fetchone()
             return self._db_instance._process_result(dict(row) if row else None)
 
+    async def execute_and_fetch_one(
+        self, query: str, params: Optional[tuple] = None
+    ) -> Optional[Dict[str, Any]]:
+        async with self._conn.execute(
+            query.replace("%s", "?"), self._db_instance._process_params(params) or ()
+        ) as cursor:
+            row = await cursor.fetchone()
+            await self._conn.commit()
+            return self._db_instance._process_result(dict(row) if row else None)
+
+
+class _SQLitePassthroughTransaction(AsyncDBTransaction):
+    def __init__(self, db_instance: "SQLiteDB"):
+        self._db_instance = db_instance
+
+    async def execute(self, query: str, params: Optional[tuple] = None) -> None:
+        await self._db_instance.execute(query, params)
+
+    async def fetch_all(
+        self, query: str, params: Optional[tuple] = None
+    ) -> List[Dict[str, Any]]:
+        return await self._db_instance.fetch_all(query, params)
+
+    async def fetch_one(
+        self, query: str, params: Optional[tuple] = None
+    ) -> Optional[Dict[str, Any]]:
+        return await self._db_instance.fetch_one(query, params)
+
+    async def execute_and_fetch_one(
+        self, query: str, params: Optional[tuple] = None
+    ) -> Optional[Dict[str, Any]]:
+        return await self._db_instance.execute_and_fetch_one(query, params)
+
 
 class SQLiteDB(AsyncDB):
     def __init__(self, db_path: str):
         self._db_path = db_path
         self._conn: Optional[aiosqlite.Connection] = None
-        self._transaction_depth = 0
 
     def _process_results(self, rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         processed_rows = []
@@ -272,38 +307,42 @@ class SQLiteDB(AsyncDB):
             return None
         return self._process_results([row])[0]
 
+    def _process_params(self, params: Optional[tuple]) -> Optional[tuple]:
+        if not params:
+            return None
+        processed = []
+        for p in params:
+            if isinstance(p, (dict, list)):
+                processed.append(json.dumps(p))
+            elif isinstance(p, UUID):
+                processed.append(str(p))
+            elif isinstance(p, datetime):
+                processed.append(p.isoformat())
+            elif isinstance(p, bool):
+                processed.append(1 if p else 0)
+            else:
+                processed.append(p)
+        return tuple(processed)
+
     async def connect(self):
         if not self._conn:
             self._conn = await aiosqlite.connect(self._db_path)
             self._conn.row_factory = aiosqlite.Row
             await self._conn.execute("PRAGMA foreign_keys = ON;")
+            await self._conn.execute("PRAGMA journal_mode=WAL;")
+            await self._conn.commit()
 
     async def disconnect(self):
         if self._conn:
             await self._conn.close()
             self._conn = None
 
-    def _process_param(self, p: Any) -> Any:
-        if isinstance(p, dict) or isinstance(p, list):
-            return json.dumps(p)
-        if isinstance(p, UUID):
-            return str(p)
-        if isinstance(p, datetime):
-            return p.isoformat()
-        if isinstance(p, bool):
-            return 1 if p else 0
-        return p
-
-    def _process_params(self, params: Optional[tuple]) -> Optional[tuple]:
-        return tuple(self._process_param(p) for p in params) if params else None
-
     async def execute(self, query: str, params: Optional[tuple] = None) -> None:
         if not self._conn:
             raise ConnectionError("Database is not connected")
-        async with self._conn.execute(
+        await self._conn.execute(
             query.replace("%s", "?"), self._process_params(params) or ()
-        ):
-            pass
+        )
         await self._conn.commit()
 
     async def fetch_all(
@@ -315,12 +354,23 @@ class SQLiteDB(AsyncDB):
             query.replace("%s", "?"), self._process_params(params) or ()
         ) as cursor:
             rows = await cursor.fetchall()
-            await self._conn.commit()
             return self._process_results([dict(row) for row in rows])
 
     async def fetch_one(
         self, query: str, params: Optional[tuple] = None
     ) -> Optional[Dict[str, Any]]:
+        if not self._conn:
+            raise ConnectionError("Database is not connected")
+        async with self._conn.execute(
+            query.replace("%s", "?"), self._process_params(params) or ()
+        ) as cursor:
+            row = await cursor.fetchone()
+            return self._process_result(dict(row) if row else None)
+
+    async def execute_and_fetch_one(
+        self, query: str, params: Optional[tuple] = None
+    ) -> Optional[Dict[str, Any]]:
+        """Executes a query that writes data and returns the first result, with a commit."""
         if not self._conn:
             raise ConnectionError("Database is not connected")
         async with self._conn.execute(
@@ -333,61 +383,29 @@ class SQLiteDB(AsyncDB):
     async def get_and_lock_pending_background_job(self) -> Optional[Dict[str, Any]]:
         if not self._conn:
             raise ConnectionError("Database is not connected")
-
-        # This transaction locks the database, preventing race conditions for workers.
         async with self.transaction() as tx:
-            select_query = """
-                SELECT id FROM "BackgroundJob"
-                WHERE status = 'pending'
-                ORDER BY created_at
-                LIMIT 1
-            """
-            job_row = await tx.fetch_one(select_query)
-
+            job_row = await tx.fetch_one(
+                "SELECT id FROM \"BackgroundJob\" WHERE status = 'pending' ORDER BY created_at LIMIT 1"
+            )
             if not job_row:
                 return None
-
             job_id = job_row["id"]
-
-            # SQLite >= 3.35.0 supports RETURNING on UPDATE
-            update_query = """
-                UPDATE "BackgroundJob"
-                SET status = 'in_progress', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-                WHERE id = %s
-                RETURNING *
-            """
-            return await tx.fetch_one(update_query, (job_id,))
+            await tx.execute(
+                "UPDATE \"BackgroundJob\" SET status = 'in_progress', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = %s",
+                (job_id,),
+            )
+            return await tx.fetch_one(
+                'SELECT * FROM "BackgroundJob" WHERE id = %s', (job_id,)
+            )
 
     async def executescript(self, script: str) -> None:
         if not self._conn:
             raise ConnectionError("Database is not connected")
-        async with self._conn.executescript(script):
-            pass
+        await self._conn.executescript(script)
         await self._conn.commit()
 
     @asynccontextmanager
-    async def transaction(self) -> AsyncGenerator[_SQLiteTransaction, None]:
+    async def transaction(self) -> AsyncGenerator[AsyncDBTransaction, None]:
         if not self._conn:
             raise ConnectionError("Database is not connected")
-
-        if not self._conn.in_transaction:
-            try:
-                await self._conn.execute("BEGIN")
-                yield _SQLiteTransaction(self._conn, self)
-                await self._conn.commit()
-            except Exception:
-                await self._conn.rollback()
-                raise
-        else:
-            # Already in a transaction, use a savepoint
-            savepoint_name = f"savepoint_{self._transaction_depth}"
-            try:
-                self._transaction_depth += 1
-                await self._conn.execute(f"SAVEPOINT {savepoint_name}")
-                yield _SQLiteTransaction(self._conn, self)
-                await self._conn.execute(f"RELEASE SAVEPOINT {savepoint_name}")
-            except Exception:
-                await self._conn.execute(f"ROLLBACK TO SAVEPOINT {savepoint_name}")
-                raise
-            finally:
-                self._transaction_depth -= 1
+        yield _SQLitePassthroughTransaction(self)

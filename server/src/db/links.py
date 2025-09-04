@@ -64,7 +64,9 @@ async def create_links(links: List[CreateLink]) -> List[Link]:
             RETURNING *
         """
         for link in links:
-            result = await tx.fetch_one(query, (uuid4(), link.project_id, link.url))
+            result = await tx.execute_and_fetch_one(
+                query, (uuid4(), link.project_id, link.url)
+            )
             if result:
                 created_links.append(Link(**result))
     return created_links

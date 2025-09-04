@@ -46,7 +46,7 @@ async def create_project_source(source: CreateProjectSource) -> ProjectSource:
         source.url,
         source.max_pages_to_crawl,
     )
-    result = await db.fetch_one(query, params)
+    result = await db.execute_and_fetch_one(query, params)
     if not result:
         raise Exception("Failed to create project source")
     return ProjectSource(**result)
@@ -86,7 +86,7 @@ async def update_project_source(
     set_clause = ", ".join(set_clause_parts)
     query = f'UPDATE "ProjectSource" SET {set_clause} WHERE id = %s RETURNING *'
 
-    result = await db.fetch_one(query, tuple(params))
+    result = await db.execute_and_fetch_one(query, tuple(params))
     return ProjectSource(**result) if result else None
 
 

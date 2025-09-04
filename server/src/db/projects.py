@@ -122,7 +122,7 @@ async def create_project(project: CreateProject) -> Project:
         json.dumps(project.ai_provider_config.model_dump()),
         project.requests_per_minute,
     )
-    result = await db.fetch_one(query, params)
+    result = await db.execute_and_fetch_one(query, params)
     if not result:
         raise Exception("Failed to create project")
 
@@ -199,7 +199,7 @@ async def update_project(
     set_clause = ", ".join(set_clause_parts)
     query = f'UPDATE "Project" SET {set_clause} WHERE id = %s RETURNING *'
 
-    result = await db.fetch_one(query, tuple(params))
+    result = await db.execute_and_fetch_one(query, tuple(params))
     return _deserialize_project(result)
 
 

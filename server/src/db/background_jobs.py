@@ -182,7 +182,7 @@ async def create_background_job(job: CreateBackgroundJob) -> BackgroundJob:
         job.project_id,
         job.payload.model_dump_json() if job.payload else None,
     )
-    result = await db.fetch_one(query, params)
+    result = await db.execute_and_fetch_one(query, params)
     if not result:
         raise Exception("Failed to create background job")
     return _deserialize_job(result)
@@ -273,7 +273,7 @@ async def update_background_job(
     # The `updated_at` column is updated automatically by the database schema's default value.
     query = f'UPDATE "BackgroundJob" SET {set_clause} WHERE id = %s RETURNING *'
 
-    result = await db.fetch_one(query, tuple(params))
+    result = await db.execute_and_fetch_one(query, tuple(params))
     if not result:
         return None
     return _deserialize_job(result)
