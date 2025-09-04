@@ -149,6 +149,7 @@ export interface CreateProjectPayload {
 export interface ProjectAnalytics {
   total_requests: number;
   total_cost: number;
+  has_unknown_costs: boolean;
   total_input_tokens: number;
   total_output_tokens: number;
   average_latency_ms: number;

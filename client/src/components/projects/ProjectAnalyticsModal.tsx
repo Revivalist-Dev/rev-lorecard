@@ -12,7 +12,7 @@ import {
   Stack,
   Box,
 } from '@mantine/core';
-import { IconAlertCircle } from '@tabler/icons-react';
+import { IconAlertCircle, IconInfoCircle } from '@tabler/icons-react';
 import { useProjectAnalytics } from '../../hooks/useProjectAnalytics';
 import type { JobStatus, LinkStatus } from '../../types';
 
@@ -22,15 +22,13 @@ interface ProjectAnalyticsModalProps {
   projectId: string;
 }
 
-function StatCard({ title, value }: { title: string; value: string | number }) {
+function StatCard({ title, value }: { title: string; value: React.ReactNode }) {
   return (
     <Paper withBorder p="md" radius="md">
       <Text c="dimmed" size="xs" tt="uppercase" fw={700}>
         {title}
       </Text>
-      <Text fw={700} size="xl">
-        {value}
-      </Text>
+      <Box mt={4}>{value}</Box>
     </Paper>
   );
 }
@@ -70,17 +68,71 @@ export function ProjectAnalyticsModal({ opened, onClose, projectId }: ProjectAna
             Usage & Cost
           </Title>
           <SimpleGrid cols={{ base: 1, sm: 3 }}>
-            <StatCard title="Total Requests" value={analytics.total_requests} />
-            <StatCard title="Total Cost" value={`$${analytics.total_cost.toFixed(6)}`} />
-            <StatCard title="Avg. Latency" value={`${analytics.average_latency_ms.toFixed(0)} ms`} />
-            <StatCard title="Input Tokens" value={analytics.total_input_tokens} />
-            <StatCard title="Output Tokens" value={analytics.total_output_tokens} />
+            <StatCard
+              title="Total Requests"
+              value={
+                <Text fw={700} size="xl">
+                  {analytics.total_requests}
+                </Text>
+              }
+            />
+            <StatCard
+              title="Total Cost"
+              value={
+                <Group gap="xs" align="center">
+                  <Text fw={700} size="xl">
+                    ${analytics.total_cost.toFixed(6)}
+                  </Text>
+                  {analytics.has_unknown_costs && (
+                    <Tooltip
+                      label="Total is partial as some requests used models with unknown pricing."
+                      withArrow
+                      multiline
+                      w={220}
+                    >
+                      <IconInfoCircle size={18} style={{ color: 'var(--mantine-color-yellow-5)' }} />
+                    </Tooltip>
+                  )}
+                </Group>
+              }
+            />
+            <StatCard
+              title="Avg. Latency"
+              value={
+                <Text fw={700} size="xl">
+                  {`${analytics.average_latency_ms.toFixed(0)} ms`}
+                </Text>
+              }
+            />
+            <StatCard
+              title="Input Tokens"
+              value={
+                <Text fw={700} size="xl">
+                  {analytics.total_input_tokens}
+                </Text>
+              }
+            />
+            <StatCard
+              title="Output Tokens"
+              value={
+                <Text fw={700} size="xl">
+                  {analytics.total_output_tokens}
+                </Text>
+              }
+            />
           </SimpleGrid>
 
           <Title order={4} mt="xl" mb="md">
             Project Status
           </Title>
-          <StatCard title="Lorebook Entries" value={analytics.total_lorebook_entries} />
+          <StatCard
+            title="Lorebook Entries"
+            value={
+              <Text fw={700} size="xl">
+                {analytics.total_lorebook_entries}
+              </Text>
+            }
+          />
 
           <Title order={5} mt="lg">
             Link Statuses

@@ -10,6 +10,7 @@ class ProjectAnalytics(BaseModel):
 
     total_requests: int
     total_cost: float
+    has_unknown_costs: bool
     total_input_tokens: int
     total_output_tokens: int
     average_latency_ms: float
@@ -26,10 +27,11 @@ async def get_project_analytics(project_id: str) -> ProjectAnalytics | None:
     api_query = """
         SELECT
             COUNT(*) AS total_requests,
-            SUM(calculated_cost) AS total_cost,
+            SUM(CASE WHEN calculated_cost >= 0 THEN calculated_cost ELSE 0 END) AS total_cost,
             SUM(input_tokens) AS total_input_tokens,
             SUM(output_tokens) AS total_output_tokens,
-            AVG(latency_ms) AS average_latency_ms
+            AVG(latency_ms) AS average_latency_ms,
+            MAX(CASE WHEN calculated_cost < 0 THEN 1 ELSE 0 END) as has_unknown_costs
         FROM "ApiRequestLog"
         WHERE project_id = %s
     """
@@ -71,6 +73,7 @@ async def get_project_analytics(project_id: str) -> ProjectAnalytics | None:
         return ProjectAnalytics(
             total_requests=0,
             total_cost=0.0,
+            has_unknown_costs=False,
             total_input_tokens=0,
             total_output_tokens=0,
             average_latency_ms=0.0,
@@ -85,6 +88,7 @@ async def get_project_analytics(project_id: str) -> ProjectAnalytics | None:
     return ProjectAnalytics(
         total_requests=api_result.get("total_requests") or 0,
         total_cost=float(api_result.get("total_cost") or 0.0),
+        has_unknown_costs=bool(api_result.get("has_unknown_costs")),
         total_input_tokens=api_result.get("total_input_tokens") or 0,
         total_output_tokens=api_result.get("total_output_tokens") or 0,
         average_latency_ms=float(api_result.get("average_latency_ms") or 0.0),

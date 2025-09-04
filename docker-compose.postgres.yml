@@ -1,5 +1,3 @@
-# docker-compose.postgres.yml (Override for PostgreSQL)
-
 services:
   app:
     depends_on:

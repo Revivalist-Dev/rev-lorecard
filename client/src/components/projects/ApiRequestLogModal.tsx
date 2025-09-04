@@ -50,7 +50,9 @@ function LogRow({ log }: { log: ApiRequestLog }) {
         <Table.Td>{log.model_used}</Table.Td>
         <Table.Td>{log.input_tokens ?? 'N/A'}</Table.Td>
         <Table.Td>{log.output_tokens ?? 'N/A'}</Table.Td>
-        <Table.Td>{log.calculated_cost?.toFixed(6) ?? 'N/A'}</Table.Td>
+        <Table.Td>
+          {log.calculated_cost !== undefined && log.calculated_cost >= 0 ? log.calculated_cost.toFixed(6) : 'N/A'}
+        </Table.Td>
         <Table.Td>{log.latency_ms}</Table.Td>
       </Table.Tr>
       <Table.Tr>

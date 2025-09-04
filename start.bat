@@ -34,15 +34,31 @@ findstr /b "OPENROUTER_API_KEY=" "%ENV_FILE%" >nul
 if errorlevel 1 (
     if not defined OPENROUTER_API_KEY (
         echo.
-        echo      OpenRouter API Key not found.
+        echo      OpenRouter API Key not found. You can leave this blank if you plan to use another provider.
         set /p "API_KEY=Please enter your OpenRouter API Key and press Enter: "
         echo OPENROUTER_API_KEY=!API_KEY!>>"%ENV_FILE%"
-        echo      API Key saved to %ENV_FILE%.
+        echo      OpenRouter API Key setting saved to %ENV_FILE%.
     ) else (
         echo      Using OpenRouter API Key from system environment.
     )
 ) else (
     echo      Using OpenRouter API Key from %ENV_FILE%.
+)
+
+REM --- Handle GOOGLE_GEMINI_KEY ---
+findstr /b "GOOGLE_GEMINI_KEY=" "%ENV_FILE%" >nul
+if errorlevel 1 (
+    if not defined GOOGLE_GEMINI_KEY (
+        echo.
+        echo      Google Gemini API Key not found. You can leave this blank if you plan to use another provider.
+        set /p "API_KEY=Please enter your Google Gemini API Key and press Enter: "
+        echo GOOGLE_GEMINI_KEY=!API_KEY!>>"%ENV_FILE%"
+        echo      Google Gemini API Key setting saved to %ENV_FILE%.
+    ) else (
+        echo      Using Google Gemini API Key from system environment.
+    )
+) else (
+    echo      Using Google Gemini API Key from %ENV_FILE%.
 )
 
 REM --- Handle PORT ---

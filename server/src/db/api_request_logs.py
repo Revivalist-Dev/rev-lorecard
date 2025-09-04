@@ -5,7 +5,7 @@ from uuid import UUID, uuid4
 
 from db.connection import get_db_connection
 from db.common import PaginatedResponse, PaginationMeta
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class CreateApiRequestLog(BaseModel):
@@ -22,7 +22,7 @@ class CreateApiRequestLog(BaseModel):
     calculated_cost: Optional[float] = None
     latency_ms: int
     error: bool = False
-    timestamp: datetime = datetime.now()
+    timestamp: datetime = Field(default_factory=datetime.now)
 
 
 class ApiRequestLog(CreateApiRequestLog):

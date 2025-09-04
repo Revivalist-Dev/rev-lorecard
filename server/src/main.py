@@ -45,6 +45,7 @@ from db.global_templates import create_global_template, get_global_template
 import default_templates
 
 import providers.openrouter  # noqa: F401
+import providers.gemini  # noqa: F401
 
 logger = get_logger(__name__)
 

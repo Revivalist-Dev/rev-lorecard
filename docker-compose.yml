@@ -9,6 +9,7 @@ services:
     environment:
       - PORT=${PORT:-3000}
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      - GOOGLE_GEMINI_KEY=${GOOGLE_GEMINI_KEY}
       - APP_ENV=${APP_ENV:-production}
 
       # --- Default to SQLite ---

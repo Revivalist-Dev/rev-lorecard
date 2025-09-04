@@ -59,7 +59,7 @@ https://github.com/user-attachments/assets/6cf2aca6-2d5d-40e8-9021-2a91b6056323
 ## Some notes
 - This is not deep research; it doesn't involve a web search. You need to give a URL that has multiple links. _Fandom:category_ pages are perfect for the app. For example, you can give [Oblivion Skill Books](https://elderscrolls.fandom.com/wiki/Category:Oblivion:_Skill_Books). So this is going to extract all books and navigate one by one, and create a lorebook for each book.
 - You can see all API request logs on the API Requests modal. You can also see the project analytics on the Project Analytics modal.
-- Currently, I'm only supporting openrouter because it is enough for me. However, if I see a need to add another API, I will add it.
+- Currently, I'm only supporting openrouter and gemini because it is enough for me. However, if I see a need to add another API, I will add it.
 - You can edit all prompts.
 
 ### Input token usage by steps
@@ -79,6 +79,7 @@ First, create a folder on your computer for the application's data. Inside that 
 ```env
 # .env file
 OPENROUTER_API_KEY=your_secret_key_here
+GOOGLE_GEMINI_KEY=your_secret_key_here
 PORT=3000
 ```
 
@@ -191,7 +192,7 @@ cp .env.example .env
 # On Windows
 copy .env.example .env
 ```
-Now, open the new `.env` file and add your `OPENROUTER_API_KEY`.
+Now, open the new `.env` file and add your `OPENROUTER_API_KEY` or `GOOGLE_GEMINI_KEY`.
 
 **3. Build and run the application**
 
