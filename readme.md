@@ -15,33 +15,45 @@ https://github.com/user-attachments/assets/6cf2aca6-2d5d-40e8-9021-2a91b6056323
 
 <details>
   <summary>Manage Sources</summary>
+  
   ![Manage Sources](showcase/manage-sources.png)
+  
 </details>
 
 <details>
   <summary>Confirming Links</summary>
+  
   ![Confirming Links](showcase/confirm-links.png)
+  
 </details>
 
 <details>
   <summary>Generate Entries</summary>
+  
   ![Generate Entries](showcase/generate-entries.png)
+  
 </details>
 
 <details>
   <summary>Completed Lorebook</summary>
+  
   *The final generated lorebook, structured and ready for use.*
+  
   ![Completed Lorebook](showcase/complete.png)
 </details>
 
 <details>
   <summary>Project Analytics</summary>
+  
   ![Project Analytics](showcase/project-analytics.png)
+  
 </details>
 
 <details>
   <summary>API Request Logs</summary>
+  
   ![API Request Logs](showcase/api-request-logs.png)
+  
 </details>
 
 ## Some notes
