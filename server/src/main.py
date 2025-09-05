@@ -1,53 +1,54 @@
 from dotenv import load_dotenv
+
 load_dotenv()
 
-import asyncio
-from pathlib import Path
-import sys
-from typing import Literal, Optional
-import httpx
-from db.background_jobs import reset_in_progress_jobs_to_pending
-from db.common import CreateGlobalTemplate
-from db.links import reset_processing_links_to_pending
-from logging_config import get_logger, setup_logging
-import os
+import asyncio  # noqa: E402
+from pathlib import Path  # noqa: E402
+import sys  # noqa: E402
+from typing import Literal, Optional  # noqa: E402
+import httpx  # noqa: E402
+from db.background_jobs import reset_in_progress_jobs_to_pending  # noqa: E402
+from db.common import CreateGlobalTemplate  # noqa: E402
+from db.links import reset_processing_links_to_pending  # noqa: E402
+from logging_config import get_logger, setup_logging  # noqa: E402
+import os  # noqa: E402
 
-import uvicorn
-from litestar import Litestar, asgi, get
-from litestar.router import Router
-from litestar.exceptions import ValidationException
-from litestar.config.cors import CORSConfig
-from litestar.static_files import StaticFiles
-from litestar.types import Receive, Scope, Send
-from litestar.file_system import BaseLocalFileSystem
-from litestar.response.file import ASGIFileResponse
-import threading
-from pydantic import BaseModel
+import uvicorn  # noqa: E402
+from litestar import Litestar, asgi, get  # noqa: E402
+from litestar.router import Router  # noqa: E402
+from litestar.exceptions import ValidationException  # noqa: E402
+from litestar.config.cors import CORSConfig  # noqa: E402
+from litestar.static_files import StaticFiles  # noqa: E402
+from litestar.types import Receive, Scope, Send  # noqa: E402
+from litestar.file_system import BaseLocalFileSystem  # noqa: E402
+from litestar.response.file import ASGIFileResponse  # noqa: E402
+import threading  # noqa: E402
+from pydantic import BaseModel  # noqa: E402
 
-from worker import run_worker
-from controllers.api_request_logs import ApiRequestLogController
-from controllers.providers import ProviderController
-from controllers.sse import SSEController
-from controllers.projects import ProjectController
-from controllers.sources import SourceController
-from controllers.lorebook_entries import LorebookEntryController
-from controllers.background_jobs import (
+from worker import run_worker  # noqa: E402
+from controllers.api_request_logs import ApiRequestLogController  # noqa: E402
+from controllers.providers import ProviderController  # noqa: E402
+from controllers.sse import SSEController  # noqa: E402
+from controllers.projects import ProjectController  # noqa: E402
+from controllers.sources import SourceController  # noqa: E402
+from controllers.lorebook_entries import LorebookEntryController  # noqa: E402
+from controllers.background_jobs import (  # noqa: E402
     BackgroundJobController,
 )
-from controllers.analytics import AnalyticsController
-from controllers.global_templates import GlobalTemplateController
-from controllers.health import HealthController
-from exceptions import (
+from controllers.analytics import AnalyticsController  # noqa: E402
+from controllers.global_templates import GlobalTemplateController  # noqa: E402
+from controllers.health import HealthController  # noqa: E402
+from exceptions import (  # noqa: E402
     generic_exception_handler,
     validation_exception_handler,
     value_error_exception_handler,
 )
-from db.connection import close_database, get_db_connection, init_database
-from db.global_templates import create_global_template, get_global_template
-import default_templates
+from db.connection import close_database, get_db_connection, init_database  # noqa: E402
+from db.global_templates import create_global_template, get_global_template  # noqa: E402
+import default_templates  # noqa: E402
 
-import providers.openrouter  # noqa: F401
-import providers.gemini  # noqa: F401
+import providers.openrouter  # noqa: E402, F401
+import providers.gemini  # noqa: E402, F401
 
 logger = get_logger(__name__)
 

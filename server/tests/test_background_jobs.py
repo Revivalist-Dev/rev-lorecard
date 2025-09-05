@@ -8,6 +8,11 @@ from db.projects import (
     CreateProject,
     ProjectTemplates,
 )
+from default_templates import (
+    selector_prompt,
+    entry_creation_prompt,
+    search_params_prompt,
+)
 from services.background_jobs import process_background_job
 
 
@@ -17,12 +22,13 @@ async def cleanup_tables(db: AsyncDB):
     yield
     if isinstance(db, PostgresDB):
         await db.execute(
-            'TRUNCATE "Project", "ProjectSource", "BackgroundJob", "ApiRequestLog", "Link", "LorebookEntry", "GlobalTemplate" CASCADE;'
+            'TRUNCATE "Project", "ProjectSource", "ProjectSourceHierarchy", "BackgroundJob", "ApiRequestLog", "Link", "LorebookEntry", "GlobalTemplate" CASCADE;'
         )
     elif isinstance(db, SQLiteDB):
         tables = [
             "Project",
             "ProjectSource",
+            "ProjectSourceHierarchy",
             "BackgroundJob",
             "ApiRequestLog",
             "Link",
@@ -36,10 +42,6 @@ async def cleanup_tables(db: AsyncDB):
 @pytest.fixture
 def real_project_payload() -> CreateProject:
     """Fixture to return a project payload with real-world settings."""
-    selector_prompt = "{{globals.selector_prompt}}"
-    entry_creation_prompt = """{{globals.entry_creation_prompt}}"""
-    search_params_prompt = "{{globals.search_params_prompt}}"
-
     return CreateProject(
         id="skyrim-locations-test",
         name="Skyrim Locations (Integration Test)",
@@ -58,17 +60,14 @@ def real_project_payload() -> CreateProject:
 
 
 @pytest.mark.asyncio
-async def test_generate_selector_job_with_test_client(
+async def test_discover_and_crawl_job_with_test_client(
     client_test: AsyncTestClient,
     real_project_payload: CreateProject,
     db_type: str,
 ):
     """
-    End-to-end test for the GENERATE_SELECTOR job using the AsyncTestClient.
+    End-to-end test for the DISCOVER_AND_CRAWL_SOURCES job using the AsyncTestClient.
     """
-    if db_type == "sqlite":
-        pytest.skip("Skipping generate_selector test for SQLite")
-
     project_id = real_project_payload.id
 
     # 1. Create the project
@@ -102,9 +101,9 @@ async def test_generate_selector_job_with_test_client(
     )
     assert response.status_code == 200
 
-    # 3. Start the 'generate_selector' job, now with source_ids
+    # 3. Start the 'discover_and_crawl_sources' job
     response = await client_test.post(
-        "/api/jobs/generate-selector",
+        "/api/jobs/discover-and-crawl",
         json={"project_id": project_id, "source_ids": [source_id]},
     )
     assert response.status_code == 201
@@ -113,11 +112,16 @@ async def test_generate_selector_job_with_test_client(
     # 4. Run the worker to process the job
     await process_background_job(job_id)
 
-    # 5. Check the job status via the API
+    # 5. Check the job status and result via the API
     response = await client_test.get(f"/api/jobs/{job_id}")
     assert response.status_code == 200
     job_data = response.json()["data"]
     assert job_data["status"] == "completed"
+    assert job_data["result"] is not None
+    assert "new_links" in job_data["result"]
+    assert "existing_links" in job_data["result"]
+    assert len(job_data["result"]["new_links"]) > 0
+    assert job_data["result"]["selectors_generated"] == 1
 
     # 6. Verify the Project and ProjectSource were updated
     project_response = await client_test.get(f"/api/projects/{project_id}")
@@ -127,9 +131,8 @@ async def test_generate_selector_job_with_test_client(
     sources_response = await client_test.get(f"/api/projects/{project_id}/sources")
     assert sources_response.status_code == 200
     sources_data = sources_response.json()
-    assert len(sources_data) == 1
-    source_data = sources_data[0]
-    assert source_data["id"] == source_id
+    assert len(sources_data) >= 1
+    source_data = next(s for s in sources_data if s["id"] == source_id)
     assert source_data["link_extraction_selector"] is not None
     assert len(source_data["link_extraction_selector"]) > 0
 
@@ -140,6 +143,68 @@ async def test_generate_selector_job_with_test_client(
     assert logs_data["meta"]["total_items"] == 1
     assert logs_data["data"][0]["error"] is False
     assert logs_data["data"][0]["job_id"] == job_id
+
+
+@pytest.mark.asyncio
+async def test_rescan_links_job_with_test_client(
+    client_test: AsyncTestClient,
+    real_project_payload: CreateProject,
+    db_type: str,
+):
+    """
+    End-to-end test for the RESCAN_LINKS job, ensuring it crawls but doesn't call an LLM.
+    """
+
+    project_id = real_project_payload.id
+
+    # 1. Create the project
+    response = await client_test.post(
+        "/api/projects", json=real_project_payload.model_dump()
+    )
+    assert response.status_code == 201
+
+    # 2. Create and configure a source with pre-existing selectors
+    source_payload = {
+        "url": "https://elderscrolls.fandom.com/wiki/Category:Skyrim:_Locations"
+    }
+    response = await client_test.post(
+        f"/api/projects/{project_id}/sources", json=source_payload
+    )
+    assert response.status_code == 201
+    source_id = response.json()["data"]["id"]
+
+    # Manually add selectors to simulate a pre-scanned source
+    response = await client_test.patch(
+        f"/api/projects/{project_id}/sources/{source_id}",
+        json={"link_extraction_selector": ["a.category-page__member-link"]},
+    )
+    assert response.status_code == 200
+
+    # 3. Start the 'rescan_links' job
+    response = await client_test.post(
+        "/api/jobs/rescan-links",
+        json={"project_id": project_id, "source_ids": [source_id]},
+    )
+    assert response.status_code == 201
+    job_id = response.json()["data"]["id"]
+
+    # 4. Run the worker to process the job
+    await process_background_job(job_id)
+
+    # 5. Check job status and result
+    response = await client_test.get(f"/api/jobs/{job_id}")
+    assert response.status_code == 200
+    job_data = response.json()["data"]
+    assert job_data["status"] == "completed"
+    assert job_data["result"] is not None
+    assert len(job_data["result"]["new_links"]) > 0
+    assert job_data["result"]["selectors_generated"] == 0  # Crucial for rescan
+
+    # 6. Verify NO API log was created, as rescan should not use an LLM
+    response = await client_test.get(f"/api/projects/{project_id}/logs")
+    assert response.status_code == 200
+    logs_data = response.json()
+    assert logs_data["meta"]["total_items"] == 0
 
 
 @pytest.mark.asyncio

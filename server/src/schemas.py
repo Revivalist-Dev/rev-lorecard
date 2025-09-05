@@ -4,12 +4,17 @@ from typing import List, Optional
 
 class SelectorResponse(BaseModel):
     """
-    Represents the expected JSON structure for a selector generation response.
+    Represents the expected JSON structure for a selector generation response,
+    distinguishing between content and category links.
     """
 
-    selectors: List[str] = Field(
+    content_selectors: List[str] = Field(
         ...,
-        description="A list of CSS selectors that target the desired links on the page.",
+        description="A list of CSS selectors that target links to final content pages (e.g., character profiles).",
+    )
+    category_selectors: List[str] = Field(
+        default_factory=list,
+        description="A list of CSS selectors for links that lead to other category/list pages.",
     )
     pagination_selector: Optional[str] = Field(
         None, description="A CSS selector for the 'next page' link, if any."

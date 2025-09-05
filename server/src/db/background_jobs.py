@@ -24,7 +24,7 @@ class JobStatus(str, Enum):
 
 
 class TaskName(str, Enum):
-    GENERATE_SELECTOR = "generate_selector"
+    DISCOVER_AND_CRAWL_SOURCES = "discover_and_crawl_sources"
     CONFIRM_LINKS = "confirm_links"
     PROCESS_PROJECT_ENTRIES = "process_project_entries"
     GENERATE_SEARCH_PARAMS = "generate_search_params"
@@ -32,7 +32,7 @@ class TaskName(str, Enum):
 
 
 PARALLEL_LIMITS = {
-    TaskName.GENERATE_SELECTOR: 1,
+    TaskName.DISCOVER_AND_CRAWL_SOURCES: 1,
     TaskName.CONFIRM_LINKS: 1,
     TaskName.PROCESS_PROJECT_ENTRIES: 1,
     TaskName.GENERATE_SEARCH_PARAMS: 1,
@@ -41,7 +41,7 @@ PARALLEL_LIMITS = {
 
 
 # Payloads
-class GenerateSelectorPayload(BaseModel):
+class DiscoverAndCrawlSourcesPayload(BaseModel):
     source_ids: List[UUID]
 
 
@@ -58,18 +58,18 @@ class GenerateSearchParamsPayload(BaseModel):
 
 
 TaskPayload = Union[
-    GenerateSelectorPayload,
+    DiscoverAndCrawlSourcesPayload,
     ConfirmLinksPayload,
     ProcessProjectEntriesPayload,
     GenerateSearchParamsPayload,
 ]
 
 
-class GenerateSelectorResult(BaseModel):
-    selectors: Dict[str, list[str]]  # source_id -> selectors
-    new_urls: List[str]
-    existing_urls: List[str]
-    pagination_selectors: Dict[str, Optional[str]]  # source_id -> pagination_selector
+class DiscoverAndCrawlSourcesResult(BaseModel):
+    new_links: List[str]
+    existing_links: List[str]
+    new_sources_created: int
+    selectors_generated: int
 
 
 class ConfirmLinksResult(BaseModel):
@@ -87,7 +87,7 @@ class GenerateSearchParamsResult(BaseModel):
 
 
 TaskResult = Union[
-    GenerateSelectorResult,
+    DiscoverAndCrawlSourcesResult,
     ConfirmLinksResult,
     ProcessProjectEntriesResult,
     GenerateSearchParamsResult,
@@ -136,11 +136,11 @@ def _deserialize_job(db_row: Dict[str, Any]) -> BackgroundJob:
 
     # --- Gracefully handle payload deserialization ---
     payload_map = {
-        TaskName.GENERATE_SELECTOR: GenerateSelectorPayload,
+        TaskName.DISCOVER_AND_CRAWL_SOURCES: DiscoverAndCrawlSourcesPayload,
         TaskName.CONFIRM_LINKS: ConfirmLinksPayload,
         TaskName.PROCESS_PROJECT_ENTRIES: ProcessProjectEntriesPayload,
         TaskName.GENERATE_SEARCH_PARAMS: GenerateSearchParamsPayload,
-        TaskName.RESCAN_LINKS: GenerateSelectorPayload,
+        TaskName.RESCAN_LINKS: DiscoverAndCrawlSourcesPayload,
     }
     if db_row.get("payload") is not None:
         try:
@@ -152,11 +152,11 @@ def _deserialize_job(db_row: Dict[str, Any]) -> BackgroundJob:
 
     # --- Gracefully handle result deserialization ---
     result_map = {
-        TaskName.GENERATE_SELECTOR: GenerateSelectorResult,
+        TaskName.DISCOVER_AND_CRAWL_SOURCES: DiscoverAndCrawlSourcesResult,
         TaskName.CONFIRM_LINKS: ConfirmLinksResult,
         TaskName.PROCESS_PROJECT_ENTRIES: ProcessProjectEntriesResult,
         TaskName.GENERATE_SEARCH_PARAMS: GenerateSearchParamsResult,
-        TaskName.RESCAN_LINKS: GenerateSelectorResult,
+        TaskName.RESCAN_LINKS: DiscoverAndCrawlSourcesResult,
     }
     if db_row.get("result") is not None:
         try:

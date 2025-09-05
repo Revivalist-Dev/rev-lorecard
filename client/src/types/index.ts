@@ -46,9 +46,18 @@ export interface ProjectSource {
   link_extraction_selector?: string[];
   link_extraction_pagination_selector?: string;
   max_pages_to_crawl: number;
+  max_crawl_depth: number;
   last_crawled_at?: string;
   created_at: string;
   updated_at: string;
+}
+
+export interface ProjectSourceHierarchy {
+  id: string; // UUID
+  project_id: string;
+  parent_source_id: string; // UUID
+  child_source_id: string; // UUID
+  created_at: string;
 }
 
 export type LinkStatus = 'pending' | 'processing' | 'completed' | 'failed' | 'skipped';
@@ -84,7 +93,7 @@ export interface UpdateLorebookEntryPayload {
 
 export type JobStatus = 'pending' | 'in_progress' | 'completed' | 'failed' | 'cancelling' | 'canceled';
 export type TaskName =
-  | 'generate_selector'
+  | 'discover_and_crawl_sources'
   | 'confirm_links'
   | 'process_project_entries'
   | 'generate_search_params'

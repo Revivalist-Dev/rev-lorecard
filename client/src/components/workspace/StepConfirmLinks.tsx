@@ -48,7 +48,7 @@ export function StepConfirmLinks({ project }: StepProps) {
 
   const confirmLinks = useConfirmLinksJob();
   const { job: latestConfirmLinksJob } = useLatestJob(project.id, 'confirm_links');
-  const { job: latestCrawlJob } = useLatestJob(project.id, 'generate_selector');
+  const { job: latestCrawlJob } = useLatestJob(project.id, 'discover_and_crawl_sources');
   const { job: latestRescanJob } = useLatestJob(project.id, 'rescan_links');
 
   const { data: savedLinksResponse, isLoading: isLoadingSavedLinks } = useProjectLinks(project.id, {
@@ -85,10 +85,11 @@ export function StepConfirmLinks({ project }: StepProps) {
       return { newlyFoundUrls: [], existingUrlsFoundAgain: [] };
     }
 
-    const result = relevantCrawlJob.result as { new_urls: string[]; existing_urls: string[] };
+    const result = relevantCrawlJob.result as { new_links?: string[]; existing_links?: string[] };
+
     return {
-      newlyFoundUrls: result?.new_urls || [],
-      existingUrlsFoundAgain: result?.existing_urls || [],
+      newlyFoundUrls: result?.new_links ?? [],
+      existingUrlsFoundAgain: result?.existing_links ?? [],
     };
   }, [relevantCrawlJob, latestConfirmLinksJob]);
 

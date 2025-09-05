@@ -1,11 +1,16 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import apiClient from '../services/api';
-import type { ProjectSource, SingleResponse } from '../types';
+import type { ProjectSource, ProjectSourceHierarchy, SingleResponse } from '../types';
 import { notifications } from '@mantine/notifications';
 
 // --- Fetch ---
 const fetchProjectSources = async (projectId: string): Promise<ProjectSource[]> => {
   const response = await apiClient.get(`/projects/${projectId}/sources`);
+  return response.data;
+};
+
+const fetchProjectSourceHierarchy = async (projectId: string): Promise<ProjectSourceHierarchy[]> => {
+  const response = await apiClient.get(`/projects/${projectId}/sources/hierarchy`);
   return response.data;
 };
 
@@ -17,10 +22,19 @@ export const useProjectSources = (projectId: string) => {
   });
 };
 
+export const useProjectSourceHierarchy = (projectId: string) => {
+  return useQuery({
+    queryKey: ['sourcesHierarchy', projectId],
+    queryFn: () => fetchProjectSourceHierarchy(projectId),
+    enabled: !!projectId,
+  });
+};
+
 // --- Create ---
 interface CreateSourcePayload {
   url: string;
   max_pages_to_crawl: number;
+  max_crawl_depth: number;
 }
 
 const createProjectSource = async ({
@@ -40,6 +54,7 @@ export const useCreateProjectSource = (projectId: string) => {
     mutationFn: createProjectSource,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['sources', projectId] });
+      queryClient.invalidateQueries({ queryKey: ['sourcesHierarchy', projectId] });
       notifications.show({
         title: 'Source Added',
         message: 'The new source has been added successfully.',
@@ -79,6 +94,7 @@ export const useUpdateProjectSource = (projectId: string) => {
     mutationFn: updateProjectSource,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['sources', projectId] });
+      queryClient.invalidateQueries({ queryKey: ['sourcesHierarchy', projectId] });
       notifications.show({
         title: 'Source Updated',
         message: 'The source has been updated successfully.',
@@ -107,6 +123,7 @@ export const useDeleteProjectSource = (projectId: string) => {
     mutationFn: deleteProjectSource,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['sources', projectId] });
+      queryClient.invalidateQueries({ queryKey: ['sourcesHierarchy', projectId] });
       notifications.show({
         title: 'Source Deleted',
         message: 'The source has been successfully deleted.',
@@ -118,6 +135,39 @@ export const useDeleteProjectSource = (projectId: string) => {
       notifications.show({
         title: 'Error',
         message: `Failed to delete source: ${error.response?.data?.detail || error.message}`,
+        color: 'red',
+      });
+    },
+  });
+};
+
+// --- Bulk Delete ---
+interface BulkDeletePayload {
+  projectId: string;
+  source_ids: string[];
+}
+const deleteProjectSourcesBulk = async ({ projectId, source_ids }: BulkDeletePayload): Promise<void> => {
+  await apiClient.post(`/projects/${projectId}/sources/delete-bulk`, { source_ids });
+};
+
+export const useDeleteProjectSourcesBulk = (projectId: string) => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: deleteProjectSourcesBulk,
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['sources', projectId] });
+      queryClient.invalidateQueries({ queryKey: ['sourcesHierarchy', projectId] });
+      notifications.show({
+        title: 'Sources Deleted',
+        message: `${variables.source_ids.length} sources have been successfully deleted.`,
+        color: 'green',
+      });
+    },
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    onError: (error: any) => {
+      notifications.show({
+        title: 'Error',
+        message: `Failed to delete sources: ${error.response?.data?.detail || error.message}`,
         color: 'red',
       });
     },

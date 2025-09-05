@@ -54,6 +54,7 @@ const useJobMutation = <T extends CreateJobForProjectPayload | CreateJobForSourc
       optimisticallyAddNewJob(queryClient, newJob);
       queryClient.invalidateQueries({ queryKey: ['project', newJob.project_id] });
       queryClient.invalidateQueries({ queryKey: ['sources', newJob.project_id] });
+      queryClient.invalidateQueries({ queryKey: ['sourcesHierarchy', newJob.project_id] });
       notifications.show({
         title: notificationTitle,
         message: 'The background job has been started successfully.',
@@ -73,8 +74,8 @@ const useJobMutation = <T extends CreateJobForProjectPayload | CreateJobForSourc
 
 export const useGenerateSearchParamsJob = () =>
   useJobMutation<CreateJobForProjectPayload>('generate-search-params', 'Search Parameter Generation Started');
-export const useGenerateSelectorJob = () =>
-  useJobMutation<CreateJobForSourcePayload>('generate-selector', 'Selector Generation & Crawl Started');
+export const useDiscoverAndCrawlJob = () =>
+  useJobMutation<CreateJobForSourcePayload>('discover-and-crawl', 'Discovery & Crawl Started');
 export const useProcessProjectEntriesJob = () =>
   useJobMutation<CreateJobForProjectPayload>('process-project-entries', 'Lorebook Generation Started');
 export const useRescanLinksJob = () => useJobMutation<CreateJobForSourcePayload>('rescan-links', 'Link Rescan Started');

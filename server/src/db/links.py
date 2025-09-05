@@ -80,20 +80,13 @@ async def get_link(
     return Link(**result) if result else None
 
 
-async def get_existing_links_by_urls(
-    project_id: str, urls: List[str], tx: Optional[AsyncDBTransaction] = None
+async def get_all_link_urls_for_project(
+    project_id: str, tx: Optional[AsyncDBTransaction] = None
 ) -> List[str]:
-    """
-    Given a list of URLs, return the subset that already exists for the project.
-    """
-    if not urls:
-        return []
+    """Efficiently retrieves all link URLs for a given project."""
     db = tx or await get_db_connection()
-    # Create a placeholder string like (%s, %s, %s)
-    placeholders = ", ".join(["%s"] * len(urls))
-    query = f'SELECT url FROM "Link" WHERE project_id = %s AND url IN ({placeholders})'
-    params = (project_id, *urls)
-    results = await db.fetch_all(query, params)  # pyright: ignore[reportArgumentType]
+    query = 'SELECT url FROM "Link" WHERE project_id = %s'
+    results = await db.fetch_all(query, (project_id,))
     return [row["url"] for row in results] if results else []
 
 

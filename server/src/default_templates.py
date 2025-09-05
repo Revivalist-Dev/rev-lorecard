@@ -3,29 +3,25 @@ selector_prompt = """--- role: system
 ---
 
 --- role: system
-Analyze this HTML content from {{source.url}} and identify ONE HIGH-VALUE CSS selector that targets links to content-rich detail pages (e.g., character profiles, item descriptions, location details).
+Your primary task is to analyze the provided HTML and identify CSS selectors for three distinct types of links: **Content Links**, **Category Links**, and a **Pagination Link**.
 
-Purpose: {{project.search_params.purpose}}
-Extraction Notes: {{project.search_params.extraction_notes}}
-Criteria: {{project.search_params.criteria}}
+**Definitions:**
+1.  **Content Links**: These lead directly to a final, detailed article about a single topic (e.g., a character profile, an item description, a specific location's page).
+2.  **Category Links**: These lead to another page that is also a list, index, or sub-category of more links (e.g., a link to "Cities in Skyrim", "Swords", "Characters by Allegiance").
+3.  **Pagination Link**: A single link that leads to the next page of the current list (e.g., a "Next" button).
 
-Prioritized Content Structure (Examples):
-1. Primary Data Tables: `table.characters tbody tr[data-id] td > a`
-2. Semantic Content Lists: `main .character-list > li[class*="character"] > a`
-3. Structured Content Groups: `.profile-grid .character-card[data-id] > .name > a`
+**Project Goal:**
+- Purpose: {{project.search_params.purpose}}
+- Extraction Notes: {{project.search_params.extraction_notes}}
+- Criteria for Content: {{project.search_params.criteria}}
 
-Selection Rules:
-1. Target data-rich elements with ID/type attributes (data-id, data-character).
-2. Focus on content within main/article/section containers.
-3. Prioritize elements with semantic class names (character, profile, entry).
-4. Include container context (#main-content, article.content).
-5. Use attribute selectors for targeted matching ([data-type], [class*="character"]).
-6. Target links that are direct children of content elements (> a).
-7. The selector MUST include at least one semantic identifier (class, id, or data attribute).
-8. The selector should ideally match multiple elements (at least 2) with similar structure on the page.
-9. If the page uses pagination (e.g., a "Next" button), also provide a single selector for the link that leads to the next page of results. Name it `pagination_selector`.
-
-Provide the single best CSS selector and a brief description of what it targets.
+**Rules for Selector Generation:**
+1.  **Prioritize Semantics**: Focus on selectors with meaningful class names (`.character-card`, `.location-entry`) or data attributes (`data-id`). Avoid generic selectors like `div > a`.
+2.  **Distinguish Link Types**: A selector is for a **Category Link** if its target pages are primarily other lists. A selector is for a **Content Link** if its target pages are detailed articles matching the project's criteria.
+3.  **Content Precedence**: If a link could be considered both (e.g., a link to a major city that also has its own page), it should be classified as a **Content Link**. A link should ONLY be a category if it is NOT a content link.
+4.  **Be Specific**: Your selectors should be specific enough to avoid capturing navigation menus, sidebars, or footers.
+5.  **Return Empty Lists**: If no selectors of a certain type are found (e.g., no sub-categories on the page), you MUST return an empty list for that key.
+6.  **Pagination**: The `pagination_selector` should be a single, specific selector for the "next page" element, or `null` if none exists.
 ---
 
 --- role: user

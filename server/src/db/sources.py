@@ -15,6 +15,7 @@ class ProjectSource(BaseModel):
     link_extraction_selector: Optional[List[str]] = None
     link_extraction_pagination_selector: Optional[str] = None
     max_pages_to_crawl: int = 20
+    max_crawl_depth: int = 1
     last_crawled_at: Optional[datetime] = None
     created_at: datetime
     updated_at: datetime
@@ -24,6 +25,7 @@ class CreateProjectSource(BaseModel):
     project_id: str
     url: str
     max_pages_to_crawl: int = 20
+    max_crawl_depth: int = 1
 
 
 class UpdateProjectSource(BaseModel):
@@ -31,15 +33,18 @@ class UpdateProjectSource(BaseModel):
     link_extraction_selector: Optional[List[str]] = None
     link_extraction_pagination_selector: Optional[str] = None
     max_pages_to_crawl: Optional[int] = None
+    max_crawl_depth: Optional[int] = None
     last_crawled_at: Optional[datetime] = None
 
 
-async def create_project_source(source: CreateProjectSource) -> ProjectSource:
-    db = await get_db_connection()
+async def create_project_source(
+    source: CreateProjectSource, tx: Optional[AsyncDBTransaction] = None
+) -> ProjectSource:
+    db = tx or await get_db_connection()
     source_id = uuid4()
     query = """
-        INSERT INTO "ProjectSource" (id, project_id, url, max_pages_to_crawl)
-        VALUES (%s, %s, %s, %s)
+        INSERT INTO "ProjectSource" (id, project_id, url, max_pages_to_crawl, max_crawl_depth)
+        VALUES (%s, %s, %s, %s, %s)
         RETURNING *
     """
     params = (
@@ -47,6 +52,7 @@ async def create_project_source(source: CreateProjectSource) -> ProjectSource:
         source.project_id,
         source.url,
         source.max_pages_to_crawl,
+        source.max_crawl_depth,
     )
     result = await db.execute_and_fetch_one(query, params)
     if not result:
@@ -60,6 +66,15 @@ async def get_project_source(
     db = tx or await get_db_connection()
     query = 'SELECT * FROM "ProjectSource" WHERE id = %s'
     result = await db.fetch_one(query, (source_id,))
+    return ProjectSource(**result) if result else None
+
+
+async def get_project_source_by_url(
+    project_id: str, url: str, tx: AsyncDBTransaction
+) -> ProjectSource | None:
+    """Retrieve a project source by its URL within a transaction."""
+    query = 'SELECT * FROM "ProjectSource" WHERE project_id = %s AND url = %s'
+    result = await tx.fetch_one(query, (project_id, url))
     return ProjectSource(**result) if result else None
 
 
@@ -100,3 +115,19 @@ async def delete_project_source(source_id: UUID) -> None:
     db = await get_db_connection()
     query = 'DELETE FROM "ProjectSource" WHERE id = %s'
     await db.execute(query, (source_id,))
+
+
+async def delete_project_sources_bulk(
+    project_id: str, source_ids: List[UUID], tx: Optional[AsyncDBTransaction] = None
+) -> None:
+    """Deletes multiple project sources in a single operation."""
+    db = tx or await get_db_connection()
+    if not source_ids:
+        return
+
+    placeholders = ", ".join(["%s"] * len(source_ids))
+    query = (
+        f'DELETE FROM "ProjectSource" WHERE project_id = %s AND id IN ({placeholders})'
+    )
+    params = (project_id, *source_ids)
+    await db.execute(query, params)
