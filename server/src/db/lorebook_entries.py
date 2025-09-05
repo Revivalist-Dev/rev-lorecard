@@ -6,7 +6,7 @@ from uuid import UUID, uuid4
 from db.connection import get_db_connection
 from pydantic import BaseModel
 from db.common import PaginatedResponse, PaginationMeta
-from db.database import AsyncDBTransaction
+from db.database import AsyncDBTransaction, DatabaseType
 
 
 class CreateLorebookEntry(BaseModel):
@@ -67,23 +67,55 @@ async def get_lorebook_entry(entry_id: UUID) -> LorebookEntry | None:
     return LorebookEntry(**result) if result else None
 
 
-async def count_entries_by_project(project_id: str) -> int:
-    """Count all lorebook entries for a given project."""
+async def count_entries_by_project(
+    project_id: str, search_query: Optional[str] = None
+) -> int:
+    """Count all lorebook entries for a given project, with an optional search filter."""
     db = await get_db_connection()
-    query = 'SELECT COUNT(*) as count FROM "LorebookEntry" WHERE project_id = %s'
-    result = await db.fetch_one(query, (project_id,))
+    base_query = 'SELECT COUNT(*) as count FROM "LorebookEntry" WHERE project_id = %s'
+    params: List[Any] = [project_id]
+
+    if search_query:
+        search_term = f"%{search_query}%"
+        db_type = db.__class__.__name__
+        like_operator = "ILIKE" if db_type == "PostgresDB" else "LIKE"
+        keywords_field = "keywords::text" if db_type == "PostgresDB" else "keywords"
+
+        base_query += f" AND (title {like_operator} %s OR {keywords_field} {like_operator} %s OR content {like_operator} %s)"
+        params.extend([search_term, search_term, search_term])
+
+    result = await db.fetch_one(base_query, tuple(params))
     return result["count"] if result and "count" in result else 0
 
 
 async def list_entries_by_project_paginated(
-    project_id: str, limit: int = 100, offset: int = 0
+    project_id: str,
+    limit: int = 100,
+    offset: int = 0,
+    search_query: Optional[str] = None,
 ) -> PaginatedResponse[LorebookEntry]:
-    """Retrieve all lorebook entries for a specific project with pagination."""
+    """Retrieve all lorebook entries for a specific project with pagination and optional search."""
     db = await get_db_connection()
-    query = 'SELECT * FROM "LorebookEntry" WHERE project_id = %s ORDER BY created_at DESC LIMIT %s OFFSET %s'
-    results = await db.fetch_all(query, (project_id, limit, offset))
+    base_query = 'SELECT * FROM "LorebookEntry" WHERE project_id = %s'
+    params: List[Any] = [project_id]
+
+    if search_query:
+        search_term = f"%{search_query}%"
+        db_type = db.database_type()
+        like_operator = "ILIKE" if db_type == DatabaseType.POSTGRES else "LIKE"
+        keywords_field = (
+            "keywords::text" if db_type == DatabaseType.POSTGRES else "keywords"
+        )
+        base_query += f" AND (title {like_operator} %s OR {keywords_field} {like_operator} %s OR content {like_operator} %s)"
+        params.extend([search_term, search_term, search_term])
+
+    base_query += " ORDER BY created_at DESC LIMIT %s OFFSET %s"
+    params.extend([limit, offset])
+
+    results = await db.fetch_all(base_query, tuple(params))
     entries = [LorebookEntry(**row) for row in results] if results else []
-    total_items = await count_entries_by_project(project_id)
+
+    total_items = await count_entries_by_project(project_id, search_query)
     current_page = offset // limit + 1
 
     return PaginatedResponse(

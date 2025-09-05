@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import apiClient from '../services/api';
-import type { BackgroundJob, PaginatedResponse, SingleResponse } from '../types';
+import type { BackgroundJob, PaginatedResponse, SingleResponse, ProcessProjectEntriesPayload } from '../types';
 import { notifications } from '@mantine/notifications';
 
 interface CreateJobForProjectPayload {
@@ -35,13 +35,15 @@ const optimisticallyAddNewJob = (queryClient: ReturnType<typeof useQueryClient>,
 };
 
 const createJob =
-  <T extends CreateJobForProjectPayload | CreateJobForSourcePayload>(endpoint: string) =>
+  <T extends CreateJobForProjectPayload | CreateJobForSourcePayload | ProcessProjectEntriesPayload>(endpoint: string) =>
   async (payload: T): Promise<SingleResponse<BackgroundJob>> => {
     const response = await apiClient.post(`/jobs/${endpoint}`, payload);
     return response.data;
   };
 
-const useJobMutation = <T extends CreateJobForProjectPayload | CreateJobForSourcePayload>(
+const useJobMutation = <
+  T extends CreateJobForProjectPayload | CreateJobForSourcePayload | ProcessProjectEntriesPayload,
+>(
   endpoint: string,
   notificationTitle: string
 ) => {
@@ -78,7 +80,7 @@ export const useGenerateSearchParamsJob = () =>
 export const useDiscoverAndCrawlJob = () =>
   useJobMutation<CreateJobForSourcePayload>('discover-and-crawl', 'Discovery & Crawl Started');
 export const useProcessProjectEntriesJob = () =>
-  useJobMutation<CreateJobForProjectPayload>('process-project-entries', 'Lorebook Generation Started');
+  useJobMutation<ProcessProjectEntriesPayload>('process-project-entries', 'Lorebook Generation Started');
 export const useRescanLinksJob = () => useJobMutation<CreateJobForSourcePayload>('rescan-links', 'Link Rescan Started');
 
 // The confirm-links job for the confirmation step.

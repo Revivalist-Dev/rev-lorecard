@@ -33,6 +33,7 @@ from db.links import (
     create_links,
     get_all_link_urls_for_project,
     get_link,
+    get_links_by_ids,
     get_processable_links_for_project,
     update_link,
 )
@@ -813,8 +814,13 @@ async def process_project_entries(job: BackgroundJob, project: Project):
         raise Exception("Invalid payload for process_project_entries task")
 
     scraper = Scraper()
-    pending_links = await get_processable_links_for_project(project.id)
-    total_links = len(pending_links)
+    # If specific link_ids are provided, use them. Otherwise, get all processable links.
+    if job.payload.link_ids:
+        links_to_process = await get_links_by_ids(job.payload.link_ids)
+    else:
+        links_to_process = await get_processable_links_for_project(project.id)
+
+    total_links = len(links_to_process)
 
     if not total_links:
         # Handle case with no links to process
@@ -847,7 +853,7 @@ async def process_project_entries(job: BackgroundJob, project: Project):
             ),
             tx=tx,
         )
-        for link in pending_links:
+        for link in links_to_process:
             await update_link(link.id, UpdateLink(status=LinkStatus.processing), tx=tx)
             updated_link = await get_link(link.id, tx=tx)
             if updated_link:
@@ -879,7 +885,9 @@ async def process_project_entries(job: BackgroundJob, project: Project):
                 return None
             return await _process_single_link_io(job, project, link, scraper)
 
-    tasks = [asyncio.create_task(process_with_limiter(link)) for link in pending_links]
+    tasks = [
+        asyncio.create_task(process_with_limiter(link)) for link in links_to_process
+    ]
 
     batch_results: List[LinkProcessingResult] = []
     total_processed = 0

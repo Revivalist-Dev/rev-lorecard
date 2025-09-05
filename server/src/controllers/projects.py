@@ -2,6 +2,7 @@ from litestar import Controller, get, post, patch, delete
 from litestar.exceptions import NotFoundException
 from litestar.params import Body
 from pydantic import BaseModel
+from typing import Optional
 
 from logging_config import get_logger
 from db.projects import (
@@ -76,11 +77,17 @@ class ProjectController(Controller):
 
     @get("/{project_id:str}/entries")
     async def list_project_entries(
-        self, project_id: str, limit: int = 100, offset: int = 0
+        self,
+        project_id: str,
+        limit: int = 100,
+        offset: int = 0,
+        q: Optional[str] = None,
     ) -> PaginatedResponse[LorebookEntry]:
-        """List all lorebook entries for a project with pagination."""
+        """List all lorebook entries for a project with pagination and optional search."""
         logger.debug(f"Listing entries for project {project_id}")
-        return await db_list_entries_by_project_paginated(project_id, limit, offset)
+        return await db_list_entries_by_project_paginated(
+            project_id, limit, offset, search_query=q
+        )
 
     @get("/{project_id:str}/logs")
     async def list_project_api_logs(

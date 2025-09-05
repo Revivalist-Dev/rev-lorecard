@@ -80,6 +80,19 @@ async def get_link(
     return Link(**result) if result else None
 
 
+async def get_links_by_ids(
+    link_ids: List[UUID], tx: Optional[AsyncDBTransaction] = None
+) -> List[Link]:
+    """Retrieve multiple links by their IDs."""
+    if not link_ids:
+        return []
+    db = tx or await get_db_connection()
+    placeholders = ", ".join(["%s"] * len(link_ids))
+    query = f'SELECT * FROM "Link" WHERE id IN ({placeholders})'
+    results = await db.fetch_all(query, tuple(link_ids))
+    return [Link(**row) for row in results] if results else []
+
+
 async def get_all_link_urls_for_project(
     project_id: str, tx: Optional[AsyncDBTransaction] = None
 ) -> List[str]:
@@ -169,3 +182,17 @@ async def reset_processing_links_to_pending(
     db = tx or await get_db_connection()
     query = "UPDATE \"Link\" SET status = 'pending' WHERE status = 'processing'"
     await db.execute(query)
+
+
+async def delete_links_bulk(
+    project_id: str, link_ids: List[UUID], tx: Optional[AsyncDBTransaction] = None
+) -> None:
+    """Deletes multiple links in a single operation."""
+    db = tx or await get_db_connection()
+    if not link_ids:
+        return
+
+    placeholders = ", ".join(["%s"] * len(link_ids))
+    query = f'DELETE FROM "Link" WHERE project_id = %s AND id IN ({placeholders})'
+    params = (project_id, *link_ids)
+    await db.execute(query, params)

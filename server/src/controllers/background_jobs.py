@@ -3,6 +3,7 @@ from litestar import Controller, get, post
 from litestar.exceptions import NotFoundException, HTTPException
 from litestar.params import Body
 from pydantic import BaseModel, Field
+from typing import Optional, List
 
 from logging_config import get_logger
 from db.background_jobs import (
@@ -43,6 +44,11 @@ class CreateJobForSourcePayload(BaseModel):
 class ConfirmLinksJobPayload(BaseModel):
     project_id: str
     urls: list[str]
+
+
+class ProcessEntriesJobPayload(BaseModel):
+    project_id: str
+    link_ids: Optional[List[UUID]] = None
 
 
 class BackgroundJobController(Controller):
@@ -174,7 +180,7 @@ class BackgroundJobController(Controller):
 
     @post("/process-project-entries")
     async def create_process_project_entries_job(
-        self, data: CreateJobForProjectPayload = Body()
+        self, data: ProcessEntriesJobPayload = Body()
     ) -> SingleResponse[BackgroundJob]:
         """Create a job to process all pending links for a project."""
         async with (await get_db_connection()).transaction() as tx:
@@ -189,7 +195,7 @@ class BackgroundJobController(Controller):
                 CreateBackgroundJob(
                     task_name=TaskName.PROCESS_PROJECT_ENTRIES,
                     project_id=data.project_id,
-                    payload=ProcessProjectEntriesPayload(),
+                    payload=ProcessProjectEntriesPayload(link_ids=data.link_ids),
                 ),
                 tx=tx,
             )

@@ -99,6 +99,11 @@ export type TaskName =
   | 'generate_search_params'
   | 'rescan_links';
 
+export interface ProcessProjectEntriesPayload {
+  project_id: string;
+  link_ids?: string[];
+}
+
 export interface BackgroundJob {
   id: string; // UUID
   task_name: TaskName;

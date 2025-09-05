@@ -31,6 +31,7 @@ from controllers.providers import ProviderController  # noqa: E402
 from controllers.sse import SSEController  # noqa: E402
 from controllers.projects import ProjectController  # noqa: E402
 from controllers.sources import SourceController  # noqa: E402
+from controllers.links import LinksController  # noqa: E402
 from controllers.lorebook_entries import LorebookEntryController  # noqa: E402
 from controllers.background_jobs import (  # noqa: E402
     BackgroundJobController,
@@ -195,6 +196,7 @@ def create_app():
             SSEController,
             ProjectController,
             SourceController,
+            LinksController,
             LorebookEntryController,
             BackgroundJobController,
             AnalyticsController,

@@ -1,3 +1,4 @@
+from enum import Enum
 import json
 from uuid import UUID
 from datetime import datetime
@@ -11,6 +12,12 @@ from contextlib import asynccontextmanager, AbstractAsyncContextManager
 from logging_config import get_logger
 
 logger = get_logger(__name__)
+
+
+class DatabaseType(str, Enum):
+    POSTGRES = "postgres"
+    SQLITE = "sqlite"
+
 
 # --- Abstract Base Classes ---
 
@@ -47,6 +54,10 @@ class AsyncDBTransaction(ABC):
 
 class AsyncDB(ABC):
     """Abstract base class for asynchronous database operations."""
+
+    @abstractmethod
+    def database_type(self) -> DatabaseType:
+        pass
 
     @abstractmethod
     async def connect(self):
@@ -96,6 +107,9 @@ class PostgresDB(AsyncDB):
     def __init__(self, dsn: str):
         self._dsn = dsn
         self._pool: Optional[AsyncConnectionPool] = None
+
+    def database_type(self) -> DatabaseType:
+        return DatabaseType.POSTGRES
 
     async def connect(self):
         if not self._pool:
@@ -290,6 +304,9 @@ class SQLiteDB(AsyncDB):
     def __init__(self, db_path: str, pool_size: int = 1):
         self._db_path = db_path
         self._conn: Optional[aiosqlite.Connection] = None
+
+    def database_type(self) -> DatabaseType:
+        return DatabaseType.SQLITE
 
     def _process_results(self, rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         processed_rows = []

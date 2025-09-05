@@ -105,13 +105,13 @@ This document outlines the architecture for an application designed to automate 
 *   **Fields**:
     *   `id` (UUID, Primary Key): A unique identifier for the job.
     *   `task_name` (Text): The name of the task to be executed (e.g., `generate_search_params`, `discover_and_crawl_sources`, `confirm_links`, `process_project_entries`).
-    *   `payload` (JSONB, nullable): Additional arguments required for the task.
+    *   `payload` (JSONB, nullable): Additional arguments required for the task. For `process_project_entries`, this can optionally contain a list of `link_ids` for targeted reprocessing.
     *   `status` (Enum): The job's state (`pending`, `in_progress`, `completed`, `failed`, `cancelling`, `canceled`).
     *   `project_id` (Text, Foreign Key, nullable): Links the job to the `Project` it operates on.
     *   `created_at` / `updated_at` (Timestamp with Timezone): Timestamps for job lifecycle tracking.
     *   `result` (JSONB): The result of the job if successful. For `discover_and_crawl_sources`, this includes `new_links`, `existing_links`, `new_sources_created`, and `selectors_generated`.
     *   `error_message` (Text): Error details if the job failed.
-    *   `total_items` (Integer, nullable): The total number of items to be processed (e.g., number of sources to crawl).
+    *   `total_items` (Integer, nullable): The total number of items to be processed (e.g., number of sources to crawl or links to process).
     *   `processed_items` (Integer, nullable): The number of items processed so far.
     *   `progress` (Real, nullable): The completion percentage (0.0 to 100.0).
 
@@ -207,18 +207,18 @@ This document outlines the architecture for an application designed to automate 
 
 ##### **3.3. Workflow C: Link Confirmation**
 
-1.  **Job Invocation**: After the user confirms the desired links on the frontend, the client sends this list of URLs to the backend, creating a `BackgroundJob` with `task_name: 'confirm_links'`.
+1.  **Job Invocation**: After the user confirms the desired links from the crawling step (or adds links manually), the client sends a list of URLs to the backend, creating a `BackgroundJob` with `task_name: 'confirm_links'`.
 2.  **Worker Execution**: A background worker picks up the job.
     *   It reads the list of URLs from the job's `payload`.
-    *   For each URL, it creates a new `Link` record in the database with `status: 'pending'`. It enforces the unique constraint to avoid duplicates.
-    *   Upon completion, it updates the `Project.status` to `links_extracted` and marks the job as `completed`.
+    *   For each URL, it creates a new `Link` record in the database with `status: 'pending'`, ignoring any duplicates.
+    *   Upon completion, it updates the `Project.status` to `links_extracted` and marks the job as `completed`. This step is solely for ingesting new links into the project's link pool.
 
 ##### **3.4. Workflow D: Lorebook Entry Generation**
 
-1.  **Job Invocation**: The user starts the main generation process. This creates the primary long-running `BackgroundJob` with `task_name: 'process_project_entries'`.
+1.  **Job Invocation**: The user can start the generation process for either **all** processable links (pending/failed) or a **specific, user-selected subset** of those links. This creates the primary long-running `BackgroundJob` with `task_name: 'process_project_entries'`. The job's `payload` will be empty to process all links, or it will contain a list of `link_ids` for targeted processing.
 2.  **Worker Execution**:
     *   A worker picks up the job and sets the `Project.status` to `processing`.
-    *   The worker queries the database for all `Link` records with `status: 'pending'` or `status: 'failed'`.
+    *   The worker queries the database for `Link` records. If the payload contains `link_ids`, it fetches only those links. Otherwise, it fetches all links with `status: 'pending'` or `status: 'failed'`.
     *   **For each `Link`**:
         a.  It updates the `Link.status` to `processing`.
         b.  It scrapes the content from the `Link.url`, storing the cleaned result in the `Link.raw_content` field.
@@ -228,7 +228,7 @@ This document outlines the architecture for an application designed to automate 
         f.  If the LLM deems the content invalid, it updates the `Link` status to `skipped`.
         g.  On failure, it updates the `Link`'s `status` to `failed` and records the `error_message`.
     *   After processing each link, the worker updates the job's progress and checks for cancellation requests.
-3.  **Completion**: Once all `Link` records are processed, the worker updates the `Project.status` to `completed` and marks its own job as `completed`.
+3.  **Completion**: Once all selected `Link` records are processed, the worker updates the `Project.status` to `completed` and marks its own job as `completed`.
 
 #### **4. API Endpoints**
 
@@ -240,7 +240,7 @@ This document outlines the architecture for an application designed to automate 
     *   `DELETE /projects/{project_id}`: Delete a project.
     *   `GET /projects/{project_id}/links`: Get a paginated list of links for the project.
     *   `GET /projects/{project_id}/links/processable-count`: Get the count of pending/failed links.
-    *   `GET /projects/{project_id}/entries`: Get a paginated list of generated lorebook entries.
+    *   `GET /projects/{project_id}/entries`: Get a paginated list of generated lorebook entries, with optional full-text search on `title`, `keywords`, and `content` via a `q` parameter.
     *   `GET /projects/{project_id}/logs`: Get a paginated list of API request logs for the project.
     *   `GET /projects/{project_id}/lorebook/download`: Get the lorebook in a downloadable format.
 
@@ -252,6 +252,9 @@ This document outlines the architecture for an application designed to automate 
     *   `PATCH /projects/{project_id}/sources/{source_id}`: Update a source.
     *   `DELETE /projects/{project_id}/sources/{source_id}`: Delete a source.
     *   `POST /projects/{project_id}/sources/delete-bulk`: Delete multiple sources in one request.
+
+*   **Links**
+    *   `POST /projects/{project_id}/links/delete-bulk`: Deletes multiple links for a project in a single request.
 
 *   **Lorebook Entries**
     *   `GET /entries/{entry_id}`: Retrieve a single lorebook entry.
@@ -265,7 +268,7 @@ This document outlines the architecture for an application designed to automate 
     *   `POST /jobs/generate-search-params`: Create a job to generate search parameters from a project's prompt (Workflow A).
     *   `POST /jobs/discover-and-crawl`: Create a job to discover sub-categories and crawl sources for links (Workflow B).
     *   `POST /jobs/confirm-links`: Create a job to ingest a user-confirmed list of URLs (Workflow C).
-    *   `POST /jobs/process-project-entries`: Create a job to process all pending links into lorebook entries (Workflow D).
+    *   `POST /jobs/process-project-entries`: Create a job to process links into lorebook entries. If the payload is empty, it processes all pending/failed links. If the payload contains `link_ids`, it processes only those specific links.
     *   `POST /jobs/rescan-links`: Create a job to re-crawl sources using existing selectors without using an LLM.
     *   `POST /jobs/{job_id}/cancel`: Request cancellation of a running job.
 

@@ -1,6 +1,19 @@
 import { useState, useEffect } from 'react';
-import { Stack, Text, Button, Group, Table, Loader, Alert, Title, ActionIcon, Pagination } from '@mantine/core';
-import { IconAlertCircle, IconDownload, IconPencil, IconTrash } from '@tabler/icons-react';
+import {
+  Stack,
+  Text,
+  Button,
+  Group,
+  Table,
+  Loader,
+  Alert,
+  Title,
+  ActionIcon,
+  Pagination,
+  TextInput,
+  Center,
+} from '@mantine/core';
+import { IconAlertCircle, IconDownload, IconPencil, IconTrash, IconSearch } from '@tabler/icons-react';
 import { useProjectEntries } from '../../hooks/useProjectEntries';
 import type { LorebookEntry, Project } from '../../types';
 import apiClient from '../../services/api';
@@ -8,7 +21,7 @@ import { notifications } from '@mantine/notifications';
 import { useModals } from '@mantine/modals';
 import { useDeleteLorebookEntry } from '../../hooks/useLorebookEntryMutations';
 import { useSearchParams } from 'react-router-dom';
-import { useDisclosure } from '@mantine/hooks';
+import { useDebouncedValue, useDisclosure } from '@mantine/hooks';
 import { LorebookEntryModal } from './LorebookEntryModal';
 
 interface StepCompletedViewProps {
@@ -22,6 +35,8 @@ export function StepCompletedView({ project }: StepCompletedViewProps) {
   const [searchParams, setSearchParams] = useSearchParams();
   const pageFromUrl = parseInt(searchParams.get(URL_PARAM_KEY) || '1', 10);
   const [activePage, setPage] = useState(isNaN(pageFromUrl) ? 1 : pageFromUrl);
+  const [filterText, setFilterText] = useState('');
+  const [debouncedFilterText] = useDebouncedValue(filterText, 300);
 
   const [editModalOpened, { open: openEditModal, close: closeEditModal }] = useDisclosure(false);
   const [selectedEntry, setSelectedEntry] = useState<LorebookEntry | null>(null);
@@ -29,9 +44,22 @@ export function StepCompletedView({ project }: StepCompletedViewProps) {
   const {
     data: entriesResponse,
     isLoading,
+    isFetching,
     isError,
     error,
-  } = useProjectEntries(project.id, { page: activePage, pageSize: PAGE_SIZE });
+  } = useProjectEntries(project.id, {
+    page: activePage,
+    pageSize: PAGE_SIZE,
+    searchQuery: debouncedFilterText,
+  });
+
+  // Effect to reset page to 1 when search query changes
+  useEffect(() => {
+    if (debouncedFilterText) {
+      handlePageChange(1);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [debouncedFilterText]);
 
   useEffect(() => {
     const newPageFromUrl = parseInt(searchParams.get(URL_PARAM_KEY) || '1', 10);
@@ -109,9 +137,9 @@ export function StepCompletedView({ project }: StepCompletedViewProps) {
     }
   };
 
-  if (isLoading) {
-    return <Loader />;
-  }
+  const entries = entriesResponse?.data || [];
+  const totalItems = entriesResponse?.meta.total_items || 0;
+  const totalPages = Math.ceil(totalItems / PAGE_SIZE);
 
   if (isError) {
     return (
@@ -120,10 +148,6 @@ export function StepCompletedView({ project }: StepCompletedViewProps) {
       </Alert>
     );
   }
-
-  const entries = entriesResponse?.data || [];
-  const totalItems = entriesResponse?.meta.total_items || 0;
-  const totalPages = Math.ceil(totalItems / PAGE_SIZE);
 
   return (
     <>
@@ -135,7 +159,7 @@ export function StepCompletedView({ project }: StepCompletedViewProps) {
             leftSection={<IconDownload size={16} />}
             onClick={handleDownload}
             loading={isDownloading}
-            disabled={totalItems === 0}
+            disabled={totalItems === 0 && !debouncedFilterText}
           >
             Download Lorebook
           </Button>
@@ -146,52 +170,69 @@ export function StepCompletedView({ project }: StepCompletedViewProps) {
           the final JSON file.
         </Text>
 
-        <Table striped highlightOnHover withTableBorder withColumnBorders>
-          <Table.Thead>
-            <Table.Tr>
-              <Table.Th>Title</Table.Th>
-              <Table.Th>Keywords</Table.Th>
-              <Table.Th>Content Snippet</Table.Th>
-              <Table.Th>Actions</Table.Th>
-            </Table.Tr>
-          </Table.Thead>
-          <Table.Tbody>
-            {entries.map((entry) => (
-              <Table.Tr key={entry.id}>
-                <Table.Td>{entry.title}</Table.Td>
-                <Table.Td>{entry.keywords.join(', ')}</Table.Td>
-                <Table.Td>
-                  <Text lineClamp={2}>{entry.content}</Text>
-                </Table.Td>
-                <Table.Td>
-                  <Group gap="xs" justify="center">
-                    <ActionIcon variant="subtle" color="blue" onClick={() => handleOpenEditModal(entry)}>
-                      <IconPencil size={16} />
-                    </ActionIcon>
-                    <ActionIcon
-                      variant="subtle"
-                      color="red"
-                      onClick={() => openDeleteModal(entry.id, entry.title)}
-                      loading={deleteEntryMutation.isPending && deleteEntryMutation.variables === entry.id}
-                    >
-                      <IconTrash size={16} />
-                    </ActionIcon>
-                  </Group>
-                </Table.Td>
-              </Table.Tr>
-            ))}
-          </Table.Tbody>
-        </Table>
-        {totalItems === 0 && (
-          <Text c="dimmed" ta="center" p="md">
-            No entries were generated.
-          </Text>
-        )}
+        <TextInput
+          placeholder="Search entries by title, keyword, or content..."
+          leftSection={<IconSearch size={14} />}
+          rightSection={isFetching ? <Loader size="xs" /> : null}
+          value={filterText}
+          onChange={(event) => setFilterText(event.currentTarget.value)}
+          mb="md"
+        />
 
-        {totalPages > 1 && (
-          <Group justify="center" mt="md">
-            <Pagination value={activePage} onChange={handlePageChange} total={totalPages} />
-          </Group>
+        {isLoading ? (
+          <Center p="xl">
+            <Loader />
+          </Center>
+        ) : (
+          <>
+            <Table striped highlightOnHover withTableBorder withColumnBorders>
+              <Table.Thead>
+                <Table.Tr>
+                  <Table.Th>Title</Table.Th>
+                  <Table.Th>Keywords</Table.Th>
+                  <Table.Th>Content Snippet</Table.Th>
+                  <Table.Th>Actions</Table.Th>
+                </Table.Tr>
+              </Table.Thead>
+              <Table.Tbody>
+                {entries.map((entry) => (
+                  <Table.Tr key={entry.id}>
+                    <Table.Td>{entry.title}</Table.Td>
+                    <Table.Td>{entry.keywords.join(', ')}</Table.Td>
+                    <Table.Td>
+                      <Text lineClamp={2}>{entry.content}</Text>
+                    </Table.Td>
+                    <Table.Td>
+                      <Group gap="xs" justify="center">
+                        <ActionIcon variant="subtle" color="blue" onClick={() => handleOpenEditModal(entry)}>
+                          <IconPencil size={16} />
+                        </ActionIcon>
+                        <ActionIcon
+                          variant="subtle"
+                          color="red"
+                          onClick={() => openDeleteModal(entry.id, entry.title)}
+                          loading={deleteEntryMutation.isPending && deleteEntryMutation.variables === entry.id}
+                        >
+                          <IconTrash size={16} />
+                        </ActionIcon>
+                      </Group>
+                    </Table.Td>
+                  </Table.Tr>
+                ))}
+              </Table.Tbody>
+            </Table>
+            {totalItems === 0 && (
+              <Text c="dimmed" ta="center" p="md">
+                {debouncedFilterText ? 'No entries match your search.' : 'No entries were generated.'}
+              </Text>
+            )}
+
+            {totalPages > 1 && (
+              <Group justify="center" mt="md">
+                <Pagination value={activePage} onChange={handlePageChange} total={totalPages} />
+              </Group>
+            )}
+          </>
         )}
       </Stack>
     </>

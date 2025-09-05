@@ -50,7 +50,7 @@ class ConfirmLinksPayload(BaseModel):
 
 
 class ProcessProjectEntriesPayload(BaseModel):
-    pass
+    link_ids: Optional[List[UUID]] = None
 
 
 class GenerateSearchParamsPayload(BaseModel):

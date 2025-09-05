@@ -9,26 +9,19 @@ import {
   Paper,
   Title,
   Center,
-  Loader,
   Pagination,
-  Table,
-  Badge,
-  Tooltip,
   TextInput,
   Grid,
   Divider,
   Flex,
-  Textarea,
-  Modal,
+  Badge,
 } from '@mantine/core';
 import { useConfirmLinksJob } from '../../hooks/useJobMutations';
 import { useLatestJob } from '../../hooks/useProjectJobs';
 import type { Project } from '../../types';
 import { JobStatusIndicator } from '../common/JobStatusIndicator';
-import { useProjectLinks } from '../../hooks/useProjectLinks';
 import { useSearchParams } from 'react-router-dom';
-import { IconSearch, IconPlus } from '@tabler/icons-react';
-import { useDisclosure } from '@mantine/hooks';
+import { IconSearch } from '@tabler/icons-react';
 
 interface StepProps {
   project: Project;
@@ -37,74 +30,14 @@ interface StepProps {
 const PAGE_SIZE = 50;
 const URL_PARAM_KEY = 'links_page';
 
-const statusColors: Record<string, string> = {
-  pending: 'gray',
-  processing: 'yellow',
-  completed: 'green',
-  failed: 'red',
-  skipped: 'yellow',
-};
-
-function AddLinksModal({
-  opened,
-  onClose,
-  onAdd,
-}: {
-  opened: boolean;
-  onClose: () => void;
-  onAdd: (urls: string[]) => void;
-}) {
-  const [urlsToAdd, setUrlsToAdd] = useState('');
-  const urls = useMemo(
-    () =>
-      urlsToAdd
-        .split('\n')
-        .map((url) => url.trim())
-        .filter(Boolean),
-    [urlsToAdd]
-  );
-
-  const handleAdd = () => {
-    if (urls.length > 0) {
-      onAdd(urls);
-    }
-    onClose();
-  };
-
-  return (
-    <Modal opened={opened} onClose={onClose} title="Add Manual Links" centered>
-      <Stack>
-        <Textarea
-          label="Links"
-          description="Enter one URL per line."
-          placeholder="https://example.com/page1&#10;https://example.com/page2"
-          autosize
-          minRows={4}
-          value={urlsToAdd}
-          onChange={(e) => setUrlsToAdd(e.currentTarget.value)}
-        />
-        <Button onClick={handleAdd} disabled={urls.length === 0}>
-          Add {urls.length} Links
-        </Button>
-      </Stack>
-    </Modal>
-  );
-}
-
 export function StepConfirmLinks({ project }: StepProps) {
   const [searchParams, setSearchParams] = useSearchParams();
   const pageFromUrl = parseInt(searchParams.get(URL_PARAM_KEY) || '1', 10);
-  const [addLinksModalOpened, { open: openAddLinksModal, close: closeAddLinksModal }] = useDisclosure(false);
 
   const confirmLinks = useConfirmLinksJob();
   const { job: latestConfirmLinksJob } = useLatestJob(project.id, 'confirm_links');
   const { job: latestCrawlJob } = useLatestJob(project.id, 'discover_and_crawl_sources');
   const { job: latestRescanJob } = useLatestJob(project.id, 'rescan_links');
-
-  const { data: savedLinksResponse, isLoading: isLoadingSavedLinks } = useProjectLinks(project.id, {
-    page: 1,
-    pageSize: 1,
-  });
 
   const [selectedUrls, setSelectedUrls] = useState<string[]>([]);
   const [filterText, setFilterText] = useState('');
@@ -147,10 +80,6 @@ export function StepConfirmLinks({ project }: StepProps) {
     setSelectedUrls(newlyFoundUrls);
   }, [newlyFoundUrls]);
 
-  const handleAddManualLinks = (urls: string[]) => {
-    confirmLinks.mutate({ project_id: project.id, urls });
-  };
-
   const filteredNewUrls = useMemo(
     () => newlyFoundUrls.filter((url) => url.toLowerCase().includes(filterText.toLowerCase())),
     [newlyFoundUrls, filterText]
@@ -189,7 +118,6 @@ export function StepConfirmLinks({ project }: StepProps) {
 
     return (
       <>
-        <AddLinksModal opened={addLinksModalOpened} onClose={closeAddLinksModal} onAdd={handleAddManualLinks} />
         <Stack>
           <Text>
             {newlyFoundUrls.length > 0
@@ -286,117 +214,8 @@ export function StepConfirmLinks({ project }: StepProps) {
     );
   }
 
-  // VIEW 2: If no new links are pending confirmation, show the results table of all saved links.
-  if (isLoadingSavedLinks && !savedLinksResponse) {
-    return (
-      <Center p="xl">
-        <Loader />
-      </Center>
-    );
-  }
-
-  const hasSavedLinks = (savedLinksResponse?.meta.total_items || 0) > 0;
-
-  if (!hasSavedLinks) {
-    return (
-      <>
-        <AddLinksModal opened={addLinksModalOpened} onClose={closeAddLinksModal} onAdd={handleAddManualLinks} />
-        <Stack>
-          <Text c="dimmed">
-            No links have been found or saved for this project yet. Go back to the previous step to crawl a source.
-          </Text>
-          <Group>
-            <Button leftSection={<IconPlus size={14} />} onClick={openAddLinksModal} variant="outline">
-              Add Manual Links
-            </Button>
-          </Group>
-        </Stack>
-      </>
-    );
-  }
-
+  // VIEW 2: If no new links are pending, show a simple message.
   return (
-    <>
-      <AddLinksModal opened={addLinksModalOpened} onClose={closeAddLinksModal} onAdd={handleAddManualLinks} />
-      <SavedLinksView project={project} onAddLinks={openAddLinksModal} />
-    </>
-  );
-}
-
-function SavedLinksView({ project, onAddLinks }: { project: Project; onAddLinks: () => void }) {
-  const [searchParams, setSearchParams] = useSearchParams();
-  const pageFromUrl = parseInt(searchParams.get(URL_PARAM_KEY) || '1', 10);
-  const { data: linksResponse, isLoading } = useProjectLinks(project.id, {
-    page: pageFromUrl,
-    pageSize: PAGE_SIZE,
-  });
-
-  const handlePageChange = (newPage: number) => {
-    setSearchParams(
-      (prev) => {
-        prev.set(URL_PARAM_KEY, newPage.toString());
-        return prev;
-      },
-      { replace: true }
-    );
-  };
-
-  if (isLoading) {
-    return (
-      <Center p="xl">
-        <Loader />
-      </Center>
-    );
-  }
-
-  const links = linksResponse?.data || [];
-  const totalItems = linksResponse?.meta.total_items || 0;
-  const totalPages = Math.ceil(totalItems / PAGE_SIZE);
-
-  return (
-    <Stack>
-      <Group justify="space-between">
-        <Text>
-          All found links have been saved. The next step will process all links with a "pending" or "failed" status.
-        </Text>
-        <Button leftSection={<IconPlus size={14} />} onClick={onAddLinks} variant="outline">
-          Add Manual Links
-        </Button>
-      </Group>
-      <Table mt="md" striped highlightOnHover withTableBorder>
-        <Table.Thead>
-          <Table.Tr>
-            <Table.Th>Link URL</Table.Th>
-            <Table.Th>Status</Table.Th>
-          </Table.Tr>
-        </Table.Thead>
-        <Table.Tbody>
-          {links.map((link) => (
-            <Table.Tr key={link.id}>
-              <Table.Td>
-                <Text truncate>{link.url}</Text>
-              </Table.Td>
-              <Table.Td>
-                <Tooltip
-                  label={link.skip_reason || link.error_message}
-                  disabled={!link.skip_reason && !link.error_message}
-                  multiline
-                  w={220}
-                >
-                  <Badge color={statusColors[link.status]} variant="light">
-                    {link.status}
-                  </Badge>
-                </Tooltip>
-              </Table.Td>
-            </Table.Tr>
-          ))}
-        </Table.Tbody>
-      </Table>
-      {totalPages > 1 && (
-        <Center mt="md">
-          <Pagination value={pageFromUrl} onChange={handlePageChange} total={totalPages} />
-        </Center>
-      )}
-    </Stack>
+    <Text c="dimmed">No new links to confirm. Proceed to the next step to manage and process your saved links.</Text>
   );
 }
