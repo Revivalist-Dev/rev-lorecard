@@ -1,13 +1,13 @@
 import json
 from db.common import CreateGlobalTemplate
-from db.database import AsyncDB, PostgresDB, SQLiteDB
+from db.database import AsyncDBTransaction, PostgresDB, SQLiteDB
 from logging_config import get_logger
 import default_templates
 
 logger = get_logger(__name__)
 
 
-async def v3_override_default_templates(db: AsyncDB) -> None:
+async def v3_override_default_templates(tx: AsyncDBTransaction) -> None:
     """
     Data migration for schema version 3.
     Creates or fully overwrites the default global templates with the latest versions.
@@ -40,7 +40,7 @@ async def v3_override_default_templates(db: AsyncDB) -> None:
     ]
 
     # 1. Create or Overwrite Global Templates
-    if isinstance(db, PostgresDB):
+    if isinstance(tx, PostgresDB):
         for default in defaults:
             query = """
                 INSERT INTO "GlobalTemplate" (id, name, content)
@@ -51,23 +51,24 @@ async def v3_override_default_templates(db: AsyncDB) -> None:
                     updated_at = CURRENT_TIMESTAMP
             """
             # The 'name' is the same as 'id' for these defaults
-            await db.execute(query, (default.id, default.name, default.content))
-    elif isinstance(db, SQLiteDB):
-        for default in defaults:
-            # Remove
-            await db.execute(
-                'DELETE FROM "GlobalTemplate" WHERE id = %s', (default.id,)
-            )
-            # Insert
-            await db.execute(
-                'INSERT INTO "GlobalTemplate" (id, name, content) VALUES (%s, %s, %s)',
-                (default.id, default.name, default.content),
-            )
+            await tx.execute(query, (default.id, default.name, default.content))
+    elif isinstance(tx, SQLiteDB):
+        async with tx.transaction():
+            for default in defaults:
+                # Remove
+                await tx.execute(
+                    'DELETE FROM "GlobalTemplate" WHERE id = %s', (default.id,)
+                )
+                # Insert
+                await tx.execute(
+                    'INSERT INTO "GlobalTemplate" (id, name, content) VALUES (%s, %s, %s)',
+                    (default.id, default.name, default.content),
+                )
 
     logger.info(f"Ensured {len(defaults)} global templates are up-to-date.")
 
     # 2. Override templates in all existing Projects
-    projects_to_update = await db.fetch_all('SELECT id, templates FROM "Project"')
+    projects_to_update = await tx.fetch_all('SELECT id, templates FROM "Project"')
 
     updated_count = 0
     for project_row in projects_to_update:
@@ -82,7 +83,7 @@ async def v3_override_default_templates(db: AsyncDB) -> None:
         templates["entry_creation"] = defaults[2].content
         templates["lorebook_definition"] = defaults[3].content
 
-        await db.execute(
+        await tx.execute(
             'UPDATE "Project" SET templates = %s WHERE id = %s',
             (json.dumps(templates), project_row["id"]),
         )

@@ -6,6 +6,7 @@ from uuid import UUID, uuid4
 from db.connection import get_db_connection
 from pydantic import BaseModel
 from db.common import PaginatedResponse, PaginationMeta
+from db.database import AsyncDBTransaction
 
 
 class CreateLorebookEntry(BaseModel):
@@ -35,10 +36,10 @@ class LorebookEntry(CreateLorebookEntry):
 
 
 async def create_lorebook_entry(
-    entry: CreateLorebookEntry,
+    entry: CreateLorebookEntry, tx: Optional[AsyncDBTransaction] = None
 ) -> LorebookEntry:
     """Create a new lorebook entry and return it."""
-    db = await get_db_connection()
+    db = tx or await get_db_connection()
     query = """
         INSERT INTO "LorebookEntry" (id, project_id, title, content, keywords, source_url)
         VALUES (%s, %s, %s, %s, %s, %s)

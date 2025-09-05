@@ -77,15 +77,15 @@ async def apply_migrations(db: AsyncDB, db_type: str):
         async with db.transaction() as tx:
             # 1. Apply schema migration
             if db_type == "sqlite":
-                await db.executescript(script)
+                await tx.executescript(script)
             else:
-                await db.execute(script)  # pyright: ignore[reportArgumentType]
+                await tx.execute(script)  # pyright: ignore[reportArgumentType]
 
             # 2. Check for and run corresponding data migration
             if version in DATA_MIGRATIONS:
                 logger.info(f"Running data migration for version {version}...")
                 data_migration_func = DATA_MIGRATIONS[version]
-                await data_migration_func(db)  # Pass the transaction object
+                await data_migration_func(tx)  # Pass the transaction object
                 logger.info(f"Data migration for version {version} completed.")
 
             # 3. Record the migration version

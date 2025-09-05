@@ -5,6 +5,8 @@ from uuid import UUID, uuid4
 from db.connection import get_db_connection
 from pydantic import BaseModel
 
+from db.database import AsyncDBTransaction
+
 
 class ProjectSource(BaseModel):
     id: UUID
@@ -52,8 +54,10 @@ async def create_project_source(source: CreateProjectSource) -> ProjectSource:
     return ProjectSource(**result)
 
 
-async def get_project_source(source_id: UUID) -> ProjectSource | None:
-    db = await get_db_connection()
+async def get_project_source(
+    source_id: UUID, tx: Optional[AsyncDBTransaction] = None
+) -> ProjectSource | None:
+    db = tx or await get_db_connection()
     query = 'SELECT * FROM "ProjectSource" WHERE id = %s'
     result = await db.fetch_one(query, (source_id,))
     return ProjectSource(**result) if result else None
@@ -69,12 +73,14 @@ async def list_sources_by_project(project_id: str) -> List[ProjectSource]:
 
 
 async def update_project_source(
-    source_id: UUID, source_update: UpdateProjectSource
+    source_id: UUID,
+    source_update: UpdateProjectSource,
+    tx: Optional[AsyncDBTransaction] = None,
 ) -> ProjectSource | None:
-    db = await get_db_connection()
+    db = tx or await get_db_connection()
     update_data = source_update.model_dump(exclude_unset=True)
     if not update_data:
-        return await get_project_source(source_id)
+        return await get_project_source(source_id, tx=tx)
 
     set_clause_parts = []
     params: List[Any] = []

@@ -122,6 +122,16 @@ export function StepConfirmLinks({ project }: StepProps) {
     const totalPages = Math.ceil(visibleUrls.length / PAGE_SIZE);
     const paginatedUrls = visibleUrls.slice((pageFromUrl - 1) * PAGE_SIZE, pageFromUrl * PAGE_SIZE);
 
+    const handlePageChange = (newPage: number) => {
+      setSearchParams(
+        (prev) => {
+          prev.set(URL_PARAM_KEY, newPage.toString());
+          return prev;
+        },
+        { replace: true }
+      );
+    };
+
     return (
       <Stack>
         <Text>
@@ -179,11 +189,7 @@ export function StepConfirmLinks({ project }: StepProps) {
               </ScrollArea>
               {totalPages > 1 && (
                 <Group justify="center" mt="md">
-                  <Pagination
-                    value={pageFromUrl}
-                    onChange={(p) => setSearchParams({ [URL_PARAM_KEY]: p.toString() })}
-                    total={totalPages}
-                  />
+                  <Pagination value={pageFromUrl} onChange={handlePageChange} total={totalPages} />
                 </Group>
               )}
               <Divider my="md" />
@@ -252,6 +258,16 @@ function SavedLinksView({ project }: StepProps) {
     pageSize: PAGE_SIZE,
   });
 
+  const handlePageChange = (newPage: number) => {
+    setSearchParams(
+      (prev) => {
+        prev.set(URL_PARAM_KEY, newPage.toString());
+        return prev;
+      },
+      { replace: true }
+    );
+  };
+
   if (isLoading) {
     return (
       <Center p="xl">
@@ -300,11 +316,7 @@ function SavedLinksView({ project }: StepProps) {
       </Table>
       {totalPages > 1 && (
         <Center mt="md">
-          <Pagination
-            value={pageFromUrl}
-            onChange={(p) => setSearchParams({ [URL_PARAM_KEY]: p.toString() })}
-            total={totalPages}
-          />
+          <Pagination value={pageFromUrl} onChange={handlePageChange} total={totalPages} />
         </Center>
       )}
     </Stack>

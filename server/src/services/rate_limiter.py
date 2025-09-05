@@ -11,6 +11,7 @@ from db.background_jobs import (
     get_background_job,
     update_background_job,
 )
+from db.database import AsyncDBTransaction
 from db.links import Link
 from db.lorebook_entries import LorebookEntry
 from logging_config import get_logger
@@ -59,10 +60,10 @@ async def wait_for_rate_limit(project_id: str, requests_per_minute: int):
 
 
 async def update_job_with_notification(
-    job_id: uuid.UUID, job_update: UpdateBackgroundJob
+    job_id: uuid.UUID, job_update: UpdateBackgroundJob, tx: AsyncDBTransaction
 ) -> BackgroundJob:
     """Update job and send SSE notification."""
-    updated_job = await update_background_job(job_id, job_update)
+    updated_job = await update_background_job(job_id, job_update, tx=tx)
     if updated_job:
         await send_job_status_notification(updated_job)
     return updated_job  # pyright: ignore[reportReturnType]

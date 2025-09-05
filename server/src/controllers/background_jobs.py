@@ -22,6 +22,7 @@ from db.background_jobs import (
 )
 from db.common import PaginatedResponse, SingleResponse
 from db.projects import get_project as db_get_project
+from db.connection import get_db_connection
 
 logger = get_logger(__name__)
 
@@ -63,30 +64,35 @@ class BackgroundJobController(Controller):
     @post("/{job_id:uuid}/cancel")
     async def cancel_job(self, job_id: UUID) -> SingleResponse[BackgroundJob]:
         """Request cancellation of a running or pending job."""
-        logger.debug(f"Cancelling job {job_id}")
-        job = await db_get_background_job(job_id)
-        if not job:
-            raise NotFoundException(f"Job '{job_id}' not found.")
+        async with (await get_db_connection()).transaction() as tx:
+            logger.debug(f"Cancelling job {job_id}")
+            job = await db_get_background_job(job_id, tx=tx)
+            if not job:
+                raise NotFoundException(f"Job '{job_id}' not found.")
 
-        if job.status in [JobStatus.completed, JobStatus.failed, JobStatus.canceled]:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Job '{job_id}' is already in a terminal state ({job.status}).",
-            )
+            if job.status in [
+                JobStatus.completed,
+                JobStatus.failed,
+                JobStatus.canceled,
+            ]:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Job '{job_id}' is already in a terminal state ({job.status}).",
+                )
 
-        if job.status == JobStatus.in_progress:
-            updated_job = await db_update_background_job(
-                job_id, UpdateBackgroundJob(status=JobStatus.cancelling)
-            )
-        else:  # pending
-            updated_job = await db_update_background_job(
-                job_id, UpdateBackgroundJob(status=JobStatus.canceled)
-            )
+            if job.status == JobStatus.in_progress:
+                updated_job = await db_update_background_job(
+                    job_id, UpdateBackgroundJob(status=JobStatus.cancelling), tx=tx
+                )
+            else:  # pending
+                updated_job = await db_update_background_job(
+                    job_id, UpdateBackgroundJob(status=JobStatus.canceled), tx=tx
+                )
 
-        if not updated_job:
-            raise NotFoundException(f"Job '{job_id}' not found after update.")
+            if not updated_job:
+                raise NotFoundException(f"Job '{job_id}' not found after update.")
 
-        return SingleResponse(data=updated_job)
+            return SingleResponse(data=updated_job)
 
     @post("/generate-selector")
     async def create_generate_selector_job(
@@ -108,61 +114,67 @@ class BackgroundJobController(Controller):
         self, data: ConfirmLinksJobPayload = Body()
     ) -> SingleResponse[BackgroundJob]:
         """Create a job to confirm and save links for a project."""
-        logger.debug(f"Creating confirm_links job for project {data.project_id}")
-        project = await db_get_project(data.project_id)
-        if not project:
-            raise NotFoundException(f"Project '{data.project_id}' not found.")
+        async with (await get_db_connection()).transaction() as tx:
+            logger.debug(f"Creating confirm_links job for project {data.project_id}")
+            project = await db_get_project(data.project_id, tx=tx)
+            if not project:
+                raise NotFoundException(f"Project '{data.project_id}' not found.")
 
-        job = await db_create_background_job(
-            CreateBackgroundJob(
-                task_name=TaskName.CONFIRM_LINKS,
-                project_id=data.project_id,
-                payload=ConfirmLinksPayload(urls=data.urls),
+            job = await db_create_background_job(
+                CreateBackgroundJob(
+                    task_name=TaskName.CONFIRM_LINKS,
+                    project_id=data.project_id,
+                    payload=ConfirmLinksPayload(urls=data.urls),
+                ),
+                tx=tx,
             )
-        )
-        return SingleResponse(data=job)
+            return SingleResponse(data=job)
 
     @post("/process-project-entries")
     async def create_process_project_entries_job(
         self, data: CreateJobForProjectPayload = Body()
     ) -> SingleResponse[BackgroundJob]:
         """Create a job to process all pending links for a project."""
-        logger.debug(
-            f"Creating process_project_entries job for project {data.project_id}"
-        )
-        project = await db_get_project(data.project_id)
-        if not project:
-            raise NotFoundException(f"Project '{data.project_id}' not found.")
-
-        job = await db_create_background_job(
-            CreateBackgroundJob(
-                task_name=TaskName.PROCESS_PROJECT_ENTRIES,
-                project_id=data.project_id,
-                payload=ProcessProjectEntriesPayload(),
+        async with (await get_db_connection()).transaction() as tx:
+            logger.debug(
+                f"Creating process_project_entries job for project {data.project_id}"
             )
-        )
-        return SingleResponse(data=job)
+            project = await db_get_project(data.project_id, tx=tx)
+            if not project:
+                raise NotFoundException(f"Project '{data.project_id}' not found.")
+
+            job = await db_create_background_job(
+                CreateBackgroundJob(
+                    task_name=TaskName.PROCESS_PROJECT_ENTRIES,
+                    project_id=data.project_id,
+                    payload=ProcessProjectEntriesPayload(),
+                ),
+                tx=tx,
+            )
+            return SingleResponse(data=job)
 
     @post("/generate-search-params")
     async def create_generate_search_params_job(
         self, data: CreateJobForProjectPayload = Body()
     ) -> SingleResponse[BackgroundJob]:
         """Create a job to generate search parameters for a project."""
-        logger.debug(
-            f"Creating generate_search_params job for project {data.project_id}"
-        )
-        project = await db_get_project(data.project_id)
-        if not project:
-            raise NotFoundException(f"Project '{data.project_id}' not found.")
-
-        job = await db_create_background_job(
-            CreateBackgroundJob(
-                task_name=TaskName.GENERATE_SEARCH_PARAMS,
-                project_id=data.project_id,
-                payload=GenerateSearchParamsPayload(),
+        async with (await get_db_connection()).transaction() as tx:
+            logger.debug(
+                f"Creating generate_search_params job for project {data.project_id}"
             )
-        )
-        return SingleResponse(data=job)
+            project = await db_get_project(data.project_id, tx=tx)
+            if not project:
+                raise NotFoundException(f"Project '{data.project_id}' not found.")
+
+            job = await db_create_background_job(
+                CreateBackgroundJob(
+                    task_name=TaskName.GENERATE_SEARCH_PARAMS,
+                    project_id=data.project_id,
+                    payload=GenerateSearchParamsPayload(),
+                ),
+                tx=tx,
+            )
+            return SingleResponse(data=job)
 
     @post("/rescan-links")
     async def create_rescan_links_job(

@@ -8,6 +8,7 @@ from db.connection import get_db_connection
 from db.common import PaginatedResponse, PaginationMeta
 from pydantic import BaseModel, ValidationError
 
+from db.database import AsyncDBTransaction
 from logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -168,9 +169,11 @@ def _deserialize_job(db_row: Dict[str, Any]) -> BackgroundJob:
     return BackgroundJob(**db_row)
 
 
-async def create_background_job(job: CreateBackgroundJob) -> BackgroundJob:
+async def create_background_job(
+    job: CreateBackgroundJob, tx: Optional[AsyncDBTransaction] = None
+) -> BackgroundJob:
     """Create a new background job and return it."""
-    db = await get_db_connection()
+    db = tx or await get_db_connection()
     query = """
         INSERT INTO "BackgroundJob" (id, task_name, project_id, payload)
         VALUES (%s, %s, %s, %s)
@@ -188,9 +191,11 @@ async def create_background_job(job: CreateBackgroundJob) -> BackgroundJob:
     return _deserialize_job(result)
 
 
-async def get_background_job(job_id: UUID) -> BackgroundJob | None:
+async def get_background_job(
+    job_id: UUID, tx: Optional[AsyncDBTransaction] = None
+) -> BackgroundJob | None:
     """Retrieve a background job by its ID."""
-    db = await get_db_connection()
+    db = tx or await get_db_connection()
     query = 'SELECT * FROM "BackgroundJob" WHERE id = %s'
     result = await db.fetch_one(query, (job_id,))
     return _deserialize_job(result) if result else None
@@ -248,10 +253,12 @@ async def get_and_lock_pending_background_job() -> BackgroundJob | None:
 
 
 async def update_background_job(
-    job_id: UUID, job_update: UpdateBackgroundJob
+    job_id: UUID,
+    job_update: UpdateBackgroundJob,
+    tx: Optional[AsyncDBTransaction] = None,
 ) -> BackgroundJob | None:
     """Update a background job's state."""
-    db = await get_db_connection()
+    db = tx or await get_db_connection()
     update_data = job_update.model_dump(exclude_unset=True)
     if not update_data:
         return await get_background_job(job_id)
@@ -286,12 +293,14 @@ async def delete_background_job(job_id: UUID) -> None:
     await db.execute(query, (job_id,))
 
 
-async def reset_in_progress_jobs_to_pending():
+async def reset_in_progress_jobs_to_pending(
+    tx: Optional[AsyncDBTransaction] = None,
+) -> None:
     """
     Resets any jobs that were 'in_progress' or 'cancelling' back to 'pending'.
     This is useful for recovering from an unexpected application shutdown.
     """
-    db = await get_db_connection()
+    db = tx or await get_db_connection()
     query = """
         UPDATE "BackgroundJob"
         SET status = 'pending'

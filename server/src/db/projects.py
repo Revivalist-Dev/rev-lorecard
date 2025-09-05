@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 from db.connection import get_db_connection
 from datetime import datetime
 from db.common import PaginatedResponse, PaginationMeta
+from db.database import AsyncDBTransaction
 
 
 class AiProviderConfig(BaseModel):
@@ -132,9 +133,11 @@ async def create_project(project: CreateProject) -> Project:
     return deserialized_project
 
 
-async def get_project(project_id: str) -> Project | None:
+async def get_project(
+    project_id: str, tx: Optional[AsyncDBTransaction] = None
+) -> Project | None:
     """Retrieve a project by its ID."""
-    db = await get_db_connection()
+    db = tx or await get_db_connection()
     query = 'SELECT * FROM "Project" WHERE id = %s'
     result = await db.fetch_one(query, (project_id,))
     return _deserialize_project(result)
@@ -171,12 +174,14 @@ async def list_projects_paginated(
 
 
 async def update_project(
-    project_id: str, project_update: UpdateProject
+    project_id: str,
+    project_update: UpdateProject,
+    tx: Optional[AsyncDBTransaction] = None,
 ) -> Project | None:
-    db = await get_db_connection()
+    db = tx or await get_db_connection()
     update_data = project_update.model_dump(exclude_unset=True)
     if not update_data:
-        return await get_project(project_id)
+        return await get_project(project_id, tx=tx)
 
     set_clause_parts = []
     params: List[Any] = []
@@ -193,7 +198,7 @@ async def update_project(
             params.append(value)
 
     if not set_clause_parts:
-        return await get_project(project_id)
+        return await get_project(project_id, tx=tx)
 
     params.append(project_id)
     set_clause = ", ".join(set_clause_parts)

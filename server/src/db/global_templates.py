@@ -5,6 +5,8 @@ from db.common import CreateGlobalTemplate, PaginatedResponse, PaginationMeta
 from db.connection import get_db_connection
 from pydantic import BaseModel
 
+from db.database import AsyncDBTransaction
+
 
 class GlobalTemplate(BaseModel):
     id: str
@@ -76,9 +78,11 @@ async def list_global_templates_paginated(
     )
 
 
-async def list_all_global_templates() -> list[GlobalTemplate]:
+async def list_all_global_templates(
+    tx: Optional[AsyncDBTransaction] = None,
+) -> list[GlobalTemplate]:
     """List all global templates."""
-    db = await get_db_connection()
+    db = tx or await get_db_connection()
     query = 'SELECT * FROM "GlobalTemplate" ORDER BY created_at DESC'
     results = await db.fetch_all(query)
     return [GlobalTemplate(**row) for row in results] if results else []

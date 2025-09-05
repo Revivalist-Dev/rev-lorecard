@@ -6,6 +6,7 @@ from uuid import UUID, uuid4
 from db.connection import get_db_connection
 from pydantic import BaseModel
 from db.common import PaginatedResponse, PaginationMeta
+from db.database import AsyncDBTransaction
 
 
 class LinkStatus(str, Enum):
@@ -47,46 +48,47 @@ class Link(CreateLink):
     raw_content: Optional[str] = None
 
 
-async def create_links(links: List[CreateLink]) -> List[Link]:
+async def create_links(links: List[CreateLink], tx: AsyncDBTransaction) -> List[Link]:
     """
     Batch insert a list of links for a project.
     This function uses a transaction to ensure all links are inserted or none are.
     Returns the list of created links.
     """
-    db = await get_db_connection()
     created_links: List[Link] = []
-
-    async with db.transaction() as tx:
-        query = """
-            INSERT INTO "Link" (id, project_id, url)
-            VALUES (%s, %s, %s)
-            ON CONFLICT (project_id, url) DO NOTHING
-            RETURNING *
-        """
-        for link in links:
-            result = await tx.execute_and_fetch_one(
-                query, (uuid4(), link.project_id, link.url)
-            )
-            if result:
-                created_links.append(Link(**result))
+    query = """
+        INSERT INTO "Link" (id, project_id, url)
+        VALUES (%s, %s, %s)
+        ON CONFLICT (project_id, url) DO NOTHING
+        RETURNING *
+    """
+    for link in links:
+        result = await tx.execute_and_fetch_one(
+            query, (uuid4(), link.project_id, link.url)
+        )
+        if result:
+            created_links.append(Link(**result))
     return created_links
 
 
-async def get_link(link_id: UUID) -> Link | None:
+async def get_link(
+    link_id: UUID, tx: Optional[AsyncDBTransaction] = None
+) -> Link | None:
     """Retrieve a link by its ID."""
-    db = await get_db_connection()
+    db = tx or await get_db_connection()
     query = 'SELECT * FROM "Link" WHERE id = %s'
     result = await db.fetch_one(query, (link_id,))
     return Link(**result) if result else None
 
 
-async def get_existing_links_by_urls(project_id: str, urls: List[str]) -> List[str]:
+async def get_existing_links_by_urls(
+    project_id: str, urls: List[str], tx: Optional[AsyncDBTransaction] = None
+) -> List[str]:
     """
     Given a list of URLs, return the subset that already exists for the project.
     """
     if not urls:
         return []
-    db = await get_db_connection()
+    db = tx or await get_db_connection()
     # Create a placeholder string like (%s, %s, %s)
     placeholders = ", ".join(["%s"] * len(urls))
     query = f'SELECT url FROM "Link" WHERE project_id = %s AND url IN ({placeholders})'
@@ -111,9 +113,11 @@ async def count_processable_links_by_project(project_id: str) -> int:
     return result["count"] if result and "count" in result else 0
 
 
-async def get_processable_links_for_project(project_id: str) -> List[Link]:
+async def get_processable_links_for_project(
+    project_id: str, tx: Optional[AsyncDBTransaction] = None
+) -> List[Link]:
     """Retrieve all processable (pending or failed) links for a specific project."""
-    db = await get_db_connection()
+    db = tx or await get_db_connection()
     query = "SELECT * FROM \"Link\" WHERE project_id = %s AND (status = 'pending' OR status = 'failed')"
     results = await db.fetch_all(query, (project_id,))
     return [Link(**row) for row in results] if results else []
@@ -140,9 +144,11 @@ async def list_links_by_project_paginated(
     )
 
 
-async def update_link(link_id: UUID, link_update: UpdateLink) -> Link | None:
+async def update_link(
+    link_id: UUID, link_update: UpdateLink, tx: Optional[AsyncDBTransaction] = None
+) -> Link | None:
     """Update a link's status, error message, or lorebook entry ID."""
-    db = await get_db_connection()
+    db = tx or await get_db_connection()
     update_data = link_update.model_dump(exclude_unset=True)
     if not update_data:
         return await get_link(link_id)
@@ -154,17 +160,19 @@ async def update_link(link_id: UUID, link_update: UpdateLink) -> Link | None:
         params.append(value)
 
     if not set_clause_parts:
-        return await get_link(link_id)
+        return await get_link(link_id, tx=tx)
 
     params.append(link_id)
     set_clause = ", ".join(set_clause_parts)
     query = f'UPDATE "Link" SET {set_clause} WHERE id = %s'
 
     await db.execute(query, tuple(params))
-    return await get_link(link_id)
+    return await get_link(link_id, tx=tx)
 
 
-async def reset_processing_links_to_pending() -> None:
-    db = await get_db_connection()
+async def reset_processing_links_to_pending(
+    tx: Optional[AsyncDBTransaction] = None,
+) -> None:
+    db = tx or await get_db_connection()
     query = "UPDATE \"Link\" SET status = 'pending' WHERE status = 'processing'"
     await db.execute(query)

@@ -40,7 +40,7 @@ from exceptions import (
     validation_exception_handler,
     value_error_exception_handler,
 )
-from db.connection import close_database, init_database
+from db.connection import close_database, get_db_connection, init_database
 from db.global_templates import create_global_template, get_global_template
 import default_templates
 
@@ -88,8 +88,9 @@ async def create_default_templates():
 async def recover_stale_datas():
     """Resets any datas that were 'in_progress' back to 'pending'."""
     logger.info("Checking for stale jobs to recover...")
-    await reset_in_progress_jobs_to_pending()
-    await reset_processing_links_to_pending()
+    async with (await get_db_connection()).transaction() as tx:
+        await reset_in_progress_jobs_to_pending(tx=tx)
+        await reset_processing_links_to_pending(tx=tx)
 
 
 CLIENT_BUILD_DIR = Path(__file__).parent.parent.parent / "client" / "dist"
