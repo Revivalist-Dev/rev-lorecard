@@ -17,6 +17,7 @@ from db.background_jobs import (
     JobStatus,
     create_background_job as db_create_background_job,
     get_background_job as db_get_background_job,
+    get_latest_job_by_task_name as db_get_latest_job_by_task_name,
     list_background_jobs_paginated as db_list_background_jobs_paginated,
     update_background_job as db_update_background_job,
 )
@@ -62,6 +63,21 @@ class BackgroundJobController(Controller):
         job = await db_get_background_job(job_id)
         if not job:
             raise NotFoundException(f"Job '{job_id}' not found.")
+        return SingleResponse(data=job)
+
+    @get("/latest")
+    async def get_latest_job(
+        self, project_id: str, task_name: TaskName
+    ) -> SingleResponse[BackgroundJob]:
+        """Retrieve the latest job for a project by task name."""
+        logger.debug(
+            f"Retrieving latest job for project {project_id} with task {task_name.value}"
+        )
+        job = await db_get_latest_job_by_task_name(project_id, task_name)
+        if not job:
+            raise NotFoundException(
+                f"No job with task name '{task_name.value}' found for project '{project_id}'."
+            )
         return SingleResponse(data=job)
 
     @post("/{job_id:uuid}/cancel")

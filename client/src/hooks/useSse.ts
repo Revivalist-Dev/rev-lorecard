@@ -31,6 +31,8 @@ export function useSse(projectId: string | undefined) {
       const updatedJob: BackgroundJob = JSON.parse(event.data);
       const queryKey = ['jobs', updatedJob.project_id];
 
+      queryClient.invalidateQueries({ queryKey: ['latestJob', updatedJob.project_id, updatedJob.task_name] });
+
       queryClient.setQueryData<PaginatedResponse<BackgroundJob>>(queryKey, (oldData) => {
         if (!oldData) return undefined;
         const jobIndex = oldData.data.findIndex((job) => job.id === updatedJob.id);

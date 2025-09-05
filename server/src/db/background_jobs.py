@@ -308,3 +308,18 @@ async def reset_in_progress_jobs_to_pending(
     """
     await db.execute(query)
     logger.info("Reset stale 'in_progress' and 'cancelling' jobs to 'pending'.")
+
+
+async def get_latest_job_by_task_name(
+    project_id: str, task_name: TaskName, tx: Optional[AsyncDBTransaction] = None
+) -> BackgroundJob | None:
+    """Retrieve the most recent background job for a specific project and task name."""
+    db = tx or await get_db_connection()
+    query = """
+        SELECT * FROM "BackgroundJob"
+        WHERE project_id = %s AND task_name = %s
+        ORDER BY created_at DESC
+        LIMIT 1
+    """
+    result = await db.fetch_one(query, (project_id, task_name.value))
+    return _deserialize_job(result) if result else None

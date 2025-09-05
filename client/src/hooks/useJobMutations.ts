@@ -52,6 +52,7 @@ const useJobMutation = <T extends CreateJobForProjectPayload | CreateJobForSourc
     onSuccess: (response) => {
       const newJob = response.data;
       optimisticallyAddNewJob(queryClient, newJob);
+      queryClient.invalidateQueries({ queryKey: ['latestJob', newJob.project_id, newJob.task_name] });
       queryClient.invalidateQueries({ queryKey: ['project', newJob.project_id] });
       queryClient.invalidateQueries({ queryKey: ['sources', newJob.project_id] });
       queryClient.invalidateQueries({ queryKey: ['sourcesHierarchy', newJob.project_id] });
@@ -97,6 +98,7 @@ export const useConfirmLinksJob = () => {
     onSuccess: (response) => {
       const newJob = response.data;
       optimisticallyAddNewJob(queryClient, newJob);
+      queryClient.invalidateQueries({ queryKey: ['latestJob', newJob.project_id, newJob.task_name] });
       queryClient.invalidateQueries({ queryKey: ['project', newJob.project_id] });
       queryClient.invalidateQueries({ queryKey: ['links', newJob.project_id] });
       notifications.show({
