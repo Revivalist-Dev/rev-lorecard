@@ -1,8 +1,10 @@
+from dotenv import load_dotenv
+load_dotenv()
+
 import asyncio
 from pathlib import Path
 import sys
 from typing import Literal, Optional
-from dotenv import load_dotenv
 import httpx
 from db.background_jobs import reset_in_progress_jobs_to_pending
 from db.common import CreateGlobalTemplate
@@ -222,7 +224,6 @@ app = create_app()
 
 async def main():
     """Main function to orchestrate application startup."""
-    load_dotenv()
     setup_logging()
 
     logger.info("Initializing database...")
