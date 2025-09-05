@@ -14,6 +14,7 @@ interface ProjectSourceModalProps {
 interface SourceFormValues {
   url: string;
   max_pages_to_crawl: number;
+  max_crawl_depth: number;
 }
 
 export function ProjectSourceModal({ opened, onClose, projectId, source }: ProjectSourceModalProps) {
@@ -25,6 +26,7 @@ export function ProjectSourceModal({ opened, onClose, projectId, source }: Proje
     initialValues: {
       url: '',
       max_pages_to_crawl: 20,
+      max_crawl_depth: 1,
     },
     validate: {
       url: (value) => {
@@ -44,6 +46,7 @@ export function ProjectSourceModal({ opened, onClose, projectId, source }: Proje
       form.setValues({
         url: source.url,
         max_pages_to_crawl: source.max_pages_to_crawl,
+        max_crawl_depth: source.max_crawl_depth,
       });
     } else {
       form.reset();
@@ -77,14 +80,24 @@ export function ProjectSourceModal({ opened, onClose, projectId, source }: Proje
             placeholder="e.g., https://elderscrolls.fandom.com/wiki/Category:Skyrim:_Locations"
             {...form.getInputProps('url')}
           />
-          <NumberInput
-            label="Max Pages to Crawl"
-            description="Limit for pagination. Set to 1 to disable."
-            defaultValue={20}
-            min={1}
-            max={100}
-            {...form.getInputProps('max_pages_to_crawl')}
-          />
+          <Group grow>
+            <NumberInput
+              label="Max Pages to Crawl"
+              description="Pagination limit per source. Set to 1 to disable."
+              defaultValue={20}
+              min={1}
+              max={100}
+              {...form.getInputProps('max_pages_to_crawl')}
+            />
+            <NumberInput
+              label="Max Crawl Depth"
+              description="How many levels of sub-categories to discover."
+              defaultValue={1}
+              min={1}
+              max={5}
+              {...form.getInputProps('max_crawl_depth')}
+            />
+          </Group>
           <Group justify="flex-end" mt="md">
             <Button variant="default" onClick={onClose}>
               Cancel

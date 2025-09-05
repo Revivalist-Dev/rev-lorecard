@@ -9,7 +9,7 @@ A web application to automatically create structured lorebooks from a URL using 
   
   *A video demonstrating the main workflow of creating a lorebook from a URL*
 
-https://github.com/user-attachments/assets/6cf2aca6-2d5d-40e8-9021-2a91b6056323
+https://github.com/user-attachments/assets/c706c611-3ce6-427d-8f2a-c2c8ebd9bf6c
   
 </details>
 
@@ -17,6 +17,8 @@ https://github.com/user-attachments/assets/6cf2aca6-2d5d-40e8-9021-2a91b6056323
   <summary>Manage Sources</summary>
   
   ![Manage Sources](showcase/manage-sources.png)
+
+  ![Manage Sources](showcase/edit-source.png)
   
 </details>
 
@@ -97,7 +99,7 @@ Open your terminal in that same folder and choose one of the commands below.
           -e DATABASE_TYPE=sqlite \
           -e DATABASE_URL=/app/server/data/lorebook_creator.db \
           -v "$(pwd)/data:/app/server/data" \
-          ghcr.io/bmen25124/lorebook-creator:v1.6
+          ghcr.io/bmen25124/lorebook-creator:v1.7
         ```
 
     *   **For Windows (Command Prompt):**
@@ -108,7 +110,7 @@ Open your terminal in that same folder and choose one of the commands below.
           -e DATABASE_TYPE=sqlite ^
           -e DATABASE_URL=/app/server/data/lorebook_creator.db ^
           -v "%cd%/data:/app/server/data" ^
-          ghcr.io/bmen25124/lorebook-creator:v1.6
+          ghcr.io/bmen25124/lorebook-creator:v1.7
         ```
         
     *   **For Windows (PowerShell):**
@@ -119,7 +121,7 @@ Open your terminal in that same folder and choose one of the commands below.
           -e DATABASE_TYPE=sqlite `
           -e DATABASE_URL=/app/server/data/lorebook_creator.db `
           -v "${pwd}/data:/app/server/data" `
-          ghcr.io/bmen25124/lorebook-creator:v1.6
+          ghcr.io/bmen25124/lorebook-creator:v1.7
         ```
 
 *   **To run with PostgreSQL (Advanced):**
@@ -141,7 +143,7 @@ Open your terminal in that same folder and choose one of the commands below.
       -e APP_ENV=production \
       -e DATABASE_TYPE=postgres \
       -e DATABASE_URL=postgresql://user:password@lorebook-db:5432/lorebook_creator \
-      ghcr.io/bmen25124/lorebook-creator:v1.6
+      ghcr.io/bmen25124/lorebook-creator:v1.7
     ```
 
 ---

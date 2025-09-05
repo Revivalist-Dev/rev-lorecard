@@ -28,20 +28,23 @@ def create_messages_from_template(
     conflicts with markdown horizontal rules.
     """
     messages = []
-    rendered_template = render_prompt(template_str, context)
 
     # The pattern now looks for "--- role: <rolename>" at the beginning of a line,
     # capturing the role and all content until the next such delimiter or the end of the string.
     pattern = re.compile(
         r"^---\s*role:\s*(\w+)\s*\n(.*?)(?=\n^---\s*role:|\Z)", re.S | re.M
     )
-    matches = pattern.findall(rendered_template)
+    matches = pattern.findall(template_str)
 
     if not matches:
         # If no delimiters are found, treat the whole template as a single user message.
         # This provides backward compatibility for simple, single-message prompts.
-        if rendered_template.strip():
-            messages.append(ChatMessage(role="user", content=rendered_template.strip()))
+        if template_str.strip():
+            messages.append(
+                ChatMessage(
+                    role="user", content=render_prompt(template_str.strip(), context)
+                )
+            )
         return messages
 
     for role_str, content_str in matches:
@@ -53,6 +56,8 @@ def create_messages_from_template(
 
         content = content_str.strip()
         if content:
-            messages.append(ChatMessage(role=role, content=content))
+            messages.append(
+                ChatMessage(role=role, content=render_prompt(content, context))
+            )
 
     return messages

@@ -41,6 +41,14 @@ export function useSse(projectId: string | undefined) {
         return { ...oldData, data: newData };
       });
 
+      if (
+        (updatedJob.task_name === 'discover_and_crawl_sources' || updatedJob.task_name === 'rescan_links') &&
+        updatedJob.status === 'in_progress'
+      ) {
+        queryClient.invalidateQueries({ queryKey: ['sources', updatedJob.project_id] });
+        queryClient.invalidateQueries({ queryKey: ['sourcesHierarchy', updatedJob.project_id] });
+      }
+
       queryClient.invalidateQueries({ queryKey: ['project', updatedJob.project_id] });
 
       if (updatedJob.status === 'completed' || updatedJob.status === 'failed') {
@@ -50,8 +58,9 @@ export function useSse(projectId: string | undefined) {
           color: updatedJob.status === 'completed' ? 'green' : 'red',
         });
 
-        if (updatedJob.task_name === 'generate_selector' || updatedJob.task_name === 'rescan_links') {
+        if (updatedJob.task_name === 'discover_and_crawl_sources' || updatedJob.task_name === 'rescan_links') {
           queryClient.invalidateQueries({ queryKey: ['sources', updatedJob.project_id] });
+          queryClient.invalidateQueries({ queryKey: ['sourcesHierarchy', updatedJob.project_id] });
         }
 
         queryClient.invalidateQueries({ queryKey: ['apiRequestLogs', updatedJob.project_id] });

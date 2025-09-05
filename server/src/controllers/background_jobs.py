@@ -10,7 +10,7 @@ from db.background_jobs import (
     CreateBackgroundJob,
     ConfirmLinksPayload,
     GenerateSearchParamsPayload,
-    GenerateSelectorPayload,
+    DiscoverAndCrawlSourcesPayload,
     ProcessProjectEntriesPayload,
     UpdateBackgroundJob,
     TaskName,
@@ -23,6 +23,9 @@ from db.background_jobs import (
 from db.common import PaginatedResponse, SingleResponse
 from db.projects import get_project as db_get_project
 from db.connection import get_db_connection
+from db.source_hierarchy import (
+    get_source_hierarchy_for_project as db_get_source_hierarchy_for_project,
+)
 
 logger = get_logger(__name__)
 
@@ -94,20 +97,43 @@ class BackgroundJobController(Controller):
 
             return SingleResponse(data=updated_job)
 
-    @post("/generate-selector")
-    async def create_generate_selector_job(
+    @post("/discover-and-crawl")
+    async def create_discover_and_crawl_job(
         self, data: CreateJobForSourcePayload = Body()
     ) -> SingleResponse[BackgroundJob]:
-        """Create a job to generate the CSS selector for project sources."""
-        logger.debug(f"Creating generate_selector job for sources {data.source_ids}")
-        job = await db_create_background_job(
-            CreateBackgroundJob(
-                task_name=TaskName.GENERATE_SELECTOR,
-                project_id=data.project_id,
-                payload=GenerateSelectorPayload(source_ids=data.source_ids),
+        """Create a job to discover sub-sources and crawl for content links."""
+        async with (await get_db_connection()).transaction() as tx:
+            hierarchy = await db_get_source_hierarchy_for_project(
+                data.project_id, tx=tx
             )
-        )
-        return SingleResponse(data=job)
+            child_to_parent_map = {
+                rel.child_source_id: rel.parent_source_id for rel in hierarchy
+            }
+            selected_ids_set = set(data.source_ids)
+
+            for source_id in data.source_ids:
+                current_id = source_id
+                while current_id in child_to_parent_map:
+                    parent_id = child_to_parent_map[current_id]
+                    if parent_id in selected_ids_set:
+                        raise HTTPException(
+                            status_code=400,
+                            detail=f"Invalid selection: Source {source_id} is a descendant of another selected source {parent_id}. Please submit only top-level sources for processing.",
+                        )
+                    current_id = parent_id
+
+            logger.debug(
+                f"Creating discover_and_crawl_sources job for sources {data.source_ids}"
+            )
+            job = await db_create_background_job(
+                CreateBackgroundJob(
+                    task_name=TaskName.DISCOVER_AND_CRAWL_SOURCES,
+                    project_id=data.project_id,
+                    payload=DiscoverAndCrawlSourcesPayload(source_ids=data.source_ids),
+                ),
+                tx=tx,
+            )
+            return SingleResponse(data=job)
 
     @post("/confirm-links")
     async def create_confirm_links_job(
@@ -187,7 +213,7 @@ class BackgroundJobController(Controller):
             CreateBackgroundJob(
                 task_name=TaskName.RESCAN_LINKS,
                 project_id=data.project_id,
-                payload=GenerateSelectorPayload(source_ids=data.source_ids),
+                payload=DiscoverAndCrawlSourcesPayload(source_ids=data.source_ids),
             )
         )
         return SingleResponse(data=job)
