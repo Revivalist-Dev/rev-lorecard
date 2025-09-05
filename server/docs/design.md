@@ -196,7 +196,7 @@ This document outlines the architecture for an application designed to automate 
     *   **For each `ProjectSource`**:
         a.  It scrapes the raw HTML from the source's `url`.
         b.  It constructs a prompt using the `templates.selector_generation` template, including the scraped HTML and the project's `search_params`.
-        c.  It sends the prompt to the LLM, asking for CSS selectors for three types of links: **content**, **category**, and **pagination**. An `ApiRequestLog` is created.
+        c.  It sends the prompt to the LLM, asking for CSS selectors for three types of links: **content**, **category**, and **pagination**. This call is rate-limited according to the project's settings to prevent API abuse during deep crawls. An `ApiRequestLog` is created.
         d.  The worker updates the `ProjectSource` with the new selectors.
         e.  It then uses these selectors to crawl the source (and subsequent pages if a pagination selector was found).
         f.  **Category Links**: If the current crawl depth is less than the source's `max_crawl_depth`, any discovered category URLs are processed. For each one, the worker creates a new `ProjectSource` (if it doesn't exist), records the parent-child relationship in `ProjectSourceHierarchy`, and adds the new source to the processing queue.
@@ -248,6 +248,7 @@ This document outlines the architecture for an application designed to automate 
     *   `GET /projects/{project_id}/sources`: List all sources for a project.
     *   `POST /projects/{project_id}/sources`: Add a new source to a project.
     *   `GET /projects/{project_id}/sources/hierarchy`: Get the parent-child relationships between sources for a project.
+    *   `POST /projects/{project_id}/sources/test-selectors`: Tests a set of CSS selectors against a given URL to provide a real-time preview of the links that would be extracted, without saving any data.
     *   `PATCH /projects/{project_id}/sources/{source_id}`: Update a source.
     *   `DELETE /projects/{project_id}/sources/{source_id}`: Delete a source.
     *   `POST /projects/{project_id}/sources/delete-bulk`: Delete multiple sources in one request.

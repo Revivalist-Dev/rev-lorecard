@@ -1,6 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import apiClient from '../services/api';
-import type { ProjectSource, ProjectSourceHierarchy, SingleResponse } from '../types';
+import type {
+  ProjectSource,
+  ProjectSourceHierarchy,
+  SingleResponse,
+  TestSelectorsPayload,
+  TestSelectorsResult,
+} from '../types';
 import { notifications } from '@mantine/notifications';
 
 // --- Fetch ---
@@ -73,7 +79,10 @@ export const useCreateProjectSource = (projectId: string) => {
 };
 
 // --- Update ---
-type UpdateSourcePayload = Partial<CreateSourcePayload>;
+type UpdateSourcePayload = Partial<CreateSourcePayload> & {
+  link_extraction_selector?: string[];
+  link_extraction_pagination_selector?: string;
+};
 
 const updateProjectSource = async ({
   projectId,
@@ -171,5 +180,24 @@ export const useDeleteProjectSourcesBulk = (projectId: string) => {
         color: 'red',
       });
     },
+  });
+};
+
+// --- Test Selectors ---
+const testProjectSourceSelectors = async ({
+  projectId,
+  data,
+}: {
+  projectId: string;
+  data: TestSelectorsPayload;
+}): Promise<TestSelectorsResult> => {
+  const response = await apiClient.post(`/projects/${projectId}/sources/test-selectors`, data);
+  return response.data;
+};
+
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export const useTestProjectSourceSelectors = (_projectId: string) => {
+  return useMutation({
+    mutationFn: testProjectSourceSelectors,
   });
 };

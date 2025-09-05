@@ -195,3 +195,16 @@ export interface GlobalTemplate {
   created_at: string;
   updated_at: string;
 }
+
+export interface TestSelectorsPayload {
+  url: string;
+  content_selectors: string[];
+  pagination_selector?: string;
+}
+
+export interface TestSelectorsResult {
+  content_links: string[];
+  pagination_link?: string;
+  error?: string;
+  link_count: number;
+}

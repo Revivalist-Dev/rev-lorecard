@@ -303,6 +303,7 @@ async def discover_and_crawl_sources(job: BackgroundJob, project: Project):
             "source": source.model_dump(),
             "globals": globals_dict,
         }
+        await wait_for_rate_limit(project.id, project.requests_per_minute)
         response = await provider.generate(
             ChatCompletionRequest(
                 model=project.ai_provider_config.model_name,
