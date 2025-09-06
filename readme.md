@@ -1,6 +1,6 @@
 # Lorebook Creator
 
-A web application to automatically create structured lorebooks from a URL using AI.
+Create lorebooks from URLs using LLMs.
 
 ## Screenshots & Videos
 
@@ -66,7 +66,7 @@ https://github.com/user-attachments/assets/c706c611-3ce6-427d-8f2a-c2c8ebd9bf6c
 
 ### Input token usage by steps
 1. **Search Params:** Single LLM request. This is a very simple operation. Input token is very low.
-2. **Manage Sources & Crawl** _Generate_ button making a single LLM request. This is a bit more complex because we giving [cleaned html](https://github.com/bmen25124/lorebook-creator/blob/4ee1c3335cdece08b25795020ceca4f8a37bdcc4/server/src/services/scraper.py#L8) to LLM. Since it is a HTML, token usage is high compared to others. However if you already _crawled_ the URL, you can always use _Rescan Selected_ to confirm new links.
+2. **Manage Sources & Crawl** _Generate_ button making a single LLM request. But if `Max Crawl Depth` is more than 1, it would navigate the links. This is a bit more complex because we giving [cleaned html](https://github.com/bmen25124/lorebook-creator/blob/4ee1c3335cdece08b25795020ceca4f8a37bdcc4/server/src/services/scraper.py#L8) to LLM. Since it is a HTML, token usage is high compared to others. However if you already _crawled_ the URL, you can always use _Rescan Selected_ to confirm new links.
 3. **Generate Entries:** Request count = link count. We are giving [cleaned html -> markdown](https://github.com/bmen25124/lorebook-creator/blob/4ee1c3335cdece08b25795020ceca4f8a37bdcc4/server/src/services/scraper.py#L111) to LLM. So token usage shouldn't be too high unless the page is very long. But if there are many links, token usage will be high.
 
 ## How to Install and Run the Application
