@@ -9,8 +9,8 @@ Create lorebooks from URLs using LLMs.
   
   *A video demonstrating the main workflow of creating a lorebook from a URL*
 
-https://github.com/user-attachments/assets/c706c611-3ce6-427d-8f2a-c2c8ebd9bf6c
-  
+https://github.com/user-attachments/assets/38f6dbd7-4975-47f1-8e4f-3e9319cce083
+
 </details>
 
 <details>
