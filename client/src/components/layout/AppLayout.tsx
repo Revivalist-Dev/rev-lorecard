@@ -1,7 +1,7 @@
 import { AppShell, Burger, Group, Title, NavLink, Box, Text, Anchor, Stack } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { Link, Outlet, useLocation } from 'react-router-dom';
-import { IconGift, IconHome } from '@tabler/icons-react';
+import { IconGift, IconHome, IconKey, IconTemplate } from '@tabler/icons-react';
 import { useQuery } from '@tanstack/react-query';
 import apiClient from '../../services/api';
 import { notifications } from '@mantine/notifications';
@@ -88,9 +88,16 @@ export function AppLayout() {
           />
           <NavLink
             component={Link}
+            to="/credentials"
+            label="Credentials"
+            leftSection={<IconKey size="1rem" />}
+            active={pathname === '/credentials'}
+          />
+          <NavLink
+            component={Link}
             to="/templates"
             label="Templates"
-            leftSection={<IconHome size="1rem" />}
+            leftSection={<IconTemplate size="1rem" />}
             active={pathname === '/templates'}
           />
         </Box>

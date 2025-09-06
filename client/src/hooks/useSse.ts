@@ -49,6 +49,7 @@ export function useSse(projectId: string | undefined) {
       ) {
         queryClient.invalidateQueries({ queryKey: ['sources', updatedJob.project_id] });
         queryClient.invalidateQueries({ queryKey: ['sourcesHierarchy', updatedJob.project_id] });
+        queryClient.invalidateQueries({ queryKey: ['apiRequestLogs', updatedJob.project_id] });
       }
 
       queryClient.invalidateQueries({ queryKey: ['project', updatedJob.project_id] });

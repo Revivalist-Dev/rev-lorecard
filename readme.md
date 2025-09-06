@@ -61,13 +61,12 @@ https://github.com/user-attachments/assets/38f6dbd7-4975-47f1-8e4f-3e9319cce083
 ## Some notes
 - This is not deep research; it doesn't involve a web search. You need to give a URL that has multiple links. _Fandom:category_ pages are perfect for the app. For example, you can give [Oblivion Skill Books](https://elderscrolls.fandom.com/wiki/Category:Oblivion:_Skill_Books). So this is going to extract all books and navigate one by one, and create a lorebook for each book.
 - You can see all API request logs on the API Requests modal. You can also see the project analytics on the Project Analytics modal.
-- Currently, I'm only supporting openrouter and gemini because it is enough for me. However, if I see a need to add another API, I will add it.
-- You can edit all prompts.
+- You can edit all prompts on the Templates page.
 
 ### Input token usage by steps
 1. **Search Params:** Single LLM request. This is a very simple operation. Input token is very low.
-2. **Manage Sources & Crawl** _Generate_ button making a single LLM request. But if `Max Crawl Depth` is more than 1, it would navigate the links. This is a bit more complex because we giving [cleaned html](https://github.com/bmen25124/lorebook-creator/blob/4ee1c3335cdece08b25795020ceca4f8a37bdcc4/server/src/services/scraper.py#L8) to LLM. Since it is a HTML, token usage is high compared to others. However if you already _crawled_ the URL, you can always use _Rescan Selected_ to confirm new links.
-3. **Generate Entries:** Request count = link count. We are giving [cleaned html -> markdown](https://github.com/bmen25124/lorebook-creator/blob/4ee1c3335cdece08b25795020ceca4f8a37bdcc4/server/src/services/scraper.py#L111) to LLM. So token usage shouldn't be too high unless the page is very long. But if there are many links, token usage will be high.
+2. **Manage Sources & Crawl** _Discover & Scan_ button makes one LLM request per source. If `Max Crawl Depth` is more than 1, it will discover sub-categories and make an LLM request for each one. We give the LLM [cleaned html](https://github.com/bmen25124/lorebook-creator/blob/main/server/src/services/scraper.py#L8), so token usage can be high. You can use _Rescan Selected_ to find new links on previously scanned sources without using the LLM.
+3. **Generate Entries:** Request count = link count. We are giving the LLM [cleaned html -> markdown](https://github.com/bmen25124/lorebook-creator/blob/main/server/src/services/scraper.py#L111). Token usage depends on the page length. This step typically consumes the most tokens.
 
 ## How to Install and Run the Application
 
@@ -76,16 +75,23 @@ Choose the option that best fits your needs.
 ### Option 1: Quick Start with Docker (Recommended for Users)
 
 **1. Create a directory and `.env` file**
-First, create a folder on your computer for the application's data. Inside that folder, create a file named `.env` and add your API key.
+First, create a folder on your computer for the application's data. Inside that folder, create a file named `.env` and add a secret key phrase.
 
 ```env
 # .env file
-OPENROUTER_API_KEY=your_secret_key_here
-GOOGLE_GEMINI_KEY=your_secret_key_here
-OPENAI_COMPATIBLE_BASE_URL=https://api.openai.com/v1
-OPENAI_COMPATIBLE_API_KEY=your_secret_key_here
+
+# A secret key phrase for encrypting credentials. Can be any string, like a strong password.
+# THIS KEY IS CRITICAL. IF YOU LOSE IT, ALL STORED CREDENTIALS WILL BE UNUSABLE.
+APP_SECRET_KEY=yoursecretphrasehere
+
+# The port the application will run on.
 PORT=3000
-```
+
+# (Optional) For first-time setup, the app can create default credentials from these.
+OPENROUTER_API_KEY=
+GOOGLE_GEMINI_KEY=
+OPENAI_COMPATIBLE_BASE_URL=
+OPENAI_COMPATIBLE_API_KEY=
 
 **2. Run the application**
 Open your terminal in that same folder and choose one of the commands below.
@@ -101,7 +107,7 @@ Open your terminal in that same folder and choose one of the commands below.
           -e DATABASE_TYPE=sqlite \
           -e DATABASE_URL=/app/server/data/lorebook_creator.db \
           -v "$(pwd)/data:/app/server/data" \
-          ghcr.io/bmen25124/lorebook-creator:v1.8
+          ghcr.io/bmen25124/lorebook-creator:v1.9
         ```
 
     *   **For Windows (Command Prompt):**
@@ -112,7 +118,7 @@ Open your terminal in that same folder and choose one of the commands below.
           -e DATABASE_TYPE=sqlite ^
           -e DATABASE_URL=/app/server/data/lorebook_creator.db ^
           -v "%cd%/data:/app/server/data" ^
-          ghcr.io/bmen25124/lorebook-creator:v1.8
+          ghcr.io/bmen25124/lorebook-creator:v1.9
         ```
         
     *   **For Windows (PowerShell):**
@@ -123,7 +129,7 @@ Open your terminal in that same folder and choose one of the commands below.
           -e DATABASE_TYPE=sqlite `
           -e DATABASE_URL=/app/server/data/lorebook_creator.db `
           -v "${pwd}/data:/app/server/data" `
-          ghcr.io/bmen25124/lorebook-creator:v1.8
+          ghcr.io/bmen25124/lorebook-creator:v1.9
         ```
 
 *   **To run with PostgreSQL (Advanced):**
@@ -145,7 +151,7 @@ Open your terminal in that same folder and choose one of the commands below.
       -e APP_ENV=production \
       -e DATABASE_TYPE=postgres \
       -e DATABASE_URL=postgresql://user:password@lorebook-db:5432/lorebook_creator \
-      ghcr.io/bmen25124/lorebook-creator:v1.8
+      ghcr.io/bmen25124/lorebook-creator:v1.9
     ```
 
 ---

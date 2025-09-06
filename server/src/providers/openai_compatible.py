@@ -1,4 +1,3 @@
-import os
 import json
 import time
 from typing import Any, Dict, List, Literal, Optional, Union
@@ -21,11 +20,9 @@ from providers.index import (
 
 logger = get_logger(__name__)
 
-# --- Configuration from Environment Variables ---
-OPENAI_COMPATIBLE_BASE_URL = os.getenv("OPENAI_COMPATIBLE_BASE_URL")
-OPENAI_COMPATIBLE_API_KEY = os.getenv("OPENAI_COMPATIBLE_API_KEY")
 
 # --- Pydantic Models for OpenAI-compatible API ---
+
 
 class OpenAICompatibleJsonSchema(BaseModel):
     name: str
@@ -55,10 +52,15 @@ class OpenAICompatibleRequestBody(BaseModel):
     ) -> "OpenAICompatibleRequestBody":
         response_format = None
         if common_request.response_format:
+            schema = common_request.response_format.schema_value
+            # Forcing all properties to be required for compatibility.
+            if "properties" in schema:
+                schema["required"] = list(schema["properties"].keys())
+
             response_format = OpenAICompatibleResponseFormat(
                 json_schema=OpenAICompatibleJsonSchema(
                     name=common_request.response_format.name,
-                    schema_value=common_request.response_format.schema_value,
+                    schema_value=schema,
                 )
             )
         return OpenAICompatibleRequestBody(
@@ -97,13 +99,18 @@ def _calculate_cost(model: str, prompt_tokens: int, completion_tokens: int) -> f
 
 # --- Provider Client Implementation ---
 class OpenAICompatibleClient(BaseProvider):
-    def __init__(self):
-        self.base_url = OPENAI_COMPATIBLE_BASE_URL
+    def __init__(
+        self,
+        base_url: Optional[str] = None,
+        api_key: Optional[str] = None,
+        **kwargs,
+    ):
+        self.base_url = base_url
         if not self.base_url:
             raise ValueError(
-                "OpenAI Compatible provider is not configured. Please set the OPENAI_COMPATIBLE_BASE_URL environment variable."
+                "OpenAI Compatible provider is not configured. Please provide a base_url in your credential or set the OPENAI_COMPATIBLE_BASE_URL environment variable."
             )
-        self.api_key = OPENAI_COMPATIBLE_API_KEY  # Can be None for local models
+        self.api_key = api_key
         self.headers = {
             "Content-Type": "application/json",
         }

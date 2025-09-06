@@ -1,4 +1,3 @@
-import os
 import json
 import time
 from typing import Dict, List, Literal, Optional, Union
@@ -20,7 +19,6 @@ from providers.index import (
 
 logger = get_logger(__name__)
 
-GOOGLE_GEMINI_KEY = os.getenv("GOOGLE_GEMINI_KEY")
 API_BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
 
 # --- Structured Pricing Data ---
@@ -170,11 +168,11 @@ class GeminiAPIResponse(BaseModel):
 
 
 class GeminiClient(BaseProvider):
-    def __init__(self, api_key: Optional[str] = None):
-        self.api_key = api_key or GOOGLE_GEMINI_KEY
+    def __init__(self, api_key: Optional[str] = None, **kwargs):
+        self.api_key = api_key
         if not self.api_key:
             raise ValueError(
-                "Google Gemini API key not found. Please set the GOOGLE_GEMINI_KEY environment variable."
+                "Google Gemini API key not found. Please provide it in your credential or set the GOOGLE_GEMINI_KEY environment variable."
             )
 
     async def get_models(self) -> List[ModelInfo]:

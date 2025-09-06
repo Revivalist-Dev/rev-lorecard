@@ -1,10 +1,39 @@
 import asyncio
-from typing import List
-from litestar import Controller, get
+from typing import List, Optional
+from uuid import UUID
+from litestar import Controller, get, post
+from litestar.exceptions import HTTPException, NotFoundException
+from pydantic import BaseModel
 from logging_config import get_logger
-from providers.index import ProviderInfo, provider_classes, get_provider
+from providers.index import (
+    ChatCompletionErrorResponse,
+    ChatCompletionRequest,
+    ChatMessage,
+    ModelInfo,
+    ProviderInfo,
+    provider_classes,
+    get_provider_for_listing,
+    get_provider_instance,
+)
+from db.credentials import (
+    CredentialValues,
+    get_credential_with_values,
+    list_credentials,
+)
 
 logger = get_logger(__name__)
+
+
+class TestCredentialPayload(BaseModel):
+    provider_type: str
+    values: CredentialValues
+    model_name: Optional[str] = None
+    credential_id: Optional[UUID] = None
+
+
+class TestCredentialResult(BaseModel):
+    success: bool
+    message: str
 
 
 class ProviderController(Controller):
@@ -14,36 +43,160 @@ class ProviderController(Controller):
     async def get_providers(self) -> List[ProviderInfo]:
         logger.debug("Listing all available providers and their models")
 
+        all_credentials = await list_credentials()
         provider_info_tasks = []
+
         for provider_id in provider_classes.keys():
 
             async def get_info(pid):
-                try:
-                    # Attempt to get the provider instance and its models
-                    p_instance = get_provider(pid)
-                    models = await p_instance.get_models()
-                    # If successful, mark as configured and include models
-                    return ProviderInfo(
-                        id=pid,
-                        name=pid.capitalize(),
-                        models=models,
-                        configured=True,
-                    )
-                except Exception as e:
-                    # If it fails (e.g., missing API key), log a warning
-                    # and return it as unconfigured with an empty model list.
-                    logger.warning(
-                        f"Could not initialize provider '{pid}' for listing. It may be missing configuration (e.g., API key). Error: {e}"
-                    )
-                    return ProviderInfo(
-                        id=pid,
-                        name=pid.capitalize(),
-                        models=[],
-                        configured=False,
-                    )
+                instance = None
+                is_configured = False
+
+                # --- Prioritize credentials from the database ---
+                first_credential_for_provider = next(
+                    (c for c in all_credentials if c.provider_type == pid), None
+                )
+
+                if first_credential_for_provider:
+                    try:
+                        full_credential = await get_credential_with_values(
+                            first_credential_for_provider.id
+                        )
+                        if full_credential and full_credential.get("values"):
+                            instance = get_provider_instance(
+                                pid, full_credential["values"].model_dump()
+                            )
+                        logger.info(
+                            f"Using credential '{first_credential_for_provider.name}' to list models for {pid}."
+                        )
+                    except Exception as e:
+                        logger.warning(
+                            f"Failed to instantiate provider '{pid}' with credential '{first_credential_for_provider.name}': {e}"
+                        )
+
+                # --- Fallback to environment variables if no instance yet ---
+                if not instance:
+                    try:
+                        instance = get_provider_for_listing(pid)
+                        logger.info(
+                            f"Using environment variables to list models for {pid}."
+                        )
+                    except Exception:
+                        # This provider is not configured via credential or env var.
+                        pass
+
+                # --- If we have an instance, get models ---
+                if instance:
+                    try:
+                        models = await instance.get_models()
+                        is_configured = True
+                        return ProviderInfo(
+                            id=pid,
+                            name=pid.capitalize(),
+                            models=models,
+                            configured=is_configured,
+                        )
+                    except Exception as e:
+                        logger.warning(
+                            f"Provider '{pid}' is configured, but failed to fetch models: {e}"
+                        )
+                        # Fallthrough to return as unconfigured
+
+                # --- Return as unconfigured if any step failed ---
+                return ProviderInfo(
+                    id=pid,
+                    name=pid.capitalize(),
+                    models=[],
+                    configured=False,
+                )
 
             provider_info_tasks.append(get_info(provider_id))
 
         results = await asyncio.gather(*provider_info_tasks)
-        # We no longer filter out failures, so we can remove the list comprehension
         return results
+
+    @post(path="/models")
+    async def get_provider_models(self, data: TestCredentialPayload) -> List[ModelInfo]:
+        """Dynamically fetches models using provided, unsaved credential values."""
+        logger.info(f"Fetching models for provider: {data.provider_type}")
+        try:
+            provider = get_provider_instance(
+                data.provider_type, data.values.model_dump()
+            )
+            return await provider.get_models()
+        except Exception as e:
+            logger.error(
+                f"Failed to fetch models for {data.provider_type}: {e}", exc_info=True
+            )
+            raise HTTPException(
+                status_code=400, detail=f"Failed to connect to provider: {e}"
+            )
+
+    @post(path="/test")
+    async def test_credential(
+        self, data: TestCredentialPayload
+    ) -> TestCredentialResult:
+        logger.info(f"Testing credential for provider: {data.provider_type}")
+        if not data.model_name:
+            raise HTTPException(
+                status_code=400, detail="A model name is required for testing."
+            )
+
+        try:
+            values_to_test = data.values.model_dump()
+
+            if data.credential_id:
+                existing_credential = await get_credential_with_values(
+                    data.credential_id
+                )
+                if not existing_credential:
+                    raise NotFoundException(
+                        f"Credential {data.credential_id} not found."
+                    )
+
+                # Start with the stored values
+                merged_values = existing_credential["values"].model_dump()
+                # Overwrite with new values only if they are not empty strings
+                if data.values.api_key:
+                    merged_values["api_key"] = data.values.api_key
+                if data.values.base_url:
+                    merged_values["base_url"] = data.values.base_url
+                values_to_test = merged_values
+
+            provider = get_provider_instance(data.provider_type, values_to_test)
+
+            # Create a simple, low-cost request
+            test_request = ChatCompletionRequest(
+                model=data.model_name,
+                messages=[ChatMessage(role="user", content="Hello")],
+                temperature=0,
+            )
+
+            response = await provider.generate(test_request)
+
+            if isinstance(response, ChatCompletionErrorResponse):
+                error_detail = "Unknown error"
+                if response.raw_response and "error" in response.raw_response:
+                    err_data = response.raw_response["error"]
+                    if isinstance(err_data, dict) and "message" in err_data:
+                        error_detail = err_data["message"]
+                    else:
+                        error_detail = str(err_data)
+
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Connection failed: {error_detail}",
+                )
+
+            return TestCredentialResult(success=True, message="Connection successful!")
+
+        except (ValueError, NotFoundException, HTTPException) as e:
+            raise e
+        except Exception as e:
+            logger.error(
+                f"An unexpected error occurred during credential test for {data.provider_type}: {e}",
+                exc_info=True,
+            )
+            raise HTTPException(
+                status_code=500, detail=f"An unexpected server error occurred: {e}"
+            )

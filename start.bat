@@ -16,6 +16,17 @@ if not exist "%ENV_FILE%" (
     echo      Created empty %ENV_FILE%.
 )
 
+REM --- Handle APP_SECRET_KEY ---
+findstr /b "APP_SECRET_KEY=" "%ENV_FILE%" >nul
+if errorlevel 1 (
+    echo.
+    echo      Encryption key not found. This is required to secure your credentials.
+    echo      Please enter a secret phrase.
+    set /p "SECRET_KEY=Secret Phrase: "
+    echo APP_SECRET_KEY=!SECRET_KEY!>>"%ENV_FILE%"
+    echo      Secret phrase saved to %ENV_FILE%.
+)
+
 REM --- Handle DATABASE_TYPE ---
 findstr /b "DATABASE_TYPE=" "%ENV_FILE%" >nul
 if errorlevel 1 (
@@ -28,58 +39,6 @@ if errorlevel 1 (
 
 REM Read DATABASE_TYPE for use in this script
 for /f "tokens=1,* delims==" %%a in ('findstr /b "DATABASE_TYPE=" "%ENV_FILE%"') do ( set "DATABASE_TYPE=%%b" )
-
-REM --- Handle OPENROUTER_API_KEY ---
-findstr /b "OPENROUTER_API_KEY=" "%ENV_FILE%" >nul
-if errorlevel 1 (
-    if not defined OPENROUTER_API_KEY (
-        echo.
-        echo      OpenRouter API Key not found. You can leave this blank if you plan to use another provider.
-        set /p "API_KEY=Please enter your OpenRouter API Key and press Enter: "
-        echo OPENROUTER_API_KEY=!API_KEY!>>"%ENV_FILE%"
-        echo      OpenRouter API Key setting saved to %ENV_FILE%.
-    ) else (
-        echo      Using OpenRouter API Key from system environment.
-    )
-) else (
-    echo      Using OpenRouter API Key from %ENV_FILE%.
-)
-
-REM --- Handle GOOGLE_GEMINI_KEY ---
-findstr /b "GOOGLE_GEMINI_KEY=" "%ENV_FILE%" >nul
-if errorlevel 1 (
-    if not defined GOOGLE_GEMINI_KEY (
-        echo.
-        echo      Google Gemini API Key not found. You can leave this blank if you plan to use another provider.
-        set /p "API_KEY=Please enter your Google Gemini API Key and press Enter: "
-        echo GOOGLE_GEMINI_KEY=!API_KEY!>>"%ENV_FILE%"
-        echo      Google Gemini API Key setting saved to %ENV_FILE%.
-    ) else (
-        echo      Using Google Gemini API Key from system environment.
-    )
-) else (
-    echo      Using Google Gemini API Key from %ENV_FILE%.
-)
-
-REM --- Handle OPENAI_COMPATIBLE_BASE_URL ---
-findstr /b "OPENAI_COMPATIBLE_BASE_URL=" "%ENV_FILE%" >nul
-if errorlevel 1 (
-    echo.
-    echo      OpenAI Compatible URL not found. Required for using custom endpoints (e.g., local LLMs).
-    set /p "BASE_URL=Please enter the Base URL (e.g., http://localhost:11434/v1) and press Enter: "
-    echo OPENAI_COMPATIBLE_BASE_URL=!BASE_URL!>>"%ENV_FILE%"
-    echo      OpenAI Compatible URL saved to %ENV_FILE%.
-)
-
-REM --- Handle OPENAI_COMPATIBLE_API_KEY ---
-findstr /b "OPENAI_COMPATIBLE_API_KEY=" "%ENV_FILE%" >nul
-if errorlevel 1 (
-    echo.
-    echo      OpenAI Compatible API Key not found. This is optional and can be left blank.
-    set /p "COMPATIBLE_API_KEY=Please enter the API Key and press Enter: "
-    echo OPENAI_COMPATIBLE_API_KEY=!COMPATIBLE_API_KEY!>>"%ENV_FILE%"
-    echo      OpenAI Compatible API Key setting saved to %ENV_FILE%.
-)
 
 REM --- Handle PORT ---
 findstr /b "PORT=" "%ENV_FILE%" >nul
