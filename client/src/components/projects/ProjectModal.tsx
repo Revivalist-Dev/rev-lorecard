@@ -91,7 +91,16 @@ export function ProjectModal({ opened, onClose, project }: ProjectModalProps) {
   const selectedProvider = providers?.find((p) => p.id === selectedProviderId);
   const isSelectedProviderConfigured = selectedProvider?.configured ?? false;
 
+  const isOaiCompatible = selectedProviderId === 'openai_compatible';
   const modelOptions = selectedProvider?.models.map((m) => ({ value: m.id, label: m.name })) || [];
+
+  // Disable the model input if:
+  // 1. No provider is selected OR
+  // 2. The selected provider isn't configured OR
+  // 3. It's a normal provider with no models available.
+  // We explicitly keep it ENABLED for the OpenAI compatible provider even if `modelOptions` is empty.
+  const isModelSelectDisabled =
+    !selectedProviderId || !isSelectedProviderConfigured || (modelOptions.length === 0 && !isOaiCompatible);
 
   const handleNameChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const newName = event.currentTarget.value;
@@ -161,16 +170,26 @@ export function ProjectModal({ opened, onClose, project }: ProjectModalProps) {
               {...form.getInputProps('ai_provider_config.api_provider')}
               onChange={handleProviderChange}
             />
-            <Select
-              withAsterisk
-              label="Model"
-              placeholder="Select a model"
-              data={modelOptions}
-              disabled={!selectedProviderId || modelOptions.length === 0 || !isSelectedProviderConfigured}
-              searchable
-              nothingFoundMessage="No models found or provider not configured"
-              {...form.getInputProps('ai_provider_config.model_name')}
-            />
+            {isOaiCompatible ? (
+              <TextInput
+                withAsterisk
+                label="Model"
+                placeholder="Enter a custom model name..."
+                disabled={isModelSelectDisabled}
+                {...form.getInputProps('ai_provider_config.model_name')}
+              />
+            ) : (
+              <Select
+                withAsterisk
+                label="Model"
+                placeholder="Select a model"
+                data={modelOptions}
+                disabled={isModelSelectDisabled}
+                searchable
+                nothingFoundMessage="No models found or provider not configured"
+                {...form.getInputProps('ai_provider_config.model_name')}
+              />
+            )}
           </Group>
 
           <NumberInput

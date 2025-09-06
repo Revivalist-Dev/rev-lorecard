@@ -50,6 +50,7 @@ import default_templates  # noqa: E402
 
 import providers.openrouter  # noqa: E402, F401
 import providers.gemini  # noqa: E402, F401
+import providers.openai_compatible  # noqa: E402, F401
 
 logger = get_logger(__name__)
 

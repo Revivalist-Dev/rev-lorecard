@@ -61,6 +61,26 @@ if errorlevel 1 (
     echo      Using Google Gemini API Key from %ENV_FILE%.
 )
 
+REM --- Handle OPENAI_COMPATIBLE_BASE_URL ---
+findstr /b "OPENAI_COMPATIBLE_BASE_URL=" "%ENV_FILE%" >nul
+if errorlevel 1 (
+    echo.
+    echo      OpenAI Compatible URL not found. Required for using custom endpoints (e.g., local LLMs).
+    set /p "BASE_URL=Please enter the Base URL (e.g., http://localhost:11434/v1) and press Enter: "
+    echo OPENAI_COMPATIBLE_BASE_URL=!BASE_URL!>>"%ENV_FILE%"
+    echo      OpenAI Compatible URL saved to %ENV_FILE%.
+)
+
+REM --- Handle OPENAI_COMPATIBLE_API_KEY ---
+findstr /b "OPENAI_COMPATIBLE_API_KEY=" "%ENV_FILE%" >nul
+if errorlevel 1 (
+    echo.
+    echo      OpenAI Compatible API Key not found. This is optional and can be left blank.
+    set /p "COMPATIBLE_API_KEY=Please enter the API Key and press Enter: "
+    echo OPENAI_COMPATIBLE_API_KEY=!COMPATIBLE_API_KEY!>>"%ENV_FILE%"
+    echo      OpenAI Compatible API Key setting saved to %ENV_FILE%.
+)
+
 REM --- Handle PORT ---
 findstr /b "PORT=" "%ENV_FILE%" >nul
 if errorlevel 1 (

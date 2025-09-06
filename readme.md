@@ -82,6 +82,8 @@ First, create a folder on your computer for the application's data. Inside that 
 # .env file
 OPENROUTER_API_KEY=your_secret_key_here
 GOOGLE_GEMINI_KEY=your_secret_key_here
+OPENAI_COMPATIBLE_BASE_URL=https://api.openai.com/v1
+OPENAI_COMPATIBLE_API_KEY=your_secret_key_here
 PORT=3000
 ```
 
