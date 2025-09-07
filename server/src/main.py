@@ -38,6 +38,7 @@ from controllers.background_jobs import (  # noqa: E402
 )
 from controllers.analytics import AnalyticsController  # noqa: E402
 from controllers.global_templates import GlobalTemplateController  # noqa: E402
+from controllers.credentials import CredentialsController  # noqa: E402
 from controllers.health import HealthController  # noqa: E402
 from exceptions import (  # noqa: E402
     generic_exception_handler,
@@ -46,10 +47,17 @@ from exceptions import (  # noqa: E402
 )
 from db.connection import close_database, get_db_connection, init_database  # noqa: E402
 from db.global_templates import create_global_template, get_global_template  # noqa: E402
+from db.credentials import (  # noqa: E402
+    CreateCredential,
+    CredentialValues,
+    create_credential,
+    list_credentials,
+)
 import default_templates  # noqa: E402
 
 import providers.openrouter  # noqa: E402, F401
 import providers.gemini  # noqa: E402, F401
+import providers.openai_compatible  # noqa: E402, F401
 
 logger = get_logger(__name__)
 
@@ -87,6 +95,57 @@ async def create_default_templates():
         if not existing_template:
             await create_global_template(template)
             logger.info(f"Created default template: {template.name}")
+
+
+async def create_credentials_from_env():
+    """Create default credentials from environment variables if they don't exist."""
+    logger.info("Checking for environment variables to create default credentials...")
+    existing_credentials = await list_credentials()
+    existing_provider_types = {c.provider_type for c in existing_credentials}
+
+    # --- OpenRouter ---
+    if "openrouter" not in existing_provider_types:
+        api_key = os.getenv("OPENROUTER_API_KEY")
+        if api_key:
+            await create_credential(
+                CreateCredential(
+                    name="Default OpenRouter (from env)",
+                    provider_type="openrouter",
+                    values=CredentialValues(api_key=api_key),
+                )
+            )
+            logger.info(
+                "Created default credential for OpenRouter from OPENROUTER_API_KEY."
+            )
+
+    # --- Gemini ---
+    if "gemini" not in existing_provider_types:
+        api_key = os.getenv("GOOGLE_GEMINI_KEY")
+        if api_key:
+            await create_credential(
+                CreateCredential(
+                    name="Default Gemini (from env)",
+                    provider_type="gemini",
+                    values=CredentialValues(api_key=api_key),
+                )
+            )
+            logger.info("Created default credential for Gemini from GOOGLE_GEMINI_KEY.")
+
+    # --- OpenAI Compatible ---
+    if "openai_compatible" not in existing_provider_types:
+        base_url = os.getenv("OPENAI_COMPATIBLE_BASE_URL")
+        if base_url:
+            api_key = os.getenv("OPENAI_COMPATIBLE_API_KEY")
+            await create_credential(
+                CreateCredential(
+                    name="Default OpenAI Compatible (from env)",
+                    provider_type="openai_compatible",
+                    values=CredentialValues(base_url=base_url, api_key=api_key),
+                )
+            )
+            logger.info(
+                "Created default credential for OpenAI Compatible from environment variables."
+            )
 
 
 async def recover_stale_datas():
@@ -191,6 +250,7 @@ def create_app():
         route_handlers=[
             get_app_info,
             HealthController,
+            CredentialsController,
             ApiRequestLogController,
             ProviderController,
             SSEController,
@@ -216,7 +276,11 @@ def create_app():
             serve_assets,
             spa_fallback,
         ],
-        on_startup=[create_default_templates, recover_stale_datas],
+        on_startup=[
+            create_default_templates,
+            recover_stale_datas,
+            create_credentials_from_env,
+        ],
         on_shutdown=[close_database],
         static_files_config=None,
     )

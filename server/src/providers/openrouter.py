@@ -1,4 +1,3 @@
-import os
 import json
 import time
 from typing import Any, Dict, List, Literal, Optional, Union
@@ -21,7 +20,6 @@ from providers.index import (
 
 logger = get_logger(__name__)
 
-OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 API_BASE_URL = "https://openrouter.ai/api/v1"
 
 
@@ -101,11 +99,11 @@ class OpenRouterAPIResponse(BaseModel):
 
 
 class OpenRouterClient(BaseProvider):
-    def __init__(self, api_key: Optional[str] = None):
-        self.api_key = api_key or OPENROUTER_API_KEY
+    def __init__(self, api_key: Optional[str] = None, **kwargs):
+        self.api_key = api_key
         if not self.api_key:
             raise ValueError(
-                "OpenRouter API key not found. Please set the OPENROUTER_API_KEY environment variable."
+                "OpenRouter API key not found. Please provide it in your credential or set the OPENROUTER_API_KEY environment variable."
             )
         self.headers = {
             "Authorization": f"Bearer {self.api_key}",

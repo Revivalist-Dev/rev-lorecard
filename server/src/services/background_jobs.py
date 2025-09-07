@@ -23,6 +23,7 @@ from db.background_jobs import (
     UpdateBackgroundJob,
     get_background_job,
 )
+from db.credentials import get_credential_with_values
 from db.connection import get_db_connection
 from db.database import AsyncDBTransaction
 from db.links import (
@@ -62,7 +63,7 @@ from providers.index import (
     ChatCompletionRequest,
     ChatCompletionResponse,
     ResponseSchema,
-    get_provider,
+    get_provider_instance,
 )
 from schemas import LorebookEntryResponse, SearchParamsResponse, SelectorResponse
 from services.rate_limiter import (
@@ -111,6 +112,17 @@ class CrawlResult(BaseModel):
     new_links: Set[str] = set()
     existing_links: Set[str] = set()
     new_sources_created: int = 0
+
+
+async def _get_provider_for_project(project: Project):
+    """Helper to get a provider instance for a project."""
+    if not project.credential_id:
+        raise ValueError("Project does not have a credential ID.")
+    credential = await get_credential_with_values(project.credential_id)
+    if not credential:
+        raise ValueError(f"Credential {project.credential_id} not found.")
+    credential_dict = credential["values"].model_dump(exclude_unset=True)
+    return get_provider_instance(credential["provider_type"], credential_dict)
 
 
 async def _crawl_and_discover(
@@ -277,7 +289,7 @@ async def discover_and_crawl_sources(job: BackgroundJob, project: Project):
         )
 
     scraper = Scraper()
-    provider = get_provider(project.ai_provider_config.api_provider)
+    provider = await _get_provider_for_project(project)
     global_templates = await list_all_global_templates()
     globals_dict = {gt.name: gt.content for gt in global_templates}
 
@@ -307,7 +319,7 @@ async def discover_and_crawl_sources(job: BackgroundJob, project: Project):
         await wait_for_rate_limit(project.id, project.requests_per_minute)
         response = await provider.generate(
             ChatCompletionRequest(
-                model=project.ai_provider_config.model_name,
+                model=project.model_name,
                 messages=create_messages_from_template(
                     project.templates.selector_generation, context
                 ),
@@ -315,7 +327,7 @@ async def discover_and_crawl_sources(job: BackgroundJob, project: Project):
                     name="selector_response",
                     schema_value=SelectorResponse.model_json_schema(),
                 ),
-                **project.ai_provider_config.model_parameters,
+                **project.model_parameters,
             )
         )
 
@@ -326,8 +338,8 @@ async def discover_and_crawl_sources(job: BackgroundJob, project: Project):
                     CreateApiRequestLog(
                         project_id=project.id,
                         job_id=job.id,
-                        api_provider=project.ai_provider_config.api_provider,
-                        model_used=project.ai_provider_config.model_name,
+                        api_provider=provider.__class__.__name__,
+                        model_used=project.model_name,
                         request=response.raw_request,
                         response=response.raw_response,
                         latency_ms=response.latency_ms,
@@ -342,8 +354,8 @@ async def discover_and_crawl_sources(job: BackgroundJob, project: Project):
                 CreateApiRequestLog(
                     project_id=project.id,
                     job_id=job.id,
-                    api_provider=project.ai_provider_config.api_provider,
-                    model_used=project.ai_provider_config.model_name,
+                    api_provider=provider.__class__.__name__,
+                    model_used=project.model_name,
                     request=response.raw_request,
                     response=response.raw_response,
                     input_tokens=response.usage.prompt_tokens,
@@ -555,7 +567,7 @@ async def generate_search_params(job: BackgroundJob, project: Project):
         raise ValueError("Project must have a prompt")
 
     async with (await get_db_connection()).transaction() as tx:
-        provider = get_provider(project.ai_provider_config.api_provider)
+        provider = await _get_provider_for_project(project)
         logger.info(
             f"[{job.id}] Generating search params with {provider.__class__.__name__}"
         )
@@ -565,7 +577,7 @@ async def generate_search_params(job: BackgroundJob, project: Project):
         context = {"project": project.model_dump(), "globals": globals_dict}
         response = await provider.generate(
             ChatCompletionRequest(
-                model=project.ai_provider_config.model_name,
+                model=project.model_name,
                 messages=create_messages_from_template(
                     project.templates.search_params_generation,
                     context,
@@ -574,7 +586,7 @@ async def generate_search_params(job: BackgroundJob, project: Project):
                     name="search_params_response",
                     schema_value=SearchParamsResponse.model_json_schema(),
                 ),
-                **project.ai_provider_config.model_parameters,
+                **project.model_parameters,
             )
         )
 
@@ -583,8 +595,8 @@ async def generate_search_params(job: BackgroundJob, project: Project):
                 CreateApiRequestLog(
                     project_id=project.id,
                     job_id=job.id,
-                    api_provider=project.ai_provider_config.api_provider,
-                    model_used=project.ai_provider_config.model_name,
+                    api_provider=provider.__class__.__name__,
+                    model_used=project.model_name,
                     request=response.raw_request,
                     response=response.raw_response,
                     latency_ms=response.latency_ms,
@@ -599,8 +611,8 @@ async def generate_search_params(job: BackgroundJob, project: Project):
             CreateApiRequestLog(
                 project_id=project.id,
                 job_id=job.id,
-                api_provider=project.ai_provider_config.api_provider,
-                model_used=project.ai_provider_config.model_name,
+                api_provider=provider.__class__.__name__,
+                model_used=project.model_name,
                 request=response.raw_request,
                 response=response.raw_response,
                 input_tokens=response.usage.prompt_tokens,
@@ -681,7 +693,7 @@ async def _process_single_link_io(
             if link.raw_content
             else await scraper.get_content(link.url, type="markdown", clean=True)
         )
-        provider = get_provider(project.ai_provider_config.api_provider)
+        provider = await _get_provider_for_project(project)
 
         global_templates = await list_all_global_templates()
         globals_dict = {gt.name: gt.content for gt in global_templates}
@@ -693,7 +705,7 @@ async def _process_single_link_io(
         }
         response = await provider.generate(
             ChatCompletionRequest(
-                model=project.ai_provider_config.model_name,
+                model=project.model_name,
                 messages=create_messages_from_template(
                     project.templates.entry_creation, context
                 ),
@@ -701,7 +713,7 @@ async def _process_single_link_io(
                     name="lorebook_entry_response",
                     schema_value=LorebookEntryResponse.model_json_schema(),
                 ),
-                **project.ai_provider_config.model_parameters,
+                **project.model_parameters,
             )
         )
 
@@ -710,8 +722,8 @@ async def _process_single_link_io(
         log_payload = CreateApiRequestLog(
             project_id=project.id,
             job_id=job.id,
-            api_provider=project.ai_provider_config.api_provider,
-            model_used=project.ai_provider_config.model_name,
+            api_provider=provider.__class__.__name__,
+            model_used=project.model_name,
             request=response.raw_request,
             response=response.raw_response,
             latency_ms=response.latency_ms,

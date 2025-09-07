@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Literal, Optional, Union, Type  # Add Type import
+from typing import Any, Dict, List, Literal, Optional, Union, Type
 from pydantic import BaseModel, Field, field_validator
 
 from logging_config import get_logger
@@ -140,7 +140,6 @@ class BaseProvider(ABC):
 
 
 provider_classes: Dict[str, Type[BaseProvider]] = {}
-_provider_instances: Dict[str, BaseProvider] = {}
 
 
 def register_provider(name: str, provider_class: Type[BaseProvider]):
@@ -148,18 +147,23 @@ def register_provider(name: str, provider_class: Type[BaseProvider]):
     provider_classes[name] = provider_class
 
 
-def get_provider(name: str) -> BaseProvider:
-    """
-    Lazily instantiates and returns a provider.
-    This is now the primary way to access a provider instance.
-    """
-    if name not in _provider_instances:
-        if name not in provider_classes:
-            raise ValueError(f"Provider '{name}' is not registered.")
+def get_provider_for_listing(name: str) -> BaseProvider:
+    if name not in provider_classes:
+        raise ValueError(f"Provider '{name}' is not registered.")
+    try:
+        return provider_classes[name]()
+    except Exception as e:
+        logger.warning(
+            f"Could not initialize provider '{name}' for listing. It may be missing configuration. Error: {e}"
+        )
+        raise
 
-        # The provider is instantiated HERE, on first use.
-        # If an API key is missing, the error will only happen at this point.
-        logger.info(f"Lazily initializing provider: {name}")
-        _provider_instances[name] = provider_classes[name]()
 
-    return _provider_instances[name]
+def get_provider_instance(name: str, credential_values: Dict[str, Any]) -> BaseProvider:
+    """
+    Instantiates and returns a provider with specific credentials for a job.
+    """
+    if name not in provider_classes:
+        raise ValueError(f"Provider '{name}' is not registered.")
+    logger.info(f"Instantiating provider '{name}' for a job.")
+    return provider_classes[name](**credential_values)

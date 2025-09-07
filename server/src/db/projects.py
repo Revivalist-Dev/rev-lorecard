@@ -1,31 +1,13 @@
 from enum import Enum
 import json
 from typing import Any, Dict, Optional, List
+from uuid import UUID
 
 from pydantic import BaseModel, Field
 from db.connection import get_db_connection
 from datetime import datetime
 from db.common import PaginatedResponse, PaginationMeta
 from db.database import AsyncDBTransaction
-
-
-class AiProviderConfig(BaseModel):
-    """Configuration for the LLM API provider."""
-
-    api_provider: str = Field(
-        ...,
-        min_length=1,
-        description="The API service to use (e.g., 'openrouter', 'openai').",
-    )
-    model_name: str = Field(
-        ...,
-        min_length=1,
-        description="The specific model identifier (e.g., 'google/gemini-2.5-flash').",
-    )
-    model_parameters: Dict[str, Any] = Field(
-        ...,
-        description='A JSON object for model settings like `{"temperature": 1.0, "top_p": 0.9}`.',
-    )
 
 
 class SearchParams(BaseModel):
@@ -63,18 +45,22 @@ class CreateProject(BaseModel):
     name: str
     prompt: Optional[str] = None
     templates: ProjectTemplates
-    ai_provider_config: AiProviderConfig
     requests_per_minute: int = 15
+    credential_id: Optional[UUID] = None
+    model_name: str
+    model_parameters: Dict[str, Any]
 
 
 class UpdateProject(BaseModel):
     name: Optional[str] = None
     templates: Optional[ProjectTemplates] = None
-    ai_provider_config: Optional[AiProviderConfig] = None
     requests_per_minute: Optional[int] = None
     status: Optional[ProjectStatus] = None
     prompt: Optional[str] = None
     search_params: Optional[SearchParams] = None
+    credential_id: Optional[UUID] = None
+    model_name: Optional[str] = None
+    model_parameters: Optional[Dict[str, Any]] = None
 
 
 class Project(CreateProject):
@@ -93,7 +79,7 @@ def _deserialize_project(row: Optional[Dict[str, Any]]) -> Optional[Project]:
         return None
 
     # These are the keys that are stored as JSON strings in SQLite
-    json_keys = ["search_params", "templates", "ai_provider_config"]
+    json_keys = ["search_params", "templates", "model_parameters"]
 
     for key in json_keys:
         if key in row and isinstance(row[key], str):
@@ -111,8 +97,8 @@ def _deserialize_project(row: Optional[Dict[str, Any]]) -> Optional[Project]:
 async def create_project(project: CreateProject) -> Project:
     db = await get_db_connection()
     query = """
-        INSERT INTO "Project" (id, name, prompt, templates, ai_provider_config, requests_per_minute)
-        VALUES (%s, %s, %s, %s, %s, %s)
+        INSERT INTO "Project" (id, name, prompt, templates, credential_id, model_name, model_parameters, requests_per_minute)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
         RETURNING *
     """
     params = (
@@ -120,7 +106,9 @@ async def create_project(project: CreateProject) -> Project:
         project.name,
         project.prompt,
         json.dumps(project.templates.model_dump()),
-        json.dumps(project.ai_provider_config.model_dump()),
+        project.credential_id,
+        project.model_name,
+        json.dumps(project.model_parameters),
         project.requests_per_minute,
     )
     result = await db.execute_and_fetch_one(query, params)
@@ -187,7 +175,7 @@ async def update_project(
     params: List[Any] = []
     for key, value in update_data.items():
         set_clause_parts.append(f'"{key}" = %s')
-        if key in ["ai_provider_config", "templates", "search_params"]:
+        if key in ["templates", "search_params", "model_parameters"]:
             if hasattr(value, "model_dump"):
                 params.append(json.dumps(value.model_dump()))
             else:

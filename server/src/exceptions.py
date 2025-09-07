@@ -1,5 +1,5 @@
 from litestar import Request, Response
-from litestar.exceptions import ValidationException
+from litestar.exceptions import ValidationException, HTTPException
 from litestar.status_codes import HTTP_500_INTERNAL_SERVER_ERROR
 from logging_config import get_logger
 
@@ -7,7 +7,20 @@ logger = get_logger(__name__)
 
 
 def generic_exception_handler(_: Request, exc: Exception) -> Response:
-    """Default handler for exceptions."""
+    """
+    Default handler for exceptions.
+    This will ignore HTTPExceptions and allow Litestar to handle them,
+    while catching and logging all other exceptions.
+    """
+    if isinstance(exc, HTTPException):
+        # Re-raise HTTPException so that Litestar's default error handling
+        # can process it and return the correct status code and detail.
+        return Response(
+            content={"status_code": exc.status_code, "detail": exc.detail},
+            status_code=exc.status_code,
+        )
+
+    # For any other, truly unexpected exception, log it and return a generic 500.
     logger.error(f"Unhandled exception: {exc}", exc_info=True)
     return Response(
         content={

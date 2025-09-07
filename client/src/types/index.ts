@@ -1,9 +1,5 @@
-export interface AiProviderConfig {
-  api_provider: string;
-  model_name: string;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  model_parameters: Record<string, any>;
-}
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export type ModelParameters = Record<string, any>;
 
 export interface ProjectTemplates {
   selector_generation: string;
@@ -31,12 +27,60 @@ export interface Project {
   name: string;
   prompt?: string;
   templates: ProjectTemplates;
-  ai_provider_config: AiProviderConfig;
   requests_per_minute: number;
   search_params?: SearchParams;
   status: ProjectStatus;
   created_at: string;
   updated_at: string;
+  credential_id?: string; // UUID
+  model_name?: string;
+  model_parameters: ModelParameters;
+}
+
+export interface CreateProjectPayload {
+  id: string;
+  name: string;
+  prompt?: string;
+  templates: ProjectTemplates;
+  requests_per_minute: number;
+  credential_id?: string;
+  model_name?: string;
+  model_parameters: ModelParameters;
+}
+
+export interface CredentialValues {
+  api_key?: string;
+  base_url?: string;
+}
+
+export interface Credential {
+  id: string; // UUID
+  name: string;
+  provider_type: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  public_values: Record<string, any>;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateCredentialPayload {
+  name: string;
+  provider_type: string;
+  values: CredentialValues;
+}
+
+export type UpdateCredentialPayload = Partial<CreateCredentialPayload>;
+
+export interface TestCredentialPayload {
+  provider_type: string;
+  values: CredentialValues;
+  model_name: string;
+  credential_id?: string;
+}
+
+export interface TestCredentialResult {
+  success: boolean;
+  message: string;
 }
 
 export interface ProjectSource {
@@ -152,15 +196,6 @@ export interface GlobalTemplate {
   updated_at: string;
 }
 
-export interface CreateProjectPayload {
-  id: string;
-  name: string;
-  prompt?: string;
-  templates: ProjectTemplates;
-  ai_provider_config: AiProviderConfig;
-  requests_per_minute: number;
-}
-
 export interface ProjectAnalytics {
   total_requests: number;
   total_cost: number;
@@ -191,14 +226,6 @@ export interface ApiRequestLog {
   latency_ms: number;
   timestamp: string; // ISO 8601 date string
   error: boolean;
-}
-
-export interface GlobalTemplate {
-  id: string;
-  name: string;
-  content: string;
-  created_at: string;
-  updated_at: string;
 }
 
 export interface TestSelectorsPayload {

@@ -1,9 +1,12 @@
 import json
 from sqlite3 import OperationalError as SQLiteOperationalError
+from typing import Dict
+from uuid import uuid4
 from db.common import CreateGlobalTemplate
 from db.database import AsyncDBTransaction
 from logging_config import get_logger
 import default_templates
+from services.encryption import encrypt
 
 logger = get_logger(__name__)
 
@@ -159,8 +162,97 @@ async def v5_override_selector_prompt(tx: AsyncDBTransaction) -> None:
     logger.info("Data migration for v5 completed successfully.")
 
 
+async def v6_migrate_to_credentials(tx: AsyncDBTransaction) -> None:
+    """
+    Data migration for schema version 6.
+    - Reads `ai_provider_config` from the old project table structure.
+    - Creates a new `Credential` for each unique provider config.
+    - Updates each project to point to its corresponding new `Credential`.
+    - Finally, drops the old table (for SQLite).
+    """
+    logger.info(
+        "Running data migration for v6: Migrating ai_provider_config to Credentials..."
+    )
+
+    try:
+        # In SQLite, the old table is named 'Project_old_for_credentials'
+        projects = await tx.fetch_all(
+            'SELECT id, ai_provider_config FROM "Project_old_for_credentials"'
+        )
+    except (Exception, SQLiteOperationalError):
+        # In PostgreSQL, the column still exists on the 'Project' table
+        projects = await tx.fetch_all('SELECT id, ai_provider_config FROM "Project"')
+
+    if not projects:
+        logger.info("No existing projects to migrate.")
+        return
+
+    # A map to store unique provider configs and their new credential ID
+    config_to_credential_id: Dict[str, str] = {}
+
+    for project in projects:
+        config_raw = project.get("ai_provider_config")
+        if not config_raw:
+            continue
+
+        config = json.loads(config_raw) if isinstance(config_raw, str) else config_raw
+
+        # Create a stable key for the config to find duplicates
+        config_key = json.dumps(config, sort_keys=True)
+        credential_id = config_to_credential_id.get(config_key)
+
+        if not credential_id:
+            # This is a new, unique config. Create a credential for it.
+            provider = config.get("api_provider")
+            model = config.get("model_name")
+
+            # Prepare credential values (only api_key for now)
+            values_to_encrypt = {}
+            # For this one-time migration, we don't have stored keys.
+            # We can leave it empty, and the user will have to re-enter them.
+            # This is safer than trying to guess or use env vars.
+
+            encrypted_values = encrypt(json.dumps(values_to_encrypt))
+            new_credential_id = uuid4()
+            credential_name = f"Migrated - {provider} - {model}"
+
+            await tx.execute(
+                'INSERT INTO "Credential" (id, name, provider_type, "values") VALUES (%s, %s, %s, %s)',
+                (new_credential_id, credential_name, provider, encrypted_values),
+            )
+            credential_id = str(new_credential_id)
+            config_to_credential_id[config_key] = credential_id
+            logger.info(f"Created new credential '{credential_name}' for migration.")
+
+        # Update the project with the new structure
+        await tx.execute(
+            """
+            UPDATE "Project"
+            SET credential_id = %s, model_name = %s, model_parameters = %s
+            WHERE id = %s
+            """,
+            (
+                credential_id,
+                config.get("model_name"),
+                json.dumps(config.get("model_parameters", {})),
+                project["id"],
+            ),
+        )
+        logger.info(f"Migrated project {project['id']} to use new credential.")
+
+    # For SQLite, we must now drop the old table
+    try:
+        await tx.execute("DROP TABLE IF EXISTS Project_old_for_credentials")
+        logger.info("Dropped old project table for SQLite.")
+    except (Exception, SQLiteOperationalError):
+        pass  # This will fail on PostgreSQL, which is expected
+
+    logger.info("Data migration for v6 completed successfully.")
+
+
 # This maps the version number to the function that should be run for it.
 DATA_MIGRATIONS = {
     3: v3_override_default_templates,
     5: v5_override_selector_prompt,
+    6: v6_migrate_to_credentials,
 }

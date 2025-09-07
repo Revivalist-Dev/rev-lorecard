@@ -172,7 +172,7 @@ export function StepProcessEntries({ project }: StepProps) {
             </Text>
             <Text size="sm">
               This will make up to {processableCount} API calls to the{' '}
-              <strong>{project.ai_provider_config.model_name}</strong> model.
+              <strong>{project.model_name}</strong> model.
             </Text>
             <Text size="sm" fw={700}>
               Are you sure you want to proceed?
