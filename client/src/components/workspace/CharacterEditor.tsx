@@ -125,6 +125,8 @@ export function CharacterEditor({ project, selectedSourceIds }: CharacterEditorP
       }
       autosize
       minRows={rows}
+      maxRows={12}
+      resize="vertical"
       {...form.getInputProps(field)}
     />
   );
@@ -185,10 +187,10 @@ export function CharacterEditor({ project, selectedSourceIds }: CharacterEditorP
             <Stack>
               {renderTextareaWithRegen('name', 'Name', 1)}
               {renderTextareaWithRegen('description', 'Description', 4)}
-              {renderTextareaWithRegen('persona', 'Persona', 6)}
+              {renderTextareaWithRegen('persona', 'Persona', 4)}
               {renderTextareaWithRegen('scenario', 'Scenario', 2)}
-              {renderTextareaWithRegen('first_message', 'First Message', 3)}
-              {renderTextareaWithRegen('example_messages', 'Example Messages', 8)}
+              {renderTextareaWithRegen('first_message', 'First Message', 4)}
+              {renderTextareaWithRegen('example_messages', 'Example Messages', 4)}
             </Stack>
           </Paper>
         </Stack>

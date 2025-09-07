@@ -4,12 +4,13 @@ import type { CharacterCard, Project, ProjectSource } from '../../types';
 import { useRegenerateFieldJob } from '../../hooks/useJobMutations';
 import { useLatestJob } from '../../hooks/useProjectJobs';
 import { JobStatusIndicator } from '../common/JobStatusIndicator';
+import { useMemo } from 'react';
 
 interface RegenerateFieldModalProps {
   opened: boolean;
   onClose: () => void;
   project: Project;
-  fieldName: keyof CharacterCard | null;
+  fieldName: keyof Omit<CharacterCard, 'id' | 'project_id' | 'created_at' | 'updated_at'> | null;
   fetchedSources: ProjectSource[];
   characterCard?: CharacterCard;
 }
@@ -26,8 +27,6 @@ export function RegenerateFieldModal({
   project,
   fieldName,
   fetchedSources,
-  // @ts-expect-error aaaaa
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   characterCard,
 }: RegenerateFieldModalProps) {
   const regenerateFieldMutation = useRegenerateFieldJob();
@@ -40,6 +39,29 @@ export function RegenerateFieldModal({
       source_ids_to_include: [],
     },
   });
+
+  const { totalEstimatedTokens, existingFieldsTokens } = useMemo(() => {
+    let sourcesTokens = 0;
+    if (form.values.source_ids_to_include.length > 0) {
+      const selectedSources = fetchedSources.filter((s) => form.values.source_ids_to_include.includes(s.id));
+      sourcesTokens = selectedSources.reduce((acc, s) => acc + Math.ceil((s.content_char_count || 0) / 4), 0);
+    }
+
+    let fieldsTokens = 0;
+    if (form.values.include_existing_fields && characterCard) {
+      fieldsTokens = Object.entries(characterCard).reduce((acc, [key, value]) => {
+        if (key !== fieldName && typeof value === 'string') {
+          return acc + Math.ceil(value.length / 4);
+        }
+        return acc;
+      }, 0);
+    }
+
+    return {
+      totalEstimatedTokens: sourcesTokens + fieldsTokens,
+      existingFieldsTokens: fieldsTokens,
+    };
+  }, [form.values, characterCard, fieldName, fetchedSources]);
 
   if (!fieldName) return null;
 
@@ -62,9 +84,6 @@ export function RegenerateFieldModal({
       }
     );
   };
-
-  const selectedSources = fetchedSources.filter((s) => form.values.source_ids_to_include.includes(s.id));
-  const totalEstimatedTokens = selectedSources.reduce((acc, s) => acc + Math.ceil((s.content_char_count || 0) / 4), 0);
 
   return (
     <Modal
@@ -91,7 +110,7 @@ export function RegenerateFieldModal({
           </Text>
 
           <Checkbox
-            label="Include existing character fields"
+            label={`Include existing character fields (~${existingFieldsTokens.toLocaleString()} tokens)`}
             description="Uses the other generated fields as context. (Recommended, low token cost)"
             {...form.getInputProps('include_existing_fields', { type: 'checkbox' })}
           />
