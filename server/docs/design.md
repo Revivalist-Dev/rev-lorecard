@@ -27,7 +27,9 @@ This document outlines the architecture for an application designed to automate 
         *   `selector_generation` (Text): The prompt used to instruct an LLM to analyze HTML and return CSS selectors for content, categories, and pagination.
         *   `entry_creation` (Text): The prompt used to instruct an LLM to process a scraped web page into a structured lorebook entry.
         *   `search_params_generation` (Text): The prompt used to instruct an LLM to generate search parameters from a user prompt.
-    *   `ai_provider_config` (JSONB): A structured object containing all necessary information to interact with the LLM API (e.g., `api_provider`, `model_name`, `model_parameters`).
+    *   `credential_id` (UUID, Foreign Key, nullable): A reference to the `Credential` used for authenticating with the LLM provider.
+    *   `model_name` (Text): The specific model identifier to be used for LLM calls (e.g., "google/gemini-1.5-pro-latest").
+    *   `model_parameters` (JSONB): A structured object for model-specific parameters like `temperature`.
     *   `requests_per_minute` (Integer): The maximum number of API requests to make per minute for this project, used for rate limiting.
     *   `status` (Enum): The current high-level state of the project (`draft`, `search_params_generated`, `selector_generated`, `links_extracted`, `processing`, `completed`, `failed`).
     *   `created_at` (Timestamp with Timezone): The timestamp when the project was created.
@@ -137,7 +139,20 @@ This document outlines the architecture for an application designed to automate 
 
 ---
 
-##### **2.8. `GlobalTemplate`**
+##### **2.8. `Credential`**
+
+*   **Purpose**: Securely stores encrypted authentication details (e.g., API keys, base URLs) for various LLM providers. This decouples sensitive information from project configurations.
+
+*   **Fields**:
+    *   `id` (UUID, Primary Key): A unique identifier for the credential.
+    *   `name` (Text, Unique): A user-friendly name for the credential (e.g., "My Personal OpenRouter Key").
+    *   `provider_type` (Text): The identifier of the provider this credential is for (e.g., "openrouter", "gemini", "openai_compatible").
+    *   `values` (Text): An encrypted JSON string containing the actual secrets, such as `api_key` and `base_url`.
+    *   `created_at` / `updated_at` (Timestamp with Timezone): Timestamps for credential lifecycle tracking.
+
+---
+
+##### **2.9. `GlobalTemplate`**
 
 *   **Purpose**: Stores reusable Jinja prompt templates that can be referenced by any `Project`. This allows for a centralized library of prompts that can be maintained independently from individual projects.
 
@@ -149,9 +164,10 @@ This document outlines the architecture for an application designed to automate 
 
 ---
 
-##### **2.9. Database Schema & Relationships**
+##### **2.10. Database Schema & Relationships**
 
 *   **Relationships**:
+    *   `Project.credential_id` -> `Credential.id` (Many-to-One, nullable). `ON DELETE SET NULL`.
     *   `ProjectSource.project_id` -> `Project.id` (Many-to-One). `ON DELETE CASCADE`.
     *   `ProjectSourceHierarchy.project_id` -> `Project.id` (Many-to-One). `ON DELETE CASCADE`.
     *   `ProjectSourceHierarchy.parent_source_id` -> `ProjectSource.id` (Many-to-One). `ON DELETE CASCADE`.
@@ -164,7 +180,8 @@ This document outlines the architecture for an application designed to automate 
     *   `ApiRequestLog.job_id` -> `BackgroundJob.id` (Many-to-One). `ON DELETE SET NULL`.
 
 *   **Indexing Strategy**:
-    *   `Project`: Index on `id` (Primary Key).
+    *   `Project`: Index on `id` (Primary Key), `credential_id`.
+    *   `Credential`: Index on `id` (Primary Key), `provider_type`. Unique constraint on `name`.
     *   `ProjectSource`: Index on `project_id`.
     *   `ProjectSourceHierarchy`: Indexes on `project_id`, `parent_source_id`, `child_source_id`. Unique constraint on `(parent_source_id, child_source_id)`.
     *   `Link`:
@@ -175,28 +192,46 @@ This document outlines the architecture for an application designed to automate 
     *   `ApiRequestLog`: Index on `project_id` for cost aggregation.
     *   `GlobalTemplate`: Index on `id` (Primary Key), Unique constraint on `name`.
 
-#### **3. Core Workflows**
+### **3. Core Workflows**
+
+The application's functionality is driven by a series of distinct, user-initiated workflows, each managed by a background job. The interaction with external LLMs, which was previously tied directly to the project configuration, is now abstracted through a centralized credential and provider system.
+
+#### **General LLM Interaction Step**
+
+All workflows that require communication with an LLM follow this standardized, secure procedure:
+
+1.  **Retrieve Project Configuration**: The background worker fetches the `Project` associated with the current job.
+2.  **Fetch Credential**: It reads the `Project.credential_id` and queries the `Credential` table to retrieve the corresponding record.
+3.  **Decrypt Secrets**: The encrypted `values` field from the `Credential` record is decrypted in memory to access secrets like the API key and base URL.
+4.  **Instantiate Provider**: Using the `Credential.provider_type` (e.g., "openrouter", "openai_compatible"), the system instantiates the correct provider client class, passing the decrypted secrets as configuration.
+5.  **Execute API Call**: The instantiated provider client is used to make the request to the LLM API, handling provider-specific request formatting and response parsing.
+6.  **Log Transaction**: An `ApiRequestLog` is created to record the full request, response, token usage, cost, and latency, ensuring auditability and traceability.
+
+---
 
 ##### **3.1. Workflow A: Project Setup & Search Parameter Generation**
 
-1.  **Project Creation**: A user creates a new `Project` by providing a `name` and a high-level `prompt`. The user then adds one or more `ProjectSource`s, each with a starting URL. The project's initial `status` is `draft`.
+1.  **Project Creation**: A user creates a new `Project` by providing a `name` and a high-level `prompt`. They must select a pre-configured `Credential` and a `model_name` available through that credential. The project's initial `status` is `draft`.
 2.  **Job Invocation**: The user initiates the first step via the API, which creates a `BackgroundJob` with `task_name: 'generate_search_params'`.
 3.  **Worker Execution**: A background worker picks up the job.
+    *   It follows the **General LLM Interaction Step** to get a configured provider instance.
     *   It constructs a prompt using the `templates.search_params_generation` template and the project's `prompt`.
-    *   It sends the prompt to the configured LLM, asking for a structured JSON response containing `purpose`, `extraction_notes`, and `criteria`.
-    *   It creates an `ApiRequestLog` to record this transaction.
+    *   It sends the prompt to the LLM, asking for a structured JSON response containing `purpose`, `extraction_notes`, and `criteria`.
     *   Upon receiving a valid response, the worker updates the `Project.search_params` field and `Project.status` to `search_params_generated`.
     *   Finally, it marks the job as `completed`.
+
+---
 
 ##### **3.2. Workflow B: Source Discovery & Crawling**
 
 1.  **Job Invocation**: The user selects one or more root `ProjectSource`s and initiates this step. This creates a `BackgroundJob` with `task_name: 'discover_and_crawl_sources'`.
 2.  **Worker Execution**: A background worker picks up the job and begins a queue-based crawling process.
-    *   The worker iterates through the queue of sources to process. Initially, this contains the user-selected sources.
+    *   The worker follows the **General LLM Interaction Step** once to get a provider instance that will be reused throughout this job.
+    *   It iterates through a queue of sources to process. Initially, this contains the user-selected sources.
     *   **For each `ProjectSource`**:
         a.  It scrapes the raw HTML from the source's `url`.
         b.  It constructs a prompt using the `templates.selector_generation` template, including the scraped HTML and the project's `search_params`.
-        c.  It sends the prompt to the LLM, asking for CSS selectors for three types of links: **content**, **category**, and **pagination**. This call is rate-limited according to the project's settings to prevent API abuse during deep crawls. An `ApiRequestLog` is created.
+        c.  It sends the prompt to the LLM, asking for CSS selectors for three types of links: **content**, **category**, and **pagination**. This call is rate-limited according to the project's settings.
         d.  The worker updates the `ProjectSource` with the new selectors.
         e.  It then uses these selectors to crawl the source (and subsequent pages if a pagination selector was found).
         f.  **Category Links**: If the current crawl depth is less than the source's `max_crawl_depth`, any discovered category URLs are processed. For each one, the worker creates a new `ProjectSource` (if it doesn't exist), records the parent-child relationship in `ProjectSourceHierarchy`, and adds the new source to the processing queue.
@@ -205,7 +240,11 @@ This document outlines the architecture for an application designed to automate 
     *   The worker updates the `Project.status` to `selector_generated` and marks the job as `completed`.
 3.  **User Confirmation**: The frontend displays the newly found URLs, allowing the user to review and deselect any unwanted links before saving them to the project.
 
+---
+
 ##### **3.3. Workflow C: Link Confirmation**
+
+*This workflow does not involve an LLM.*
 
 1.  **Job Invocation**: After the user confirms the desired links from the crawling step (or adds links manually), the client sends a list of URLs to the backend, creating a `BackgroundJob` with `task_name: 'confirm_links'`.
 2.  **Worker Execution**: A background worker picks up the job.
@@ -213,20 +252,22 @@ This document outlines the architecture for an application designed to automate 
     *   For each URL, it creates a new `Link` record in the database with `status: 'pending'`, ignoring any duplicates.
     *   Upon completion, it updates the `Project.status` to `links_extracted` and marks the job as `completed`. This step is solely for ingesting new links into the project's link pool.
 
+---
+
 ##### **3.4. Workflow D: Lorebook Entry Generation**
 
 1.  **Job Invocation**: The user can start the generation process for either **all** processable links (pending/failed) or a **specific, user-selected subset** of those links. This creates the primary long-running `BackgroundJob` with `task_name: 'process_project_entries'`. The job's `payload` will be empty to process all links, or it will contain a list of `link_ids` for targeted processing.
 2.  **Worker Execution**:
     *   A worker picks up the job and sets the `Project.status` to `processing`.
     *   The worker queries the database for `Link` records. If the payload contains `link_ids`, it fetches only those links. Otherwise, it fetches all links with `status: 'pending'` or `status: 'failed'`.
-    *   **For each `Link`**:
+    *   It follows the **General LLM Interaction Step** to get a provider instance.
+    *   **For each `Link` (processed concurrently up to a limit):**
         a.  It updates the `Link.status` to `processing`.
         b.  It scrapes the content from the `Link.url`, storing the cleaned result in the `Link.raw_content` field.
-        c.  It uses the `templates.entry_creation` prompt, providing the `raw_content` to the LLM and requesting a structured JSON response containing `title`, `content`, and `keywords`.
-        d.  An `ApiRequestLog` is created for this LLM call.
-        e.  On success, it parses the LLM's response, creates a `LorebookEntry` record, and updates the `Link`'s status to `completed` and sets the `lorebook_entry_id`.
-        f.  If the LLM deems the content invalid, it updates the `Link` status to `skipped`.
-        g.  On failure, it updates the `Link`'s `status` to `failed` and records the `error_message`.
+        c.  It uses the `templates.entry_creation` prompt, providing the `raw_content` to the LLM and requesting a structured JSON response containing `valid`, `reason`, and `entry` data (`title`, `content`, `keywords`).
+        d.  On success (`valid: true`), it parses the LLM's response, creates a `LorebookEntry` record, and updates the `Link`'s status to `completed` and sets the `lorebook_entry_id`.
+        e.  If the LLM deems the content invalid (`valid: false`), it updates the `Link` status to `skipped` and stores the `reason`.
+        f.  On failure (e.g., API error), it updates the `Link`'s `status` to `failed` and records the `error_message`.
     *   After processing each link, the worker updates the job's progress and checks for cancellation requests.
 3.  **Completion**: Once all selected `Link` records are processed, the worker updates the `Project.status` to `completed` and marks its own job as `completed`.
 
@@ -243,6 +284,13 @@ This document outlines the architecture for an application designed to automate 
     *   `GET /projects/{project_id}/entries`: Get a paginated list of generated lorebook entries, with optional full-text search on `title`, `keywords`, and `content` via a `q` parameter.
     *   `GET /projects/{project_id}/logs`: Get a paginated list of API request logs for the project.
     *   `GET /projects/{project_id}/lorebook/download`: Get the lorebook in a downloadable format.
+
+*   **Credentials**
+    *   `POST /credentials`: Create a new credential.
+    *   `GET /credentials`: List all credentials.
+    *   `GET /credentials/{credential_id}`: Retrieve a single credential.
+    *   `PATCH /credentials/{credential_id}`: Update a credential (e.g., name, or re-encrypt new secret values).
+    *   `DELETE /credentials/{credential_id}`: Delete a credential.
 
 *   **Project Sources**
     *   `GET /projects/{project_id}/sources`: List all sources for a project.
@@ -274,6 +322,8 @@ This document outlines the architecture for an application designed to automate 
 
 *   **Providers**
     *   `GET /providers`: List all available AI providers and their models.
+    *   `POST /providers/test`: Test a credential configuration (saved or unsaved) against a provider to ensure it works.
+    *   `POST /providers/models`: Dynamically fetch models from a provider using a given set of (unsaved) credentials.
 
 *   **Server-Sent Events (SSE)**
     *   `GET /sse/subscribe/{project_id}`: Subscribe to a stream of real-time events for a project, primarily for job progress updates.
