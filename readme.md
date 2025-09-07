@@ -92,6 +92,7 @@ OPENROUTER_API_KEY=
 GOOGLE_GEMINI_KEY=
 OPENAI_COMPATIBLE_BASE_URL=
 OPENAI_COMPATIBLE_API_KEY=
+```
 
 **2. Run the application**
 Open your terminal in that same folder and choose one of the commands below.
@@ -202,7 +203,7 @@ cp .env.example .env
 # On Windows
 copy .env.example .env
 ```
-Now, open the new `.env` file and add your `OPENROUTER_API_KEY` or `GOOGLE_GEMINI_KEY`.
+Now, open the new `.env` file and add your API keys. Don't forget to add `APP_SECRET_KEY` as well.
 
 **3. Build and run the application**
 
