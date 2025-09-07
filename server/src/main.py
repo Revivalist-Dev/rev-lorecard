@@ -33,6 +33,7 @@ from controllers.projects import ProjectController  # noqa: E402
 from controllers.sources import SourceController  # noqa: E402
 from controllers.links import LinksController  # noqa: E402
 from controllers.lorebook_entries import LorebookEntryController  # noqa: E402
+from controllers.character_cards import CharacterCardController  # noqa: E402
 from controllers.background_jobs import (  # noqa: E402
     BackgroundJobController,
 )
@@ -88,6 +89,21 @@ async def create_default_templates():
             id="lorebook-definition",
             name="lorebook_definition",
             content=default_templates.lorebook_definition,
+        ),
+        CreateGlobalTemplate(
+            id="character-card-definition",
+            name="character_card_definition",
+            content=default_templates.character_card_definition,
+        ),
+        CreateGlobalTemplate(
+            id="character-generation-prompt",
+            name="character_generation_prompt",
+            content=default_templates.character_generation_prompt,
+        ),
+        CreateGlobalTemplate(
+            id="character-field-regeneration-prompt",
+            name="character_field_regeneration_prompt",
+            content=default_templates.character_field_regeneration_prompt,
         ),
     ]
     for template in templates_to_create:
@@ -258,6 +274,7 @@ def create_app():
             SourceController,
             LinksController,
             LorebookEntryController,
+            CharacterCardController,
             BackgroundJobController,
             AnalyticsController,
             GlobalTemplateController,

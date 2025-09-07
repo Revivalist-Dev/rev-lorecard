@@ -58,3 +58,39 @@ class SearchParamsResponse(BaseModel):
     purpose: str = Field(..., description="Clear statement based on request type.")
     extraction_notes: str = Field(..., description="Guidelines for extraction.")
     criteria: str = Field(..., description="Simple validation requirements.")
+
+
+class CharacterCardData(BaseModel):
+    """
+    Represents the expected JSON structure for a full character card.
+    """
+
+    name: str = Field(..., description="The character's full name.")
+    description: str = Field(
+        ..., description="A detailed physical and general description of the character."
+    )
+    persona: str = Field(
+        ...,
+        description="A detailed description of the character's personality, demeanor, and inner thoughts.",
+    )
+    scenario: str = Field(
+        ..., description="The setting or scenario the character is in."
+    )
+    first_message: str = Field(
+        ...,
+        description="The character's first message to the user, written in a roleplay style.",
+    )
+    example_messages: str = Field(
+        ...,
+        description="Several example dialogue exchanges, formatted with placeholders like {{user}} and {{char}}.",
+    )
+
+
+class RegeneratedFieldResponse(BaseModel):
+    """
+    Represents the expected JSON response when regenerating a single field.
+    """
+
+    new_content: str = Field(
+        ..., description="The newly generated text for the requested field."
+    )

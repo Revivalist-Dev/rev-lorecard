@@ -8,14 +8,17 @@ from typing import Optional, List
 from logging_config import get_logger
 from db.background_jobs import (
     BackgroundJob,
-    CreateBackgroundJob,
     ConfirmLinksPayload,
-    GenerateSearchParamsPayload,
+    CreateBackgroundJob,
     DiscoverAndCrawlSourcesPayload,
-    ProcessProjectEntriesPayload,
-    UpdateBackgroundJob,
-    TaskName,
+    FetchSourceContentPayload,
+    GenerateCharacterCardPayload,
+    GenerateSearchParamsPayload,
     JobStatus,
+    ProcessProjectEntriesPayload,
+    RegenerateCharacterFieldPayload,
+    TaskName,
+    UpdateBackgroundJob,
     create_background_job as db_create_background_job,
     get_background_job as db_get_background_job,
     get_latest_job_by_task_name as db_get_latest_job_by_task_name,
@@ -49,6 +52,15 @@ class ConfirmLinksJobPayload(BaseModel):
 class ProcessEntriesJobPayload(BaseModel):
     project_id: str
     link_ids: Optional[List[UUID]] = None
+
+
+class CreateGenerateCharacterJobPayload(BaseModel):
+    project_id: str
+    source_ids: Optional[List[UUID]] = None
+
+
+class CreateJobForRegenerateCharacterFieldPayload(RegenerateCharacterFieldPayload):
+    project_id: str
 
 
 class BackgroundJobController(Controller):
@@ -236,6 +248,56 @@ class BackgroundJobController(Controller):
                 task_name=TaskName.RESCAN_LINKS,
                 project_id=data.project_id,
                 payload=DiscoverAndCrawlSourcesPayload(source_ids=data.source_ids),
+            )
+        )
+        return SingleResponse(data=job)
+
+    @post("/fetch-content")
+    async def create_fetch_content_job(
+        self, data: CreateJobForSourcePayload = Body()
+    ) -> SingleResponse[BackgroundJob]:
+        """Create a job to fetch and cache content for sources."""
+        logger.debug(f"Creating fetch_source_content job for sources {data.source_ids}")
+        job = await db_create_background_job(
+            CreateBackgroundJob(
+                task_name=TaskName.FETCH_SOURCE_CONTENT,
+                project_id=data.project_id,
+                payload=FetchSourceContentPayload(source_ids=data.source_ids),
+            )
+        )
+        return SingleResponse(data=job)
+
+    @post("/generate-character")
+    async def create_generate_character_job(
+        self, data: CreateGenerateCharacterJobPayload = Body()
+    ) -> SingleResponse[BackgroundJob]:
+        """Create a job to generate a character card."""
+        logger.debug(
+            f"Creating generate_character_card job for project {data.project_id}"
+        )
+        job = await db_create_background_job(
+            CreateBackgroundJob(
+                task_name=TaskName.GENERATE_CHARACTER_CARD,
+                project_id=data.project_id,
+                payload=GenerateCharacterCardPayload(source_ids=data.source_ids),
+            )
+        )
+        return SingleResponse(data=job)
+
+    @post("/regenerate-field")
+    async def create_regenerate_field_job(
+        self, data: CreateJobForRegenerateCharacterFieldPayload = Body()
+    ) -> SingleResponse[BackgroundJob]:
+        """Create a job to regenerate a single field of a character card."""
+
+        logger.debug(
+            f"Creating regenerate_character_field job for project {data.project_id}"
+        )
+        job = await db_create_background_job(
+            CreateBackgroundJob(
+                task_name=TaskName.REGENERATE_CHARACTER_FIELD,
+                project_id=data.project_id,
+                payload=data,
             )
         )
         return SingleResponse(data=job)

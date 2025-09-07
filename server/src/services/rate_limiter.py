@@ -11,9 +11,11 @@ from db.background_jobs import (
     get_background_job,
     update_background_job,
 )
+from db.character_cards import CharacterCard
 from db.database import AsyncDBTransaction
 from db.links import Link
 from db.lorebook_entries import LorebookEntry
+from db.sources import ProjectSource
 from logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -118,3 +120,33 @@ async def send_link_updated_notification(job: BackgroundJob, link: Link):
         )
     except Exception as e:
         logger.error(f"Error sending SSE notification: {e}", exc_info=True)
+
+
+async def send_character_card_update_notification(project_id: str, card: CharacterCard):
+    """Send SSE notification about character card changes."""
+    try:
+        await SSEController.send_event_to_project(
+            project_id=project_id,
+            event_type="character_card_update",
+            data=card.model_dump(),
+        )
+    except Exception as e:
+        logger.error(
+            f"Error sending SSE notification for character card: {e}", exc_info=True
+        )
+
+
+async def send_source_update_notification(project_id: str, source: ProjectSource):
+    """Send SSE notification about a project source being updated."""
+    try:
+        # Exclude raw_content to keep the payload small
+        source_data = source.model_dump(exclude={"raw_content"})
+        await SSEController.send_event_to_project(
+            project_id=project_id,
+            event_type="source_updated",
+            data=source_data,
+        )
+    except Exception as e:
+        logger.error(
+            f"Error sending SSE notification for source update: {e}", exc_info=True
+        )

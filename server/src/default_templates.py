@@ -112,3 +112,68 @@ A Lorebook is a collection of entries used to provide an AI with consistent, con
   "content": "A volcanic fortress built from black obsidian. It is the ancestral seat of House Targaryen and home to the ancient Order of Flames, who guard the Eternal Fire—a magical flame that grants visions of the future. The citadel is rumored to be cursed, as its rulers rarely live past 40 years."
 }
 """
+
+# --- Character Creator Templates ---
+
+character_card_definition = """### SILLYTAVERN CHARACTER CARD DEFINITION
+
+A Character Card is a structured JSON-like format used to define an AI roleplaying character.
+
+**Purpose:** To create a complete, interactive character with a defined personality, backstory, and conversational style for use in SillyTavern.
+
+**Standard Card Structure:**
+- `name`: The character's full name.
+- `description`: A detailed physical and general description. Written in the third person. Should include appearance, attire, and general demeanor.
+- `persona`: A detailed description of the character's personality, demeanor, motivations, and inner thoughts. Written in the third person. This is the core of their personality.
+- `scenario`: The setting or situation the character is in when the user first meets them.
+- `first_message`: The character's first message to the user, written in a roleplay style from the character's perspective. It should be engaging and set the scene.
+- `example_messages`: A long string containing several example dialogue exchanges between {{user}} and {{char}} to demonstrate the character's speaking style, personality, and how they interact. Must include multiple back-and-forths. Use markdown for actions (e.g., *she smiles*).
+"""
+
+character_generation_prompt = """--- role: system
+{{globals.character_card_definition}}
+---
+
+--- role: system
+Your task is to create a complete SillyTavern Character Card based on the provided source material. Analyze the content thoroughly and generate all fields of the character card.
+
+**Project Goal/Prompt:** {{ project.prompt }}
+
+**Rules:**
+1.  Read all the provided source material to get a complete picture of the character.
+2.  Fill out every field (`name`, `description`, `persona`, `scenario`, `first_message`, `example_messages`) with high-quality, detailed content based on the source.
+3.  The `example_messages` field must be a long, single string containing multiple dialogue examples.
+---
+
+--- role: user
+**SOURCE MATERIAL:**
+
+{{ content }}
+---
+"""
+
+character_field_regeneration_prompt = """--- role: system
+{{globals.character_card_definition}}
+---
+
+--- role: user
+You are tasked with rewriting a single field of a character card based on the provided context and a specific user instruction.
+
+**Field to Rewrite:** {{ field_to_regenerate }}
+
+**User Instruction:** {{ custom_prompt }}
+
+--- CONTEXT ---
+{% if context.existing_fields %}
+**EXISTING CHARACTER DATA:**
+{{ context.existing_fields }}
+{% endif %}
+
+{% if context.source_material %}
+**RELEVANT SOURCE MATERIAL:**
+{{ context.source_material }}
+{% endif %}
+--- END CONTEXT ---
+
+Now, based on all the context above, provide the new rewritten content for the "{{ field_to_regenerate }}" field. Output only the raw text for the new field, with no additional commentary.
+"""

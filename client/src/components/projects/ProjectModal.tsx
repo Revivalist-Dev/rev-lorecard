@@ -13,17 +13,18 @@ import {
   ActionIcon,
   Tooltip,
   Slider,
+  SegmentedControl,
 } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import { useCreateProject, useUpdateProject } from '../../hooks/useProjectMutations';
-import type { CreateProjectPayload, Project, Credential } from '../../types';
+import type { CreateProjectPayload, Project, Credential, ProjectType } from '../../types';
 import { useProviders } from '../../hooks/useProviders';
 import { useEffect, useMemo, useState } from 'react';
 import { useGlobalTemplates } from '../../hooks/useGlobalTemplates';
 import { LazyMonacoEditorInput } from '../common/LazyMonacoEditorInput';
 import { useCredentials } from '../../hooks/useCredentials';
 import { useDisclosure } from '@mantine/hooks';
-import { IconPlus } from '@tabler/icons-react';
+import { IconBook, IconPlus, IconUser } from '@tabler/icons-react';
 import { CredentialModal } from '../credentials/CredentialModal';
 
 interface ProjectModalProps {
@@ -57,6 +58,7 @@ export function ProjectModal({ opened, onClose, project }: ProjectModalProps) {
     initialValues: {
       id: '',
       name: '',
+      project_type: 'lorebook',
       prompt: '',
       requests_per_minute: 15,
       credential_id: undefined,
@@ -84,12 +86,33 @@ export function ProjectModal({ opened, onClose, project }: ProjectModalProps) {
       const templates = globalTemplates.data;
       const getTemplate = (id: string) => templates.find((t) => t.id === id)?.content || '';
       form.reset();
+      // Set defaults for lorebook initially
       form.setFieldValue('templates.search_params_generation', getTemplate('search-params-prompt'));
       form.setFieldValue('templates.selector_generation', getTemplate('selector-prompt'));
       form.setFieldValue('templates.entry_creation', getTemplate('entry-creation-prompt'));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [project, opened, globalTemplates?.data]);
+
+  // Update templates when project type changes
+  const handleProjectTypeChange = (value: string) => {
+    const projectType = value as ProjectType;
+    form.setFieldValue('project_type', projectType);
+    if (!isEditMode && globalTemplates?.data) {
+      const templates = globalTemplates.data;
+      const getTemplate = (id: string) => templates.find((t) => t.id === id)?.content || '';
+      if (projectType === 'character') {
+        form.setFieldValue('templates.entry_creation', getTemplate('character-generation-prompt'));
+        // Clear lorebook-specific templates
+        form.setFieldValue('templates.search_params_generation', '');
+        form.setFieldValue('templates.selector_generation', '');
+      } else {
+        form.setFieldValue('templates.search_params_generation', getTemplate('search-params-prompt'));
+        form.setFieldValue('templates.selector_generation', getTemplate('selector-prompt'));
+        form.setFieldValue('templates.entry_creation', getTemplate('entry-creation-prompt'));
+      }
+    }
+  };
 
   const credentialOptions = useMemo(
     () =>
@@ -166,6 +189,8 @@ export function ProjectModal({ opened, onClose, project }: ProjectModalProps) {
     </Group>
   );
 
+  const isLorebook = form.values.project_type === 'lorebook';
+
   return (
     <>
       <CredentialModal
@@ -183,10 +208,37 @@ export function ProjectModal({ opened, onClose, project }: ProjectModalProps) {
       >
         <form onSubmit={form.onSubmit(handleSubmit)}>
           <Stack gap="md">
+            {!isEditMode && (
+              <SegmentedControl
+                fullWidth
+                data={[
+                  {
+                    value: 'lorebook',
+                    label: (
+                      <Group justify="center" gap="xs">
+                        <IconBook size={16} />
+                        <Text>Lorebook</Text>
+                      </Group>
+                    ),
+                  },
+                  {
+                    value: 'character',
+                    label: (
+                      <Group justify="center" gap="xs">
+                        <IconUser size={16} />
+                        <Text>Character</Text>
+                      </Group>
+                    ),
+                  },
+                ]}
+                {...form.getInputProps('project_type')}
+                onChange={handleProjectTypeChange}
+              />
+            )}
             <TextInput
               withAsterisk
               label="Project Name"
-              placeholder="e.g., Skyrim Locations Lorebook"
+              placeholder={isLorebook ? 'e.g., Skyrim Locations Lorebook' : 'e.g., Lydia from Skyrim'}
               {...form.getInputProps('name')}
               onChange={handleNameChange}
             />
@@ -199,8 +251,16 @@ export function ProjectModal({ opened, onClose, project }: ProjectModalProps) {
             />
             <Textarea
               label="High-level Prompt"
-              description="A general prompt describing the overall goal of the lorebook."
-              placeholder="e.g., 'All major and minor locations in Skyrim'"
+              description={
+                isLorebook
+                  ? 'A general prompt describing the overall goal of the lorebook.'
+                  : 'A prompt describing the character to generate. Be specific about their personality and key traits.'
+              }
+              placeholder={
+                isLorebook
+                  ? "e.g., 'All major and minor locations in Skyrim'"
+                  : "e.g., 'Lydia, the loyal and sarcastic housecarl from Whiterun in Skyrim.'"
+              }
               {...form.getInputProps('prompt')}
               autosize
               minRows={2}
@@ -267,7 +327,7 @@ export function ProjectModal({ opened, onClose, project }: ProjectModalProps) {
               {...form.getInputProps('requests_per_minute')}
             />
 
-            <Accordion variant="separated" defaultValue="templates">
+            <Accordion variant="separated">
               <Accordion.Item value="templates">
                 <Accordion.Control>
                   <Text fw={500}>Advanced: Prompt Templates</Text>
@@ -277,20 +337,24 @@ export function ProjectModal({ opened, onClose, project }: ProjectModalProps) {
                     <Loader />
                   ) : (
                     <Stack>
+                      {isLorebook ? (
+                        <>
+                          <LazyMonacoEditorInput
+                            label="Search Params Generation"
+                            language="handlebars"
+                            height={200}
+                            {...form.getInputProps('templates.search_params_generation')}
+                          />
+                          <LazyMonacoEditorInput
+                            label="Selector Generation"
+                            language="handlebars"
+                            height={200}
+                            {...form.getInputProps('templates.selector_generation')}
+                          />
+                        </>
+                      ) : null}
                       <LazyMonacoEditorInput
-                        label="Search Params Generation"
-                        language="handlebars"
-                        height={200}
-                        {...form.getInputProps('templates.search_params_generation')}
-                      />
-                      <LazyMonacoEditorInput
-                        label="Selector Generation"
-                        language="handlebars"
-                        height={200}
-                        {...form.getInputProps('templates.selector_generation')}
-                      />
-                      <LazyMonacoEditorInput
-                        label="Entry Creation"
+                        label={isLorebook ? 'Entry Creation' : 'Character Generation'}
                         language="handlebars"
                         height={200}
                         {...form.getInputProps('templates.entry_creation')}

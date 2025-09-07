@@ -15,10 +15,16 @@ from db.background_jobs import (
     ConfirmLinksResult,
     DiscoverAndCrawlSourcesPayload,
     DiscoverAndCrawlSourcesResult,
+    FetchSourceContentPayload,
+    FetchSourceContentResult,
+    GenerateCharacterCardPayload,
+    GenerateCharacterCardResult,
     GenerateSearchParamsResult,
     JobStatus,
     ProcessProjectEntriesPayload,
     ProcessProjectEntriesResult,
+    RegenerateCharacterFieldPayload,
+    RegenerateCharacterFieldResult,
     TaskName,
     UpdateBackgroundJob,
     get_background_job,
@@ -39,9 +45,17 @@ from db.links import (
     update_link,
 )
 from db.lorebook_entries import CreateLorebookEntry, create_lorebook_entry
+from db.character_cards import (
+    CreateCharacterCard,
+    UpdateCharacterCard,
+    create_or_update_character_card,
+    get_character_card_by_project,
+    update_character_card,
+)
 from db.projects import (
     Project,
     ProjectStatus,
+    ProjectType,
     SearchParams,
     UpdateProject,
     get_project,
@@ -54,6 +68,7 @@ from db.sources import (
     create_project_source,
     get_project_source,
     get_project_source_by_url,
+    list_sources_by_project,
     update_project_source,
 )
 from db.source_hierarchy import add_source_child_relationship
@@ -65,12 +80,20 @@ from providers.index import (
     ResponseSchema,
     get_provider_instance,
 )
-from schemas import LorebookEntryResponse, SearchParamsResponse, SelectorResponse
+from schemas import (
+    CharacterCardData,
+    LorebookEntryResponse,
+    RegeneratedFieldResponse,
+    SearchParamsResponse,
+    SelectorResponse,
+)
 from services.rate_limiter import (
     CONCURRENT_REQUESTS,
+    send_character_card_update_notification,
     send_entry_created_notification,
     send_link_updated_notification,
     send_links_created_notification,
+    send_source_update_notification,
     update_job_with_notification,
     wait_for_rate_limit,
 )
@@ -123,6 +146,288 @@ async def _get_provider_for_project(project: Project):
         raise ValueError(f"Credential {project.credential_id} not found.")
     credential_dict = credential["values"].model_dump(exclude_unset=True)
     return get_provider_instance(credential["provider_type"], credential_dict)
+
+
+# --- Character Creator Jobs ---
+
+
+async def fetch_source_content(job: BackgroundJob, project: Project):
+    """
+    Scrapes content from source URLs and caches it in the ProjectSource table.
+    """
+    if not isinstance(job.payload, FetchSourceContentPayload):
+        raise TypeError("Invalid payload for fetch_source_content job.")
+
+    source_ids = job.payload.source_ids
+    total_sources = len(source_ids)
+    processed_count = 0
+    failed_count = 0
+    scraper = Scraper()
+
+    async with (await get_db_connection()).transaction() as tx:
+        await update_job_with_notification(
+            job.id,
+            UpdateBackgroundJob(
+                total_items=total_sources, processed_items=0, progress=0
+            ),
+            tx=tx,
+        )
+
+    for source_id in source_ids:
+        try:
+            source = await get_project_source(source_id)
+            if not source:
+                logger.warning(f"[{job.id}] Source {source_id} not found, skipping.")
+                failed_count += 1
+                continue
+
+            if project.project_type == ProjectType.CHARACTER:
+                content = await scraper.get_content(
+                    source.url, type="markdown", clean=True
+                )
+                content_type = "markdown"
+            else:  # Lorebook
+                content = await scraper.get_content(source.url, type="html", clean=True)
+                content_type = "html"
+
+            updated_source = await update_project_source(
+                source.id,
+                UpdateProjectSource(
+                    raw_content=content,
+                    content_type=content_type,
+                    content_char_count=len(content),
+                    last_crawled_at=datetime.now(),
+                ),
+            )
+            if updated_source:
+                await send_source_update_notification(project.id, updated_source)
+            processed_count += 1
+        except Exception as e:
+            logger.error(
+                f"[{job.id}] Failed to fetch content for source {source_id}: {e}",
+                exc_info=True,
+            )
+            failed_count += 1
+        finally:
+            progress = ((processed_count + failed_count) / total_sources) * 100
+            async with (await get_db_connection()).transaction() as tx:
+                await update_job_with_notification(
+                    job.id,
+                    UpdateBackgroundJob(
+                        processed_items=processed_count + failed_count,
+                        progress=progress,
+                    ),
+                    tx=tx,
+                )
+
+    async with (await get_db_connection()).transaction() as tx:
+        await update_job_with_notification(
+            job.id,
+            UpdateBackgroundJob(
+                status=JobStatus.completed,
+                result=FetchSourceContentResult(
+                    sources_fetched=processed_count, sources_failed=failed_count
+                ),
+            ),
+            tx=tx,
+        )
+
+
+async def generate_character_card(job: BackgroundJob, project: Project):
+    """
+    Generates a full character card using all fetched content from project sources.
+    """
+    if not isinstance(job.payload, GenerateCharacterCardPayload):
+        raise TypeError("Invalid payload for generate_character_card job.")
+
+    if job.payload.source_ids:
+        # If specific sources are provided, fetch them directly
+        source_futures = [get_project_source(sid) for sid in job.payload.source_ids]
+        sources = await asyncio.gather(*source_futures)
+        sources = [s for s in sources if s]  # Filter out any not found
+    else:
+        # Fallback to using all sources for the project
+        sources = await list_sources_by_project(project.id, include_content=True)
+    fetched_sources = [s for s in sources if s.raw_content]
+
+    if not fetched_sources:
+        raise ValueError(
+            "No fetched content available for this project. Please fetch content from sources first."
+        )
+
+    all_content = "\n\n---\n\n".join(
+        [f"Source: {s.url}\n\n{s.raw_content}" for s in fetched_sources]
+    )
+
+    provider = await _get_provider_for_project(project)
+    global_templates = await list_all_global_templates()
+    globals_dict = {gt.id: gt.content for gt in global_templates}
+    context = {
+        "project": project.model_dump(),
+        "content": all_content,
+        "globals": globals_dict,
+    }
+
+    response = await provider.generate(
+        ChatCompletionRequest(
+            model=project.model_name,
+            messages=create_messages_from_template(
+                globals_dict["character-generation-prompt"], context
+            ),
+            response_format=ResponseSchema(
+                name="character_card_data",
+                schema_value=CharacterCardData.model_json_schema(),
+            ),
+            **project.model_parameters,
+        )
+    )
+
+    async with (await get_db_connection()).transaction() as tx:
+        is_error = isinstance(response, ChatCompletionErrorResponse)
+        usage = response.usage if isinstance(response, ChatCompletionResponse) else None
+        await create_api_request_log(
+            CreateApiRequestLog(
+                project_id=project.id,
+                job_id=job.id,
+                api_provider=provider.__class__.__name__,
+                model_used=project.model_name,
+                request=response.raw_request,
+                response=response.raw_response,
+                latency_ms=response.latency_ms,
+                error=is_error,
+                input_tokens=usage.prompt_tokens if usage else None,
+                output_tokens=usage.completion_tokens if usage else None,
+                calculated_cost=usage.cost if usage else None,
+            ),
+        )
+
+        if is_error:
+            raise Exception(
+                f"Failed to generate character card: {response.raw_response}"
+            )
+
+        card_data = CharacterCardData.model_validate(response.content)
+        updated_card = await create_or_update_character_card(
+            CreateCharacterCard(project_id=project.id, **card_data.model_dump()), tx=tx
+        )
+        await send_character_card_update_notification(project.id, updated_card)
+
+        await update_project(
+            project.id, UpdateProject(status=ProjectStatus.completed), tx=tx
+        )
+        await update_job_with_notification(
+            job.id,
+            UpdateBackgroundJob(
+                status=JobStatus.completed, result=GenerateCharacterCardResult()
+            ),
+            tx=tx,
+        )
+
+
+async def regenerate_character_field(job: BackgroundJob, project: Project):
+    """
+    Regenerates a single field of a character card using selective context.
+    """
+    if not isinstance(job.payload, RegenerateCharacterFieldPayload):
+        raise TypeError("Invalid payload for regenerate_character_field job.")
+
+    # --- 1. Gather Context ---
+    existing_card = await get_character_card_by_project(project.id)
+    if not existing_card:
+        raise ValueError("Cannot regenerate field: Character card not found.")
+
+    existing_fields_str = ""
+    if job.payload.context_options.include_existing_fields:
+        card_dict = existing_card.model_dump()
+        for key, value in card_dict.items():
+            if key != job.payload.field_to_regenerate and value:
+                existing_fields_str += f"{key.upper()}:\n{value}\n\n"
+
+    source_material_str = ""
+    if job.payload.context_options.source_ids_to_include:
+        sources_to_include = [
+            await get_project_source(sid)
+            for sid in job.payload.context_options.source_ids_to_include
+        ]
+        source_material_str = "\n\n---\n\n".join(
+            [s.raw_content for s in sources_to_include if s and s.raw_content]
+        )
+
+    # --- 2. LLM Call ---
+    provider = await _get_provider_for_project(project)
+    global_templates = await list_all_global_templates()
+    globals_dict = {gt.id: gt.content for gt in global_templates}
+    context = {
+        "project": project.model_dump(),
+        "field_to_regenerate": job.payload.field_to_regenerate,
+        "custom_prompt": job.payload.custom_prompt,
+        "context": {
+            "existing_fields": existing_fields_str,
+            "source_material": source_material_str,
+        },
+        "globals": globals_dict,
+    }
+
+    response = await provider.generate(
+        ChatCompletionRequest(
+            model=project.model_name,
+            messages=create_messages_from_template(
+                globals_dict["character-field-regeneration-prompt"], context
+            ),
+            response_format=ResponseSchema(
+                name="regenerated_field_response",
+                schema_value=RegeneratedFieldResponse.model_json_schema(),
+            ),
+            **project.model_parameters,
+        )
+    )
+
+    # --- 3. Process Response and DB Write ---
+    async with (await get_db_connection()).transaction() as tx:
+        is_error = isinstance(response, ChatCompletionErrorResponse)
+        usage = response.usage if isinstance(response, ChatCompletionResponse) else None
+        await create_api_request_log(
+            CreateApiRequestLog(
+                project_id=project.id,
+                job_id=job.id,
+                api_provider=provider.__class__.__name__,
+                model_used=project.model_name,
+                request=response.raw_request,
+                response=response.raw_response,
+                latency_ms=response.latency_ms,
+                error=is_error,
+                input_tokens=usage.prompt_tokens if usage else None,
+                output_tokens=usage.completion_tokens if usage else None,
+                calculated_cost=usage.cost if usage else None,
+            ),
+        )
+
+        if is_error:
+            raise Exception(f"Failed to regenerate field: {response.raw_response}")
+
+        field_response = RegeneratedFieldResponse.model_validate(response.content)
+        update_payload = UpdateCharacterCard(
+            **{job.payload.field_to_regenerate: field_response.new_content}
+        )
+        updated_card = await update_character_card(
+            existing_card.id, update_payload, tx=tx
+        )
+        if updated_card:
+            await send_character_card_update_notification(project.id, updated_card)
+
+        await update_job_with_notification(
+            job.id,
+            UpdateBackgroundJob(
+                status=JobStatus.completed,
+                result=RegenerateCharacterFieldResult(
+                    field_regenerated=job.payload.field_to_regenerate
+                ),
+            ),
+            tx=tx,
+        )
+
+
+# --- Lorebook Creator Jobs ---
 
 
 async def _crawl_and_discover(
@@ -970,6 +1275,9 @@ async def process_project_entries(job: BackgroundJob, project: Project):
             )
 
 
+# --- Main Job Processor ---
+
+
 async def process_background_job(id: UUID):
     job = await get_background_job(id)
     if not job:
@@ -985,6 +1293,7 @@ async def process_background_job(id: UUID):
         return
 
     try:
+        # Lorebook Jobs
         if job.task_name == TaskName.DISCOVER_AND_CRAWL_SOURCES:
             await discover_and_crawl_sources(job, project)
         elif job.task_name == TaskName.RESCAN_LINKS:
@@ -995,6 +1304,14 @@ async def process_background_job(id: UUID):
             await process_project_entries(job, project)
         elif job.task_name == TaskName.GENERATE_SEARCH_PARAMS:
             await generate_search_params(job, project)
+        # Character Jobs
+        elif job.task_name == TaskName.FETCH_SOURCE_CONTENT:
+            await fetch_source_content(job, project)
+        elif job.task_name == TaskName.GENERATE_CHARACTER_CARD:
+            await generate_character_card(job, project)
+        elif job.task_name == TaskName.REGENERATE_CHARACTER_FIELD:
+            await regenerate_character_field(job, project)
+
     except Exception as e:
         logger.error(f"[{job.id}] Error processing job: {e}", exc_info=True)
         async with (await get_db_connection()).transaction() as tx:

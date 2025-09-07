@@ -46,7 +46,7 @@ class ProjectController(Controller):
         self, data: CreateProject = Body()
     ) -> SingleResponse[Project]:
         """Create a new project."""
-        logger.debug(f"Creating project {data.id}")
+        logger.debug(f"Creating project {data.id} of type {data.project_type}")
         project = await db_create_project(data)
         return SingleResponse(data=project)
 

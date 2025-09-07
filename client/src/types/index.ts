@@ -13,6 +13,8 @@ export interface SearchParams {
   criteria: string;
 }
 
+export type ProjectType = 'lorebook' | 'character';
+
 export type ProjectStatus =
   | 'draft'
   | 'search_params_generated'
@@ -25,6 +27,7 @@ export type ProjectStatus =
 export interface Project {
   id: string;
   name: string;
+  project_type: ProjectType;
   prompt?: string;
   templates: ProjectTemplates;
   requests_per_minute: number;
@@ -40,6 +43,7 @@ export interface Project {
 export interface CreateProjectPayload {
   id: string;
   name: string;
+  project_type: ProjectType;
   prompt?: string;
   templates: ProjectTemplates;
   requests_per_minute: number;
@@ -83,6 +87,8 @@ export interface TestCredentialResult {
   message: string;
 }
 
+export type ContentType = 'html' | 'markdown';
+
 export interface ProjectSource {
   id: string; // UUID
   project_id: string;
@@ -94,6 +100,9 @@ export interface ProjectSource {
   last_crawled_at?: string;
   created_at: string;
   updated_at: string;
+  raw_content?: string; // Note: Not typically sent in list views
+  content_type?: ContentType;
+  content_char_count?: number;
 }
 
 export interface ProjectSourceHierarchy {
@@ -135,17 +144,52 @@ export interface UpdateLorebookEntryPayload {
   keywords?: string[];
 }
 
+export interface CharacterCard {
+  id: string;
+  project_id: string;
+  name?: string;
+  description?: string;
+  persona?: string;
+  scenario?: string;
+  first_message?: string;
+  example_messages?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface GenerateCharacterCardPayload {
+  project_id: string;
+  source_ids?: string[];
+}
+
+export type UpdateCharacterCardPayload = Omit<CharacterCard, 'id' | 'project_id' | 'created_at' | 'updated_at'>;
+
 export type JobStatus = 'pending' | 'in_progress' | 'completed' | 'failed' | 'cancelling' | 'canceled';
 export type TaskName =
   | 'discover_and_crawl_sources'
   | 'confirm_links'
   | 'process_project_entries'
   | 'generate_search_params'
-  | 'rescan_links';
+  | 'rescan_links'
+  | 'fetch_source_content'
+  | 'generate_character_card'
+  | 'regenerate_character_field';
 
 export interface ProcessProjectEntriesPayload {
   project_id: string;
   link_ids?: string[];
+}
+
+export interface RegenerateCharacterFieldContextOptions {
+  include_existing_fields: boolean;
+  source_ids_to_include: string[];
+}
+
+export interface RegenerateCharacterFieldPayload {
+  project_id: string;
+  field_to_regenerate: string;
+  custom_prompt?: string;
+  context_options: RegenerateCharacterFieldContextOptions;
 }
 
 export interface BackgroundJob {

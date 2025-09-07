@@ -1,11 +1,13 @@
 from datetime import datetime
-from typing import Any, List, Optional
+from typing import Any, List, Literal, Optional
 from uuid import UUID, uuid4
 
 from db.connection import get_db_connection
 from pydantic import BaseModel
 
 from db.database import AsyncDBTransaction
+
+ContentType = Literal["html", "markdown"]
 
 
 class ProjectSource(BaseModel):
@@ -19,6 +21,9 @@ class ProjectSource(BaseModel):
     last_crawled_at: Optional[datetime] = None
     created_at: datetime
     updated_at: datetime
+    raw_content: Optional[str] = None
+    content_type: Optional[ContentType] = None
+    content_char_count: Optional[int] = None
 
 
 class CreateProjectSource(BaseModel):
@@ -35,6 +40,9 @@ class UpdateProjectSource(BaseModel):
     max_pages_to_crawl: Optional[int] = None
     max_crawl_depth: Optional[int] = None
     last_crawled_at: Optional[datetime] = None
+    raw_content: Optional[str] = None
+    content_type: Optional[ContentType] = None
+    content_char_count: Optional[int] = None
 
 
 async def create_project_source(
@@ -78,11 +86,21 @@ async def get_project_source_by_url(
     return ProjectSource(**result) if result else None
 
 
-async def list_sources_by_project(project_id: str) -> List[ProjectSource]:
+async def list_sources_by_project(
+    project_id: str, include_content: bool = False
+) -> List[ProjectSource]:
     db = await get_db_connection()
-    query = (
-        'SELECT * FROM "ProjectSource" WHERE project_id = %s ORDER BY created_at ASC'
-    )
+    if include_content:
+        # Select all columns when content is requested
+        query = 'SELECT * FROM "ProjectSource" WHERE project_id = %s ORDER BY created_at ASC'
+    else:
+        # Exclude raw_content for performance in list views
+        query = (
+            "SELECT id, project_id, url, link_extraction_selector, link_extraction_pagination_selector, "
+            "max_pages_to_crawl, max_crawl_depth, last_crawled_at, created_at, updated_at, "
+            "content_type, content_char_count "
+            'FROM "ProjectSource" WHERE project_id = %s ORDER BY created_at ASC'
+        )
     results = await db.fetch_all(query, (project_id,))
     return [ProjectSource(**row) for row in results] if results else []
 

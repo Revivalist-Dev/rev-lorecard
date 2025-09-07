@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useSseStore } from '../stores/sseStore';
 import { notifications } from '@mantine/notifications';
-import type { BackgroundJob, PaginatedResponse, Link, LorebookEntry } from '../types';
+import type { BackgroundJob, PaginatedResponse, Link, LorebookEntry, CharacterCard, ProjectSource } from '../types';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
 
@@ -66,11 +66,13 @@ export function useSse(projectId: string | undefined) {
           queryClient.invalidateQueries({ queryKey: ['sourcesHierarchy', updatedJob.project_id] });
         }
 
+        // Invalidate analytics and logs for any completed/failed job
         queryClient.invalidateQueries({ queryKey: ['apiRequestLogs', updatedJob.project_id] });
         queryClient.invalidateQueries({ queryKey: ['projectAnalytics', updatedJob.project_id] });
       }
     });
 
+    // --- LOREBOOK EVENTS ---
     eventSource.addEventListener('link_updated', (event) => {
       const updatedLink: Link = JSON.parse(event.data);
       queryClient.invalidateQueries({ queryKey: ['links', updatedLink.project_id] });
@@ -87,6 +89,23 @@ export function useSse(projectId: string | undefined) {
     eventSource.addEventListener('entry_created', (event) => {
       const newEntry: LorebookEntry = JSON.parse(event.data);
       queryClient.invalidateQueries({ queryKey: ['entries', newEntry.project_id] });
+    });
+
+    // --- CHARACTER CREATOR EVENTS ---
+    eventSource.addEventListener('character_card_update', (event) => {
+      const updatedCard: CharacterCard = JSON.parse(event.data);
+      const queryKey = ['characterCard', updatedCard.project_id];
+      queryClient.setQueryData(queryKey, { data: updatedCard });
+    });
+
+    eventSource.addEventListener('source_updated', (event) => {
+      const updatedSource: ProjectSource = JSON.parse(event.data);
+      const queryKey = ['sources', updatedSource.project_id];
+
+      queryClient.setQueryData<ProjectSource[]>(queryKey, (oldData) => {
+        if (!oldData) return [];
+        return oldData.map((source) => (source.id === updatedSource.id ? updatedSource : source));
+      });
     });
 
     return () => {

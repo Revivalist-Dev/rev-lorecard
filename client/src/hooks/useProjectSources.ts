@@ -36,6 +36,23 @@ export const useProjectSourceHierarchy = (projectId: string) => {
   });
 };
 
+// --- Fetch Single Source Details ---
+const fetchProjectSourceDetails = async (
+  projectId: string,
+  sourceId: string
+): Promise<SingleResponse<ProjectSource>> => {
+  const response = await apiClient.get(`/projects/${projectId}/sources/${sourceId}`);
+  return response.data;
+};
+
+export const useProjectSourceDetails = (projectId: string, sourceId: string | null) => {
+  return useQuery({
+    queryKey: ['sourceDetails', projectId, sourceId],
+    queryFn: () => fetchProjectSourceDetails(projectId, sourceId!),
+    enabled: !!projectId && !!sourceId, // Only run when a sourceId is provided
+  });
+};
+
 // --- Create ---
 interface CreateSourcePayload {
   url: string;

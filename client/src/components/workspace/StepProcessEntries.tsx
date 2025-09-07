@@ -171,8 +171,7 @@ export function StepProcessEntries({ project }: StepProps) {
               You are about to process <strong>{processableCount}</strong> pending or failed links.
             </Text>
             <Text size="sm">
-              This will make up to {processableCount} API calls to the{' '}
-              <strong>{project.model_name}</strong> model.
+              This will make up to {processableCount} API calls to the <strong>{project.model_name}</strong> model.
             </Text>
             <Text size="sm" fw={700}>
               Are you sure you want to proceed?
