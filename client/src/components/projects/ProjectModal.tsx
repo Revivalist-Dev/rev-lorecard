@@ -24,7 +24,7 @@ import { useGlobalTemplates } from '../../hooks/useGlobalTemplates';
 import { LazyMonacoEditorInput } from '../common/LazyMonacoEditorInput';
 import { useCredentials } from '../../hooks/useCredentials';
 import { useDisclosure } from '@mantine/hooks';
-import { IconBook, IconPlus, IconUser } from '@tabler/icons-react';
+import { IconBook, IconPlus, IconRefresh, IconUser } from '@tabler/icons-react';
 import { CredentialModal } from '../credentials/CredentialModal';
 
 interface ProjectModalProps {
@@ -64,7 +64,13 @@ export function ProjectModal({ opened, onClose, project }: ProjectModalProps) {
       credential_id: undefined,
       model_name: undefined,
       model_parameters: { temperature: 0.7 },
-      templates: { search_params_generation: '', selector_generation: '', entry_creation: '' },
+      templates: {
+        search_params_generation: '',
+        selector_generation: '',
+        entry_creation: '',
+        character_generation: '',
+        character_field_regeneration: '',
+      },
     },
     validate: {
       name: (value) => (value.trim().length < 3 ? 'Name must be at least 3 characters long' : null),
@@ -80,16 +86,25 @@ export function ProjectModal({ opened, onClose, project }: ProjectModalProps) {
         ...project,
         prompt: project.prompt || '',
         model_parameters: project.model_parameters || { temperature: 0.7 },
+        templates: {
+          search_params_generation: project.templates.search_params_generation || '',
+          selector_generation: project.templates.selector_generation || '',
+          entry_creation: project.templates.entry_creation || '',
+          character_generation: project.templates.character_generation || '',
+          character_field_regeneration: project.templates.character_field_regeneration || '',
+        },
       });
       setSelectedCredentialId(project.credential_id || null);
     } else if (!isEditMode && globalTemplates?.data) {
       const templates = globalTemplates.data;
       const getTemplate = (id: string) => templates.find((t) => t.id === id)?.content || '';
       form.reset();
-      // Set defaults for lorebook initially
+      // Set defaults for lorebook initially, as it's the default project type
       form.setFieldValue('templates.search_params_generation', getTemplate('search-params-prompt'));
       form.setFieldValue('templates.selector_generation', getTemplate('selector-prompt'));
       form.setFieldValue('templates.entry_creation', getTemplate('entry-creation-prompt'));
+      form.setFieldValue('templates.character_generation', '');
+      form.setFieldValue('templates.character_field_regeneration', '');
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [project, opened, globalTemplates?.data]);
@@ -102,14 +117,22 @@ export function ProjectModal({ opened, onClose, project }: ProjectModalProps) {
       const templates = globalTemplates.data;
       const getTemplate = (id: string) => templates.find((t) => t.id === id)?.content || '';
       if (projectType === 'character') {
-        form.setFieldValue('templates.entry_creation', getTemplate('character-generation-prompt'));
+        form.setFieldValue('templates.character_generation', getTemplate('character-generation-prompt'));
+        form.setFieldValue(
+          'templates.character_field_regeneration',
+          getTemplate('character-field-regeneration-prompt')
+        );
         // Clear lorebook-specific templates
         form.setFieldValue('templates.search_params_generation', '');
         form.setFieldValue('templates.selector_generation', '');
+        form.setFieldValue('templates.entry_creation', '');
       } else {
         form.setFieldValue('templates.search_params_generation', getTemplate('search-params-prompt'));
         form.setFieldValue('templates.selector_generation', getTemplate('selector-prompt'));
         form.setFieldValue('templates.entry_creation', getTemplate('entry-creation-prompt'));
+        // Clear character-specific templates
+        form.setFieldValue('templates.character_generation', '');
+        form.setFieldValue('templates.character_field_regeneration', '');
       }
     }
   };
@@ -170,6 +193,15 @@ export function ProjectModal({ opened, onClose, project }: ProjectModalProps) {
     }
   };
 
+  const handleResetTemplate = (templateField: keyof CreateProjectPayload['templates'], templateId: string) => {
+    if (globalTemplates?.data) {
+      const template = globalTemplates.data.find((t) => t.id === templateId);
+      if (template) {
+        form.setFieldValue(`templates.${templateField}`, template.content);
+      }
+    }
+  };
+
   const isLoadingMutation = createProjectMutation.isPending || updateProjectMutation.isPending;
 
   const credentialLabel = (
@@ -190,6 +222,19 @@ export function ProjectModal({ opened, onClose, project }: ProjectModalProps) {
   );
 
   const isLorebook = form.values.project_type === 'lorebook';
+
+  const renderTemplateLabel = (label: string, onReset: () => void) => (
+    <Group justify="space-between" w="100%">
+      <Text component="span" size="sm" fw={500}>
+        {label}
+      </Text>
+      <Tooltip label="Reset to global template" withArrow position="top-end">
+        <ActionIcon onClick={onReset} variant="subtle" size="xs" aria-label={`Reset ${label} to global template`}>
+          <IconRefresh size={16} />
+        </ActionIcon>
+      </Tooltip>
+    </Group>
+  );
 
   return (
     <>
@@ -340,25 +385,50 @@ export function ProjectModal({ opened, onClose, project }: ProjectModalProps) {
                       {isLorebook ? (
                         <>
                           <LazyMonacoEditorInput
-                            label="Search Params Generation"
+                            label={renderTemplateLabel('Search Params Generation', () =>
+                              handleResetTemplate('search_params_generation', 'search-params-prompt')
+                            )}
                             language="handlebars"
                             height={200}
                             {...form.getInputProps('templates.search_params_generation')}
                           />
                           <LazyMonacoEditorInput
-                            label="Selector Generation"
+                            label={renderTemplateLabel('Selector Generation', () =>
+                              handleResetTemplate('selector_generation', 'selector-prompt')
+                            )}
                             language="handlebars"
                             height={200}
                             {...form.getInputProps('templates.selector_generation')}
                           />
+                          <LazyMonacoEditorInput
+                            label={renderTemplateLabel('Entry Creation', () =>
+                              handleResetTemplate('entry_creation', 'entry-creation-prompt')
+                            )}
+                            language="handlebars"
+                            height={200}
+                            {...form.getInputProps('templates.entry_creation')}
+                          />
                         </>
-                      ) : null}
-                      <LazyMonacoEditorInput
-                        label={isLorebook ? 'Entry Creation' : 'Character Generation'}
-                        language="handlebars"
-                        height={200}
-                        {...form.getInputProps('templates.entry_creation')}
-                      />
+                      ) : (
+                        <>
+                          <LazyMonacoEditorInput
+                            label={renderTemplateLabel('Character Generation', () =>
+                              handleResetTemplate('character_generation', 'character-generation-prompt')
+                            )}
+                            language="handlebars"
+                            height={200}
+                            {...form.getInputProps('templates.character_generation')}
+                          />
+                          <LazyMonacoEditorInput
+                            label={renderTemplateLabel('Character Field Regeneration', () =>
+                              handleResetTemplate('character_field_regeneration', 'character-field-regeneration-prompt')
+                            )}
+                            language="handlebars"
+                            height={200}
+                            {...form.getInputProps('templates.character_field_regeneration')}
+                          />
+                        </>
+                      )}
                     </Stack>
                   )}
                 </Accordion.Panel>

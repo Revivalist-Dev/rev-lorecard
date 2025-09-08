@@ -1,5 +1,6 @@
 from litestar import Controller, get, post, patch, delete
 from litestar.exceptions import NotFoundException
+from typing import Dict
 from litestar.params import Body
 
 from logging_config import get_logger
@@ -14,12 +15,31 @@ from db.global_templates import (
     delete_global_template as db_delete_global_template,
 )
 from db.common import PaginatedResponse, SingleResponse
+import default_templates
 
 logger = get_logger(__name__)
 
 
 class GlobalTemplateController(Controller):
     path = "/global-templates"
+
+    @get(
+        "/defaults",
+        summary="Get Default Templates",
+        description="Retrieve the hardcoded default templates.",
+    )
+    async def get_default_templates(self) -> Dict[str, str]:
+        """Returns a dictionary of the default templates."""
+        logger.debug("Retrieving default templates")
+        return {
+            "selector-prompt": default_templates.selector_prompt,
+            "search-params-prompt": default_templates.search_params_prompt,
+            "entry-creation-prompt": default_templates.entry_creation_prompt,
+            "lorebook-definition": default_templates.lorebook_definition,
+            "character-card-definition": default_templates.character_card_definition,
+            "character-generation-prompt": default_templates.character_generation_prompt,
+            "character-field-regeneration-prompt": default_templates.character_field_regeneration_prompt,
+        }
 
     @post("/")
     async def create_global_template(

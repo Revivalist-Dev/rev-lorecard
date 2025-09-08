@@ -2,9 +2,11 @@
 export type ModelParameters = Record<string, any>;
 
 export interface ProjectTemplates {
-  selector_generation: string;
-  entry_creation: string;
-  search_params_generation: string;
+  selector_generation?: string;
+  entry_creation?: string;
+  search_params_generation?: string;
+  character_generation?: string;
+  character_field_regeneration?: string;
 }
 
 export interface SearchParams {

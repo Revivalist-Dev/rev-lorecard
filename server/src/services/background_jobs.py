@@ -268,11 +268,14 @@ async def generate_character_card(job: BackgroundJob, project: Project):
         "globals": globals_dict,
     }
 
+    if not project.templates.character_generation:
+        raise ValueError("Character generation template is missing for this project.")
+
     response = await provider.generate(
         ChatCompletionRequest(
             model=project.model_name,
             messages=create_messages_from_template(
-                globals_dict["character_generation_prompt"], context
+                project.templates.character_generation, context
             ),
             response_format=ResponseSchema(
                 name="character_card_data",
@@ -368,11 +371,16 @@ async def regenerate_character_field(job: BackgroundJob, project: Project):
         "globals": globals_dict,
     }
 
+    if not project.templates.character_field_regeneration:
+        raise ValueError(
+            "Character field regeneration template is missing for this project."
+        )
+
     response = await provider.generate(
         ChatCompletionRequest(
             model=project.model_name,
             messages=create_messages_from_template(
-                globals_dict["character-field-regeneration-prompt"], context
+                project.templates.character_field_regeneration, context
             ),
             response_format=ResponseSchema(
                 name="regenerated_field_response",
@@ -622,6 +630,12 @@ async def discover_and_crawl_sources(job: BackgroundJob, project: Project):
             "globals": globals_dict,
         }
         await wait_for_rate_limit(project.id, project.requests_per_minute)
+
+        if not project.templates.selector_generation:
+            raise ValueError(
+                "Selector generation template is missing for this project."
+            )
+
         response = await provider.generate(
             ChatCompletionRequest(
                 model=project.model_name,
@@ -880,6 +894,12 @@ async def generate_search_params(job: BackgroundJob, project: Project):
         global_templates = await list_all_global_templates(tx=tx)
         globals_dict = {gt.name: gt.content for gt in global_templates}
         context = {"project": project.model_dump(), "globals": globals_dict}
+
+        if not project.templates.search_params_generation:
+            raise ValueError(
+                "Search params generation template is missing for this project."
+            )
+
         response = await provider.generate(
             ChatCompletionRequest(
                 model=project.model_name,
@@ -1008,6 +1028,10 @@ async def _process_single_link_io(
             "source": link.model_dump(),
             "globals": globals_dict,
         }
+
+        if not project.templates.entry_creation:
+            raise ValueError("Entry creation template is missing for this project.")
+
         response = await provider.generate(
             ChatCompletionRequest(
                 model=project.model_name,

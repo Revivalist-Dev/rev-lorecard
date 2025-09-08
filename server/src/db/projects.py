@@ -24,14 +24,28 @@ class SearchParams(BaseModel):
 class ProjectTemplates(BaseModel):
     """Jinja templates for various tasks."""
 
-    selector_generation: str = Field(
-        description="The prompt used to instruct an LLM to analyze HTML and return a CSS selector."
+    # Lorebook-specific templates
+    selector_generation: Optional[str] = Field(
+        None,
+        description="The prompt used to instruct an LLM to analyze HTML and return a CSS selector.",
     )
-    entry_creation: str = Field(
-        description="The prompt used to instruct an LLM to process a scraped web page into a structured lorebook entry."
+    entry_creation: Optional[str] = Field(
+        None,
+        description="The prompt used to instruct an LLM to process a scraped web page into a structured lorebook entry.",
     )
-    search_params_generation: str = Field(
-        description="The prompt used to instruct an LLM to generate search parameters from a user prompt."
+    search_params_generation: Optional[str] = Field(
+        None,
+        description="The prompt used to instruct an LLM to generate search parameters from a user prompt.",
+    )
+
+    # Character-specific templates
+    character_generation: Optional[str] = Field(
+        None,
+        description="The prompt used to generate a full character card from source material.",
+    )
+    character_field_regeneration: Optional[str] = Field(
+        None,
+        description="The prompt used to regenerate a single field of a character card.",
     )
 
 

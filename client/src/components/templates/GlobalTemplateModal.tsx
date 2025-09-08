@@ -1,9 +1,11 @@
-import { Modal, TextInput, Button, Group, Stack, Text } from '@mantine/core';
+import { Modal, TextInput, Button, Group, Stack, Text, Tooltip, ActionIcon } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import { useEffect } from 'react';
 import type { GlobalTemplate } from '../../types';
 import { useCreateGlobalTemplate, useUpdateGlobalTemplate } from '../../hooks/useGlobalTemplatesMutations';
+import { useDefaultGlobalTemplates } from '../../hooks/useGlobalTemplates';
 import { LazyMonacoEditorInput } from '../common/LazyMonacoEditorInput';
+import { IconRefresh } from '@tabler/icons-react';
 
 interface GlobalTemplateModalProps {
   opened: boolean;
@@ -21,6 +23,7 @@ export function GlobalTemplateModal({ opened, onClose, template }: GlobalTemplat
   const isEditMode = !!template;
   const createTemplateMutation = useCreateGlobalTemplate();
   const updateTemplateMutation = useUpdateGlobalTemplate();
+  const { data: defaultTemplates } = useDefaultGlobalTemplates();
 
   const form = useForm<TemplateFormValues>({
     initialValues: {
@@ -55,6 +58,27 @@ export function GlobalTemplateModal({ opened, onClose, template }: GlobalTemplat
 
   const isLoading = createTemplateMutation.isPending || updateTemplateMutation.isPending;
 
+  const handleResetContent = () => {
+    if (template && defaultTemplates && defaultTemplates[template.id]) {
+      form.setFieldValue('content', defaultTemplates[template.id]);
+    }
+  };
+
+  const hasDefaultTemplate = isEditMode && template && defaultTemplates && !!defaultTemplates[template.id];
+
+  const renderTemplateLabel = (label: string) => (
+    <Group justify="space-between" w="100%">
+      <Text component="span" size="sm" fw={500}>
+        {label}
+      </Text>
+      <Tooltip label="Reset to default template" withArrow position="top-end">
+        <ActionIcon onClick={handleResetContent} variant="subtle" size="xs" aria-label={`Reset ${label} to default`}>
+          <IconRefresh size={16} />
+        </ActionIcon>
+      </Tooltip>
+    </Group>
+  );
+
   return (
     <Modal
       opened={opened}
@@ -79,7 +103,7 @@ export function GlobalTemplateModal({ opened, onClose, template }: GlobalTemplat
             {...form.getInputProps('name')}
           />
           <LazyMonacoEditorInput
-            label="Template Content"
+            label={hasDefaultTemplate ? renderTemplateLabel('Template Content') : 'Template Content'}
             language="handlebars"
             height={400}
             {...form.getInputProps('content')}

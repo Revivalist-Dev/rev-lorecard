@@ -116,9 +116,7 @@ export function CharacterSources({ project, selectedSourceIds, setSelectedSource
                           onChange={(event) => {
                             const { checked } = event.currentTarget;
                             setSelectedSourceIds((current) =>
-                              checked
-                                ? [...current, source.id]
-                                : current.filter((id) => id !== source.id)
+                              checked ? [...current, source.id] : current.filter((id) => id !== source.id)
                             );
                           }}
                           disabled={!source.last_crawled_at}

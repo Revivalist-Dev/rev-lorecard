@@ -21,3 +21,15 @@ export const useGlobalTemplates = ({ page, pageSize }: TemplatesQuery) => {
     queryFn: () => fetchGlobalTemplates({ page, pageSize }),
   });
 };
+
+const fetchDefaultGlobalTemplates = async (): Promise<Record<string, string>> => {
+  const response = await apiClient.get('/global-templates/defaults');
+  return response.data;
+};
+
+export const useDefaultGlobalTemplates = () => {
+  return useQuery({
+    queryKey: ['defaultGlobalTemplates'],
+    queryFn: fetchDefaultGlobalTemplates,
+  });
+};
