@@ -9,15 +9,16 @@ Create characters and lorebooks from URLs using LLMs.
   
   *A video demonstrating the main workflow of creating a lorebook from a URL*
 
-https://github.com/user-attachments/assets/38f6dbd7-4975-47f1-8e4f-3e9319cce083
+https://github.com/user-attachments/assets/d34efdb7-a5ec-4c9c-ab2b-b633fa59b3ca
 
 </details>
 
+<details>
   <summary>Character Workflow</summary>
   
   *A video demonstrating the main workflow of creating a character from a URL*
 
-...
+https://github.com/user-attachments/assets/abd86ee8-b347-40f2-a768-cb83d5607d1f
 
 </details>
 
