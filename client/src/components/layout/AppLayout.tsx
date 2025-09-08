@@ -72,7 +72,7 @@ export function AppLayout() {
         <Group h="100%" px="md">
           <Burger opened={opened} onClick={toggle} hiddenFrom="sm" size="sm" />
           <Link to="/" style={{ textDecoration: 'none', color: 'inherit' }}>
-            <Title order={3}>Lorebook Creator</Title>
+            <Title order={3}>Lorecard</Title>
           </Link>
         </Group>
       </AppShell.Header>
@@ -107,10 +107,10 @@ export function AppLayout() {
         <Outlet />
         <Box component="footer" p="md" mt="xl" style={{ textAlign: 'center' }}>
           <Text c="dimmed" size="xs">
-            Lorebook Creator
+            Lorecard
             {appInfo?.current_version && ` - Version: ${appInfo.current_version}`}
             {' | '}
-            <Anchor href="https://github.com/bmen25124/lorebook-creator" target="_blank" c="dimmed" size="xs">
+            <Anchor href="https://github.com/bmen25124/lorecard" target="_blank" c="dimmed" size="xs">
               GitHub
             </Anchor>
           </Text>

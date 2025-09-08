@@ -93,7 +93,7 @@ class CharacterCardController(Controller):
                 "post_history_instructions": "",
                 "alternate_greetings": [],
                 "tags": [],
-                "creator": "Lorebook Creator",
+                "creator": "Lorecard",
                 "character_version": "1.0",
                 "extensions": {},
             },

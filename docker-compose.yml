@@ -13,9 +13,10 @@ services:
       - OPENAI_COMPATIBLE_BASE_URL=${OPENAI_COMPATIBLE_BASE_URL}
       - OPENAI_COMPATIBLE_API_KEY=${OPENAI_COMPATIBLE_API_KEY}
       - APP_ENV=${APP_ENV:-production}
+      - APP_SECRET_KEY=${APP_SECRET_KEY}
 
       # --- Default to SQLite ---
       - DATABASE_TYPE=${DATABASE_TYPE:-sqlite}
-      - DATABASE_URL=/app/server/data/${SQLITE_DB_NAME:-lorebook_creator.db}
+      - DATABASE_URL=/app/server/data/${SQLITE_DB_NAME:-lorecard.db}
     volumes:
       - ./data:/app/server/data

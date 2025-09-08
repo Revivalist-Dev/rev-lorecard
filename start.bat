@@ -2,7 +2,7 @@
 setlocal enabledelayedexpansion
 
 echo ===========================================
-echo  Lorebook Creator - Startup Script
+echo  Lorecard - Startup Script
 echo ===========================================
 echo.
 

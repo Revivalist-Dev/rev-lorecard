@@ -210,7 +210,7 @@ class AppInfo(BaseModel):
 async def get_latest_github_version() -> Optional[str]:
     """Fetches the latest tag name from the GitHub repository."""
     # Use the /tags endpoint since the repo uses tags, not formal releases
-    repo_url = "https://api.github.com/repos/bmen25124/lorebook-creator/tags"
+    repo_url = "https://api.github.com/repos/bmen25124/lorecard/tags"
     headers = {"Accept": "application/vnd.github.v3+json"}
     try:
         async with httpx.AsyncClient() as client:

@@ -1,4 +1,4 @@
-# Lorebook Creator
+# Lorecard
 
 Create lorebooks from URLs using LLMs.
 
@@ -65,8 +65,8 @@ https://github.com/user-attachments/assets/38f6dbd7-4975-47f1-8e4f-3e9319cce083
 
 ### Input token usage by steps
 1. **Search Params:** Single LLM request. This is a very simple operation. Input token is very low.
-2. **Manage Sources & Crawl** _Discover & Scan_ button makes one LLM request per source. If `Max Crawl Depth` is more than 1, it will discover sub-categories and make an LLM request for each one. We give the LLM [cleaned html](https://github.com/bmen25124/lorebook-creator/blob/main/server/src/services/scraper.py#L8), so token usage can be high. You can use _Rescan Selected_ to find new links on previously scanned sources without using the LLM.
-3. **Generate Entries:** Request count = link count. We are giving the LLM [cleaned html -> markdown](https://github.com/bmen25124/lorebook-creator/blob/main/server/src/services/scraper.py#L111). Token usage depends on the page length. This step typically consumes the most tokens.
+2. **Manage Sources & Crawl** _Discover & Scan_ button makes one LLM request per source. If `Max Crawl Depth` is more than 1, it will discover sub-categories and make an LLM request for each one. We give the LLM [cleaned html](https://github.com/bmen25124/lorecard/blob/main/server/src/services/scraper.py#L8), so token usage can be high. You can use _Rescan Selected_ to find new links on previously scanned sources without using the LLM.
+3. **Generate Entries:** Request count = link count. We are giving the LLM [cleaned html -> markdown](https://github.com/bmen25124/lorecard/blob/main/server/src/services/scraper.py#L111). Token usage depends on the page length. This step typically consumes the most tokens.
 
 ## How to Install and Run the Application
 
@@ -106,9 +106,9 @@ Open your terminal in that same folder and choose one of the commands below.
           --env-file .env \
           -e APP_ENV=production \
           -e DATABASE_TYPE=sqlite \
-          -e DATABASE_URL=/app/server/data/lorebook_creator.db \
+          -e DATABASE_URL=/app/server/data/lorecard.db \
           -v "$(pwd)/data:/app/server/data" \
-          ghcr.io/bmen25124/lorebook-creator:v1.9
+          ghcr.io/bmen25124/lorecard:v1.9
         ```
 
     *   **For Windows (Command Prompt):**
@@ -117,9 +117,9 @@ Open your terminal in that same folder and choose one of the commands below.
           --env-file .env ^
           -e APP_ENV=production ^
           -e DATABASE_TYPE=sqlite ^
-          -e DATABASE_URL=/app/server/data/lorebook_creator.db ^
+          -e DATABASE_URL=/app/server/data/lorecard.db ^
           -v "%cd%/data:/app/server/data" ^
-          ghcr.io/bmen25124/lorebook-creator:v1.9
+          ghcr.io/bmen25124/lorecard:v1.9
         ```
         
     *   **For Windows (PowerShell):**
@@ -128,9 +128,9 @@ Open your terminal in that same folder and choose one of the commands below.
           --env-file .env `
           -e APP_ENV=production `
           -e DATABASE_TYPE=sqlite `
-          -e DATABASE_URL=/app/server/data/lorebook_creator.db `
+          -e DATABASE_URL=/app/server/data/lorecard.db `
           -v "${pwd}/data:/app/server/data" `
-          ghcr.io/bmen25124/lorebook-creator:v1.9
+          ghcr.io/bmen25124/lorecard:v1.9
         ```
 
 *   **To run with PostgreSQL (Advanced):**
@@ -142,8 +142,8 @@ Open your terminal in that same folder and choose one of the commands below.
 
     # 2. Start the database container
     docker run -d --name lorebook-db --restart unless-stopped --network lorebook-net \
-      -e POSTGRES_USER=user -e POSTGRES_PASSWORD=password -e POSTGRES_DB=lorebook_creator \
-      -v lorebook_creator_postgres_data:/var/lib/postgresql/data \
+      -e POSTGRES_USER=user -e POSTGRES_PASSWORD=password -e POSTGRES_DB=lorecard \
+      -v lorecard_postgres_data:/var/lib/postgresql/data \
       postgres:13
 
     # 3. Start the application container
@@ -151,8 +151,8 @@ Open your terminal in that same folder and choose one of the commands below.
       --env-file .env \
       -e APP_ENV=production \
       -e DATABASE_TYPE=postgres \
-      -e DATABASE_URL=postgresql://user:password@lorebook-db:5432/lorebook_creator \
-      ghcr.io/bmen25124/lorebook-creator:v1.9
+      -e DATABASE_URL=postgresql://user:password@lorebook-db:5432/lorecard \
+      ghcr.io/bmen25124/lorecard:v1.9
     ```
 
 ---
@@ -171,8 +171,8 @@ You must have the following software installed and available in your PATH:
 
 **1. Clone the repository**
 ```bash
-git clone https://github.com/bmen25124/lorebook-creator.git
-cd lorebook-creator
+git clone https://github.com/bmen25124/lorecard.git
+cd lorecard
 ```
 
 **2. Run the script**
@@ -190,8 +190,8 @@ Use this method if you have cloned the source code and want to build and run the
 
 **1. Clone the repository**
 ```bash
-git clone https://github.com/bmen25124/lorebook-creator.git
-cd lorebook-creator
+git clone https://github.com/bmen25124/lorecard.git
+cd lorecard
 ```
 
 **2. Configure your API Key**

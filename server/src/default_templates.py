@@ -117,19 +117,101 @@ A Lorebook is a collection of entries used to provide an AI with consistent, con
 
 character_card_definition = """### CHARACTER CARD DEFINITION
 
-A Character Card is a structured JSON-like format used to define an AI roleplaying character.
+When creating a **character card**, you define a structured profile to guide the AI's behavior and ensure consistency in roleplay or storytelling. Below are the common fields and their purposes:
 
-**Purpose:** To create a complete, interactive character with a defined personality, backstory, and conversational style.
+---
 
-**Standard Card Structure:**
-- `name`: The character's full name.
-- `description`: A detailed physical and general description. Should include appearance, attire, and general demeanor.
-- `persona`: A detailed description of the character's personality, demeanor, motivations, and inner thoughts. This is the core of their personality.
-- `scenario`: The setting or situation the character is in when the user first meets them.
-- `first_message`: The character's first message to the user. It should be engaging and set the scene.
-- `example_messages`: A string containing several example dialogue exchanges between {{user}} and {{char}} to demonstrate the character's speaking style, personality, and how they interact. Must include multiple back-and-forths. Use markdown for actions (e.g., *she smiles*).
+### **1. `name`**
+**Purpose**:
+The character's primary identifier. The AI uses this to reference the character in dialogue and narration.
+**Key Tips**:
+- Use a memorable name that reflects their role (e.g., "Zara the Shadowblade" implies stealth/combat).
+- Avoid overly complex or ambiguous names (e.g., "Xy'lthraa" may confuse the AI).
+**Example**:
+`"Seraphina Vale"` (Elegant, hints at nobility) vs. `"Rusty"` (Casual, rugged).
 
-**Writing Style:** Third-person, roleplaying.
+---
+
+### **2. `description`**
+**Purpose**:
+A snapshot of the character's identity, combining **appearance**, **personality**, and **key traits** to guide the AI's "mental image."
+**Structure**:
+- **Appearance**: Physical traits (e.g., scars, clothing, species).
+- **Personality**: Core demeanor (e.g., stoic, playful).
+- **Mannerisms**: Unique habits (e.g., "taps fingers when lying").
+**Example**:
+> *"A hulking orc with moss-green skin and a chipped tusk, wearing a patchwork cloak. Despite his intimidating frame, he speaks softly and collects wildflowers. Secretly fears fire."*
+**Tips**:
+- Use vivid, concise language.
+- Prioritize traits critical to roleplay (e.g., "blind in one eye" affects interactions).
+
+---
+
+### **3. `persona`**
+**Purpose**:
+Explicitly defines **how the character thinks/behaves**, reducing ambiguity for the AI. This is the core of their personality.
+**What to Include**:
+- Core traits (e.g., "optimistic", "paranoid").
+- Motivations (e.g., "seeks revenge against the crown").
+- Flaws (e.g., "impulsive", "overly trusting").
+**Example**:
+`"Charismatic but manipulative; values loyalty only when it benefits him. Haunted by guilt over a failed rescue mission."`
+**Tips**:
+- Use bullet points or short phrases for clarity.
+- Avoid contradictions (e.g., "shy" vs. "loves public speaking").
+
+---
+
+### **4. `scenario`**
+**Purpose**:
+Sets the stage for the interaction, providing **contextual boundaries** for the AI.
+**What to Include**:
+- **Location**: Where the scene takes place (e.g., "a smoky tavern").
+- **Time**: Era or time-sensitive context (e.g., "during a solar eclipse").
+- **Relationship**: Predefined ties to the user (e.g., "childhood rivals reunited").
+**Example**:
+`"A cyberpunk night market in 2147. {{char}} is a rogue hacker who suspects {{user}} works for the corrupt government."`
+**Tips**:
+- Use dynamic placeholders like `{{user}}` to personalize the scenario.
+
+---
+
+### **5. `first_message`**
+**Purpose**:
+The character's **opening line**, critical for establishing tone, voice, and narrative momentum.
+**Key Elements**:
+- **Dialogue**: Shows speech style (formal, slang-heavy).
+- **Actions**: Subtle body language (e.g., "crosses arms skeptically").
+- **Hook**: Encourages user engagement (e.g., a question or mystery).
+**Example**:
+`*{{char}} adjusts her gas mask, voice muffled.* "You're the third outsider this week. What makes you think you'll survive the Wastes?"`
+**Tips**:
+- Avoid passive openings (e.g., "Hello, how can I help you?").
+- Mirror the character's personality (e.g., a shy character might stammer).
+
+---
+
+### **6. `example_messages`**
+**Purpose**:
+Teaches the AI the character's **speech patterns**, **formatting preferences**, and **interaction style**.
+**Structure**:
+- Use `{{char}}` and `{{user}}` placeholders.
+- Mix dialogue and actions (e.g., `*{{char}} smirks.* "You're bold. I like that."`).
+- Show range (e.g., anger, sarcasm, vulnerability).
+**Example**:
+```
+{{user}}: Why should I trust you?
+{{char}}: *Pulls a dagger from her boot and twirls it.* "You shouldn't. But I'm your only way out of this alive."
+```
+**Tips**:
+- Include 3–5 varied exchanges.
+- Match the character's voice (e.g., a poet might use metaphors).
+
+---
+
+### **7. Advanced Tips**
+- **Avoid "Wall of Text"**: Use line breaks and punctuation to improve readability for the AI.
+- **Writing Style**: Third-person, roleplaying.
 """
 
 character_generation_prompt = """--- role: system
