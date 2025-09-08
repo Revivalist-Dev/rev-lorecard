@@ -321,7 +321,7 @@ async def main():
     worker_thread.start()
 
     port = int(os.getenv("PORT", 3000))
-    config = uvicorn.Config(app, host="0.0.0.0", port=port, log_config=None)
+    config = uvicorn.Config(app, host="0.0.0.0", port=port, log_config=None, forwarded_allow_ips="*")
     server = uvicorn.Server(config)
 
     logger.info(f"Starting API server on http://0.0.0.0:{port}")
