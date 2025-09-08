@@ -18,6 +18,7 @@ from db.sources import (
     list_sources_by_project,
     update_project_source,
     delete_project_source,
+    get_project_source as db_get_project_source,
 )
 from db.source_hierarchy import (
     ProjectSourceHierarchy,
@@ -69,6 +70,19 @@ class SourceController(Controller):
         logger.debug(f"Adding source to project {project_id}")
         source_data = CreateProjectSource(project_id=project_id, **data)
         source = await create_project_source(source_data)
+        return SingleResponse(data=source)
+
+    @get("/{source_id:uuid}")
+    async def get_source_details(
+        self, project_id: str, source_id: UUID
+    ) -> SingleResponse[ProjectSource]:
+        """Gets the full details of a single source, including its raw_content."""
+        logger.debug(f"Getting details for source {source_id}")
+        source = await db_get_project_source(source_id)
+        if not source or source.project_id != project_id:
+            raise NotFoundException(
+                f"Source '{source_id}' not found in project '{project_id}'."
+            )
         return SingleResponse(data=source)
 
     @post("/test-selectors")

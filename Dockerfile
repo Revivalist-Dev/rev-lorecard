@@ -29,7 +29,7 @@ ENV PORT=3000
 ENV APP_ENV=production
 ENV RUNTIME_ENV=docker
 ENV DATABASE_TYPE=sqlite
-ENV DATABASE_URL=lorebook_creator.db
+ENV DATABASE_URL=lorecard.db
 ENV APP_VERSION=${APP_VERSION}
 
 # Install uv, the Python package manager

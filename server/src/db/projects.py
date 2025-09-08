@@ -10,6 +10,11 @@ from db.common import PaginatedResponse, PaginationMeta
 from db.database import AsyncDBTransaction
 
 
+class ProjectType(str, Enum):
+    LOREBOOK = "lorebook"
+    CHARACTER = "character"
+
+
 class SearchParams(BaseModel):
     purpose: str
     extraction_notes: str
@@ -19,14 +24,28 @@ class SearchParams(BaseModel):
 class ProjectTemplates(BaseModel):
     """Jinja templates for various tasks."""
 
-    selector_generation: str = Field(
-        description="The prompt used to instruct an LLM to analyze HTML and return a CSS selector."
+    # Lorebook-specific templates
+    selector_generation: Optional[str] = Field(
+        None,
+        description="The prompt used to instruct an LLM to analyze HTML and return a CSS selector.",
     )
-    entry_creation: str = Field(
-        description="The prompt used to instruct an LLM to process a scraped web page into a structured lorebook entry."
+    entry_creation: Optional[str] = Field(
+        None,
+        description="The prompt used to instruct an LLM to process a scraped web page into a structured lorebook entry.",
     )
-    search_params_generation: str = Field(
-        description="The prompt used to instruct an LLM to generate search parameters from a user prompt."
+    search_params_generation: Optional[str] = Field(
+        None,
+        description="The prompt used to instruct an LLM to generate search parameters from a user prompt.",
+    )
+
+    # Character-specific templates
+    character_generation: Optional[str] = Field(
+        None,
+        description="The prompt used to generate a full character card from source material.",
+    )
+    character_field_regeneration: Optional[str] = Field(
+        None,
+        description="The prompt used to regenerate a single field of a character card.",
     )
 
 
@@ -43,6 +62,7 @@ class ProjectStatus(str, Enum):
 class CreateProject(BaseModel):
     id: str
     name: str
+    project_type: ProjectType = ProjectType.LOREBOOK
     prompt: Optional[str] = None
     templates: ProjectTemplates
     requests_per_minute: int = 15
@@ -97,13 +117,14 @@ def _deserialize_project(row: Optional[Dict[str, Any]]) -> Optional[Project]:
 async def create_project(project: CreateProject) -> Project:
     db = await get_db_connection()
     query = """
-        INSERT INTO "Project" (id, name, prompt, templates, credential_id, model_name, model_parameters, requests_per_minute)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+        INSERT INTO "Project" (id, name, project_type, prompt, templates, credential_id, model_name, model_parameters, requests_per_minute)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
         RETURNING *
     """
     params = (
         project.id,
         project.name,
+        project.project_type.value,
         project.prompt,
         json.dumps(project.templates.model_dump()),
         project.credential_id,

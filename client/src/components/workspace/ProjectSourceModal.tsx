@@ -1,7 +1,7 @@
 import { Modal, TextInput, Button, Group, Stack, Text, NumberInput, Textarea, Collapse, Alert } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import { useEffect, useState } from 'react';
-import type { ProjectSource, TestSelectorsResult } from '../../types';
+import type { ProjectSource, TestSelectorsResult, ProjectType } from '../../types';
 import {
   useCreateProjectSource,
   useUpdateProjectSource,
@@ -15,6 +15,7 @@ interface ProjectSourceModalProps {
   onClose: () => void;
   projectId: string;
   source: ProjectSource | null;
+  projectType: ProjectType; // New prop
 }
 
 interface SourceFormValues {
@@ -25,7 +26,7 @@ interface SourceFormValues {
   link_extraction_pagination_selector: string;
 }
 
-export function ProjectSourceModal({ opened, onClose, projectId, source }: ProjectSourceModalProps) {
+export function ProjectSourceModal({ opened, onClose, projectId, source, projectType }: ProjectSourceModalProps) {
   const isEditMode = !!source;
   const createSourceMutation = useCreateProjectSource(projectId);
   const updateSourceMutation = useUpdateProjectSource(projectId);
@@ -112,6 +113,7 @@ export function ProjectSourceModal({ opened, onClose, projectId, source }: Proje
   };
 
   const isLoading = createSourceMutation.isPending || updateSourceMutation.isPending;
+  const isLorebookProject = projectType === 'lorebook';
 
   return (
     <Modal
@@ -126,86 +128,95 @@ export function ProjectSourceModal({ opened, onClose, projectId, source }: Proje
           <TextInput
             withAsterisk
             label="Source URL"
-            placeholder="e.g., https://elderscrolls.fandom.com/wiki/Category:Skyrim:_Locations"
+            placeholder={
+              isLorebookProject
+                ? 'e.g., https://elderscrolls.fandom.com/wiki/Category:Skyrim:_Locations'
+                : 'e.g., https://elderscrolls.fandom.com/wiki/Lydia_(Skyrim)'
+            }
             {...form.getInputProps('url')}
           />
-          <Group grow>
-            <NumberInput
-              label="Max Pages to Crawl"
-              description="Pagination limit per source. Set to 1 to disable."
-              defaultValue={20}
-              min={1}
-              max={100}
-              {...form.getInputProps('max_pages_to_crawl')}
-            />
-            <NumberInput
-              label="Max Crawl Depth"
-              description="How many levels of sub-categories to discover."
-              defaultValue={1}
-              min={1}
-              max={5}
-              {...form.getInputProps('max_crawl_depth')}
-            />
-          </Group>
 
-          {isEditMode && (
+          {isLorebookProject && (
             <>
-              <Button variant="subtle" size="xs" onClick={toggleSelectors}>
-                {selectorsVisible ? 'Hide' : 'Show'} Advanced: CSS Selectors
-              </Button>
-              <Collapse in={selectorsVisible}>
-                <Stack>
-                  <Textarea
-                    label="Content Link Selectors"
-                    description="CSS selectors for links to content pages, one per line."
-                    autosize
-                    minRows={3}
-                    {...form.getInputProps('link_extraction_selector')}
-                  />
-                  <TextInput
-                    label="Pagination Link Selector"
-                    description="CSS selector for the 'next page' link."
-                    {...form.getInputProps('link_extraction_pagination_selector')}
-                  />
-                  <Group justify="flex-end">
-                    <Button
-                      variant="outline"
-                      onClick={handleTestSelectors}
-                      loading={testSelectorsMutation.isPending}
-                      disabled={!form.values.url}
-                    >
-                      Test Selectors
-                    </Button>
-                  </Group>
-                  {testResult && (
-                    <Alert
-                      icon={<IconAlertCircle size="1rem" />}
-                      title="Selector Test Result"
-                      color={testResult.error ? 'red' : 'green'}
-                      withCloseButton
-                      onClose={() => setTestResult(null)}
-                    >
-                      {testResult.error ? (
-                        <Text>{testResult.error}</Text>
-                      ) : (
-                        <Stack>
-                          <Text>Found {testResult.link_count} content links.</Text>
-                          {testResult.pagination_link ? (
-                            <Text>Pagination link found: {testResult.pagination_link}</Text>
+              <Group grow>
+                <NumberInput
+                  label="Max Pages to Crawl"
+                  description="Pagination limit per source. Set to 1 to disable."
+                  defaultValue={20}
+                  min={1}
+                  max={100}
+                  {...form.getInputProps('max_pages_to_crawl')}
+                />
+                <NumberInput
+                  label="Max Crawl Depth"
+                  description="How many levels of sub-categories to discover."
+                  defaultValue={1}
+                  min={1}
+                  max={5}
+                  {...form.getInputProps('max_crawl_depth')}
+                />
+              </Group>
+
+              {isEditMode && (
+                <>
+                  <Button variant="subtle" size="xs" onClick={toggleSelectors}>
+                    {selectorsVisible ? 'Hide' : 'Show'} Advanced: CSS Selectors
+                  </Button>
+                  <Collapse in={selectorsVisible}>
+                    <Stack>
+                      <Textarea
+                        label="Content Link Selectors"
+                        description="CSS selectors for links to content pages, one per line."
+                        autosize
+                        minRows={3}
+                        {...form.getInputProps('link_extraction_selector')}
+                      />
+                      <TextInput
+                        label="Pagination Link Selector"
+                        description="CSS selector for the 'next page' link."
+                        {...form.getInputProps('link_extraction_pagination_selector')}
+                      />
+                      <Group justify="flex-end">
+                        <Button
+                          variant="outline"
+                          onClick={handleTestSelectors}
+                          loading={testSelectorsMutation.isPending}
+                          disabled={!form.values.url}
+                        >
+                          Test Selectors
+                        </Button>
+                      </Group>
+                      {testResult && (
+                        <Alert
+                          icon={<IconAlertCircle size="1rem" />}
+                          title="Selector Test Result"
+                          color={testResult.error ? 'red' : 'green'}
+                          withCloseButton
+                          onClose={() => setTestResult(null)}
+                        >
+                          {testResult.error ? (
+                            <Text>{testResult.error}</Text>
                           ) : (
-                            <Text>No pagination link found.</Text>
+                            <Stack>
+                              <Text>Found {testResult.link_count} content links.</Text>
+                              {testResult.pagination_link ? (
+                                <Text>Pagination link found: {testResult.pagination_link}</Text>
+                              ) : (
+                                <Text>No pagination link found.</Text>
+                              )}
+                              {testResult.content_links.length > 0 && (
+                                <Text size="xs" c="dimmed">
+                                  First link: {testResult.content_links[0]}
+                                </Text>
+                              )}
+                            </Stack>
                           )}
-                          {testResult.content_links.length > 0 && (
-                            <Text size="xs" c="dimmed">
-                              First link: {testResult.content_links[0]}
-                            </Text>
-                          )}
-                        </Stack>
+                        </Alert>
                       )}
-                    </Alert>
-                  )}
-                </Stack>
-              </Collapse>
+                    </Stack>
+                  </Collapse>
+                </>
+              )}
             </>
           )}
 

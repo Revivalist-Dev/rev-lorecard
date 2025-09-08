@@ -39,11 +39,11 @@ async def init_database():
 
     if db_type == "postgres":
         db_url = os.environ.get(
-            "DATABASE_URL", "postgresql://user:password@localhost:5432/lorebook_creator"
+            "DATABASE_URL", "postgresql://user:password@localhost:5432/lorecard"
         )
         db = PostgresDB(db_url)
     elif db_type == "sqlite":
-        db_url = os.environ.get("DATABASE_URL", "lorebook_creator.db")
+        db_url = os.environ.get("DATABASE_URL", "lorecard.db")
         db = SQLiteDB(db_url)
     else:
         raise ValueError(f"Unsupported DATABASE_TYPE: {db_type}")

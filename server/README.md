@@ -1,4 +1,4 @@
-# lorebook_creator
+# lorecard server
 
 ## Setup
 

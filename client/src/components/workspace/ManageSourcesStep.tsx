@@ -264,7 +264,13 @@ export function ManageSourcesStep({ project }: StepProps) {
 
   return (
     <>
-      <ProjectSourceModal opened={modalOpened} onClose={closeModal} projectId={project.id} source={selectedSource} />
+      <ProjectSourceModal
+        opened={modalOpened}
+        onClose={closeModal}
+        projectId={project.id}
+        source={selectedSource}
+        projectType="lorebook"
+      />
       <Stack>
         <Group justify="space-between">
           <Text>Add sources, then select them to discover sub-categories and crawl for links.</Text>

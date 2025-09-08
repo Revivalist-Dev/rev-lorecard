@@ -29,6 +29,9 @@ class TaskName(str, Enum):
     PROCESS_PROJECT_ENTRIES = "process_project_entries"
     GENERATE_SEARCH_PARAMS = "generate_search_params"
     RESCAN_LINKS = "rescan_links"
+    FETCH_SOURCE_CONTENT = "fetch_source_content"
+    GENERATE_CHARACTER_CARD = "generate_character_card"
+    REGENERATE_CHARACTER_FIELD = "regenerate_character_field"
 
 
 PARALLEL_LIMITS = {
@@ -37,6 +40,9 @@ PARALLEL_LIMITS = {
     TaskName.PROCESS_PROJECT_ENTRIES: 1,
     TaskName.GENERATE_SEARCH_PARAMS: 1,
     TaskName.RESCAN_LINKS: 1,
+    TaskName.FETCH_SOURCE_CONTENT: 1,
+    TaskName.GENERATE_CHARACTER_CARD: 1,
+    TaskName.REGENERATE_CHARACTER_FIELD: 1,
 }
 
 
@@ -57,11 +63,33 @@ class GenerateSearchParamsPayload(BaseModel):
     pass
 
 
+class FetchSourceContentPayload(BaseModel):
+    source_ids: List[UUID]
+
+
+class GenerateCharacterCardPayload(BaseModel):
+    source_ids: Optional[List[UUID]] = None
+
+
+class RegenerateCharacterFieldContextOptions(BaseModel):
+    include_existing_fields: bool
+    source_ids_to_include: List[UUID]
+
+
+class RegenerateCharacterFieldPayload(BaseModel):
+    field_to_regenerate: str
+    custom_prompt: Optional[str] = None
+    context_options: RegenerateCharacterFieldContextOptions
+
+
 TaskPayload = Union[
     DiscoverAndCrawlSourcesPayload,
     ConfirmLinksPayload,
     ProcessProjectEntriesPayload,
     GenerateSearchParamsPayload,
+    FetchSourceContentPayload,
+    GenerateCharacterCardPayload,
+    RegenerateCharacterFieldPayload,
 ]
 
 
@@ -86,11 +114,27 @@ class GenerateSearchParamsResult(BaseModel):
     pass
 
 
+class FetchSourceContentResult(BaseModel):
+    sources_fetched: int
+    sources_failed: int
+
+
+class GenerateCharacterCardResult(BaseModel):
+    pass
+
+
+class RegenerateCharacterFieldResult(BaseModel):
+    field_regenerated: str
+
+
 TaskResult = Union[
     DiscoverAndCrawlSourcesResult,
     ConfirmLinksResult,
     ProcessProjectEntriesResult,
     GenerateSearchParamsResult,
+    FetchSourceContentResult,
+    GenerateCharacterCardResult,
+    RegenerateCharacterFieldResult,
 ]
 
 
@@ -141,6 +185,9 @@ def _deserialize_job(db_row: Dict[str, Any]) -> BackgroundJob:
         TaskName.PROCESS_PROJECT_ENTRIES: ProcessProjectEntriesPayload,
         TaskName.GENERATE_SEARCH_PARAMS: GenerateSearchParamsPayload,
         TaskName.RESCAN_LINKS: DiscoverAndCrawlSourcesPayload,
+        TaskName.FETCH_SOURCE_CONTENT: FetchSourceContentPayload,
+        TaskName.GENERATE_CHARACTER_CARD: GenerateCharacterCardPayload,
+        TaskName.REGENERATE_CHARACTER_FIELD: RegenerateCharacterFieldPayload,
     }
     if db_row.get("payload") is not None:
         try:
@@ -157,6 +204,9 @@ def _deserialize_job(db_row: Dict[str, Any]) -> BackgroundJob:
         TaskName.PROCESS_PROJECT_ENTRIES: ProcessProjectEntriesResult,
         TaskName.GENERATE_SEARCH_PARAMS: GenerateSearchParamsResult,
         TaskName.RESCAN_LINKS: DiscoverAndCrawlSourcesResult,
+        TaskName.FETCH_SOURCE_CONTENT: FetchSourceContentResult,
+        TaskName.GENERATE_CHARACTER_CARD: GenerateCharacterCardResult,
+        TaskName.REGENERATE_CHARACTER_FIELD: RegenerateCharacterFieldResult,
     }
     if db_row.get("result") is not None:
         try:

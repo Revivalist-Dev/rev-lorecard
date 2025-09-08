@@ -16,3 +16,4 @@ beautifulsoup4
 lxml
 html-to-markdown
 cryptography
+Pillow

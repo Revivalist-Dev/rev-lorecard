@@ -1,6 +1,13 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import apiClient from '../services/api';
-import type { BackgroundJob, PaginatedResponse, SingleResponse, ProcessProjectEntriesPayload } from '../types';
+import type {
+  BackgroundJob,
+  PaginatedResponse,
+  SingleResponse,
+  ProcessProjectEntriesPayload,
+  RegenerateCharacterFieldPayload,
+  GenerateCharacterCardPayload,
+} from '../types';
 import { notifications } from '@mantine/notifications';
 
 interface CreateJobForProjectPayload {
@@ -35,14 +42,28 @@ const optimisticallyAddNewJob = (queryClient: ReturnType<typeof useQueryClient>,
 };
 
 const createJob =
-  <T extends CreateJobForProjectPayload | CreateJobForSourcePayload | ProcessProjectEntriesPayload>(endpoint: string) =>
+  <
+    T extends
+      | CreateJobForProjectPayload
+      | CreateJobForSourcePayload
+      | ProcessProjectEntriesPayload
+      | RegenerateCharacterFieldPayload
+      | GenerateCharacterCardPayload,
+  >(
+    endpoint: string
+  ) =>
   async (payload: T): Promise<SingleResponse<BackgroundJob>> => {
     const response = await apiClient.post(`/jobs/${endpoint}`, payload);
     return response.data;
   };
 
 const useJobMutation = <
-  T extends CreateJobForProjectPayload | CreateJobForSourcePayload | ProcessProjectEntriesPayload,
+  T extends
+    | CreateJobForProjectPayload
+    | CreateJobForSourcePayload
+    | ProcessProjectEntriesPayload
+    | RegenerateCharacterFieldPayload
+    | GenerateCharacterCardPayload,
 >(
   endpoint: string,
   notificationTitle: string
@@ -82,6 +103,14 @@ export const useDiscoverAndCrawlJob = () =>
 export const useProcessProjectEntriesJob = () =>
   useJobMutation<ProcessProjectEntriesPayload>('process-project-entries', 'Lorebook Generation Started');
 export const useRescanLinksJob = () => useJobMutation<CreateJobForSourcePayload>('rescan-links', 'Link Rescan Started');
+
+// Character Jobs
+export const useFetchContentJob = () =>
+  useJobMutation<CreateJobForSourcePayload>('fetch-content', 'Content Fetching Started');
+export const useGenerateCharacterJob = () =>
+  useJobMutation<GenerateCharacterCardPayload>('generate-character', 'Character Generation Started');
+export const useRegenerateFieldJob = () =>
+  useJobMutation<RegenerateCharacterFieldPayload>('regenerate-field', 'Field Regeneration Started');
 
 // The confirm-links job for the confirmation step.
 interface ConfirmLinksPayload {

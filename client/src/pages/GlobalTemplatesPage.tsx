@@ -93,6 +93,9 @@ export function GlobalTemplatesPage() {
               'search-params-prompt',
               'entry-creation-prompt',
               'lorebook-definition',
+              'character-field-regeneration-prompt',
+              'character-generation-prompt',
+              'character-card-definition',
             ].includes(template.id)}
           >
             <IconTrash size={16} />

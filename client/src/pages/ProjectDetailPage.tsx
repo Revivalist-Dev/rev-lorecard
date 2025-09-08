@@ -14,6 +14,7 @@ import { ApiRequestLogModal } from '../components/projects/ApiRequestLogModal';
 import { ProjectAnalyticsModal } from '../components/projects/ProjectAnalyticsModal';
 import { ProjectModal } from '../components/projects/ProjectModal';
 import { useEffect } from 'react';
+import { CharacterWorkspace } from '../components/workspace/CharacterWorkspace';
 
 const stepIdentifiers = ['search-params', 'sources', 'links', 'entries', 'completed'] as const;
 type StepIdentifier = (typeof stepIdentifiers)[number];
@@ -64,7 +65,7 @@ export function ProjectDetailPage() {
         : 0;
 
   useEffect(() => {
-    if (project && !searchParams.get('step')) {
+    if (project && project.project_type === 'lorebook' && !searchParams.get('step')) {
       const stepIndexForStatus = statusToStepIndex[project.status];
       setSearchParams({ step: stepIndexToIdentifier[stepIndexForStatus] }, { replace: true });
     }
@@ -96,6 +97,32 @@ export function ProjectDetailPage() {
     transition: 'opacity 300ms ease',
   });
 
+  const renderWorkspace = () => {
+    if (project.project_type === 'character') {
+      return <CharacterWorkspace project={project} />;
+    }
+
+    return (
+      <Stepper active={activeStep} onStepClick={handleStepClick}>
+        <Stepper.Step label="Step 1" description="Search Params" style={futureStepStyle(0)}>
+          <StepGenerateSearchParams project={project} />
+        </Stepper.Step>
+        <Stepper.Step label="Step 2" description="Manage Sources & Crawl" style={futureStepStyle(1)}>
+          <ManageSourcesStep project={project} />
+        </Stepper.Step>
+        <Stepper.Step label="Step 3" description="Confirm Links" style={futureStepStyle(2)}>
+          <StepConfirmLinks project={project} />
+        </Stepper.Step>
+        <Stepper.Step label="Step 4" description="Generate Entries" style={futureStepStyle(3)}>
+          <StepProcessEntries project={project} />
+        </Stepper.Step>
+        <Stepper.Step label="Completed" description="Review & Download" style={futureStepStyle(4)}>
+          <StepCompletedView project={project} />
+        </Stepper.Step>
+      </Stepper>
+    );
+  };
+
   return (
     <>
       <ApiRequestLogModal opened={logsModalOpened} onClose={closeLogsModal} projectId={project.id} />
@@ -121,23 +148,7 @@ export function ProjectDetailPage() {
         </Group>
 
         <Paper withBorder p="xl" mt="lg" radius="md">
-          <Stepper active={activeStep} onStepClick={handleStepClick}>
-            <Stepper.Step label="Step 1" description="Search Params" style={futureStepStyle(0)}>
-              <StepGenerateSearchParams project={project} />
-            </Stepper.Step>
-            <Stepper.Step label="Step 2" description="Manage Sources & Crawl" style={futureStepStyle(1)}>
-              <ManageSourcesStep project={project} />
-            </Stepper.Step>
-            <Stepper.Step label="Step 3" description="Confirm Links" style={futureStepStyle(2)}>
-              <StepConfirmLinks project={project} />
-            </Stepper.Step>
-            <Stepper.Step label="Step 4" description="Generate Entries" style={futureStepStyle(3)}>
-              <StepProcessEntries project={project} />
-            </Stepper.Step>
-            <Stepper.Step label="Completed" description="Review & Download" style={futureStepStyle(4)}>
-              <StepCompletedView project={project} />
-            </Stepper.Step>
-          </Stepper>
+          {renderWorkspace()}
         </Paper>
       </Stack>
     </>

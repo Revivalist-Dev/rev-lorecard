@@ -8,6 +8,6 @@ services:
       - OPENAI_COMPATIBLE_BASE_URL=${OPENAI_COMPATIBLE_BASE_URL}
       - OPENAI_COMPATIBLE_API_KEY=${OPENAI_COMPATIBLE_API_KEY}
       - DATABASE_TYPE=sqlite
-      - DATABASE_URL=/app/server/data/${SQLITE_DB_NAME:-lorebook_creator.db}
+      - DATABASE_URL=/app/server/data/${SQLITE_DB_NAME:-lorecard.db}
     volumes:
       - ./data:/app/server/data
