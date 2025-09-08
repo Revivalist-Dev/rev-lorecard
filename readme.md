@@ -1,11 +1,11 @@
 # Lorecard
 
-Create lorebooks from URLs using LLMs.
+Create characters and lorebooks from URLs using LLMs.
 
 ## Screenshots & Videos
 
 <details>
-  <summary>Main Workflow</summary>
+  <summary>Lorebook Workflow</summary>
   
   *A video demonstrating the main workflow of creating a lorebook from a URL*
 
@@ -13,35 +13,57 @@ https://github.com/user-attachments/assets/38f6dbd7-4975-47f1-8e4f-3e9319cce083
 
 </details>
 
-<details>
-  <summary>Manage Sources</summary>
+  <summary>Character Workflow</summary>
   
-  ![Manage Sources](showcase/manage-sources.png)
+  *A video demonstrating the main workflow of creating a character from a URL*
 
-  ![Manage Sources](showcase/edit-source.png)
+...
+
+</details>
+
+<details>
+  <summary>[Lorebook]Manage Sources</summary>
+  
+  ![Lorebook Manage Sources](showcase/lorebook-manage-sources.png)
+
+  ![Lorebook Edit Sources](showcase/lorebook-edit-source.png)
   
 </details>
 
 <details>
-  <summary>Confirming Links</summary>
+  <summary>[Lorebook]Confirming Links</summary>
   
-  ![Confirming Links](showcase/confirm-links.png)
-  
-</details>
-
-<details>
-  <summary>Generate Entries</summary>
-  
-  ![Generate Entries](showcase/generate-entries.png)
+  ![Lorebook Confirming Links](showcase/lorebook-confirm-links.png)
   
 </details>
 
 <details>
-  <summary>Completed Lorebook</summary>
+  <summary>[Lorebook]Generate Entries</summary>
+  
+  ![Lorebook Generate Entries](showcase/lorebook-generate-entries.png)
+  
+</details>
+
+<details>
+  <summary>[Lorebook]Completed Lorebook</summary>
   
   *The final generated lorebook, structured and ready for use.*
   
-  ![Completed Lorebook](showcase/complete.png)
+  ![Completed Lorebook](showcase/lorebook-complete.png)
+</details>
+
+<details>
+  <summary>[Character]Overview</summary>
+  
+  ![Character Overview](showcase/character-complete.png)
+  
+</details>
+
+<details>
+  <summary>[Character]Regenerate</summary>
+  
+  ![Character Regenerate](showcase/character-regenerate.png)
+  
 </details>
 
 <details>
