@@ -82,9 +82,10 @@ https://github.com/user-attachments/assets/abd86ee8-b347-40f2-a768-cb83d5607d1f
 </details>
 
 ## Some notes
-- This is not deep research; it doesn't involve a web search. You need to give a URL that has multiple links. _Fandom:category_ pages are perfect for the app. For example, you can give [Oblivion Skill Books](https://elderscrolls.fandom.com/wiki/Category:Oblivion:_Skill_Books). So this is going to extract all books and navigate one by one, and create a lorebook for each book.
+- **Lorebook creation:** This is not deep research; it doesn't involve a web search. You need to give a URL that has multiple links. _Fandom:category_ pages are perfect for the app. For example, you can give [Oblivion Skill Books](https://elderscrolls.fandom.com/wiki/Category:Oblivion:_Skill_Books). So this is going to extract all books and navigate one by one, and create a lorebook for each book.
+- **Character creation:** You can simply give a URL for a character. It will extract the the page.
 - You can see all API request logs on the API Requests modal. You can also see the project analytics on the Project Analytics modal.
-- You can edit all prompts on the Templates page.
+- You can edit all prompts on the _Global Templates_ page and _Project Edit_ modal.
 
 ### Input token usage
 #### Lorebook
