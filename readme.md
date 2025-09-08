@@ -86,10 +86,14 @@ https://github.com/user-attachments/assets/abd86ee8-b347-40f2-a768-cb83d5607d1f
 - You can see all API request logs on the API Requests modal. You can also see the project analytics on the Project Analytics modal.
 - You can edit all prompts on the Templates page.
 
-### Input token usage by steps
+### Input token usage
+#### Lorebook
 1. **Search Params:** Single LLM request. This is a very simple operation. Input token is very low.
 2. **Manage Sources & Crawl** _Discover & Scan_ button makes one LLM request per source. If `Max Crawl Depth` is more than 1, it will discover sub-categories and make an LLM request for each one. We give the LLM [cleaned html](https://github.com/bmen25124/lorecard/blob/main/server/src/services/scraper.py#L8), so token usage can be high. You can use _Rescan Selected_ to find new links on previously scanned sources without using the LLM.
 3. **Generate Entries:** Request count = link count. We are giving the LLM [cleaned html -> markdown](https://github.com/bmen25124/lorecard/blob/main/server/src/services/scraper.py#L111). Token usage depends on the page length. This step typically consumes the most tokens.
+
+#### Character
+- It is only generate and regenate actions. However there are estimated token count for each source.
 
 ## How to Install and Run the Application
 
