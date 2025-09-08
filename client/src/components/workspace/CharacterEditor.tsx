@@ -43,14 +43,16 @@ export function CharacterEditor({ project, selectedSourceIds }: CharacterEditorP
   useEffect(() => {
     if (characterCardResponse?.data) {
       const { name, description, persona, scenario, first_message, example_messages } = characterCardResponse.data;
-      form.setValues({
+      const values = {
         name: name || '',
         description: description || '',
         persona: persona || '',
         scenario: scenario || '',
         first_message: first_message || '',
         example_messages: example_messages || '',
-      });
+      };
+      form.setValues(values);
+      form.resetDirty(values);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [characterCardResponse]);

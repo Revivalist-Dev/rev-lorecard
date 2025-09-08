@@ -261,7 +261,7 @@ async def generate_character_card(job: BackgroundJob, project: Project):
 
     provider = await _get_provider_for_project(project)
     global_templates = await list_all_global_templates()
-    globals_dict = {gt.id: gt.content for gt in global_templates}
+    globals_dict = {gt.name: gt.content for gt in global_templates}
     context = {
         "project": project.model_dump(),
         "content": all_content,
@@ -272,7 +272,7 @@ async def generate_character_card(job: BackgroundJob, project: Project):
         ChatCompletionRequest(
             model=project.model_name,
             messages=create_messages_from_template(
-                globals_dict["character-generation-prompt"], context
+                globals_dict["character_generation_prompt"], context
             ),
             response_format=ResponseSchema(
                 name="character_card_data",
@@ -356,7 +356,7 @@ async def regenerate_character_field(job: BackgroundJob, project: Project):
     # --- 2. LLM Call ---
     provider = await _get_provider_for_project(project)
     global_templates = await list_all_global_templates()
-    globals_dict = {gt.id: gt.content for gt in global_templates}
+    globals_dict = {gt.name: gt.content for gt in global_templates}
     context = {
         "project": project.model_dump(),
         "field_to_regenerate": job.payload.field_to_regenerate,
@@ -1277,6 +1277,19 @@ async def process_project_entries(job: BackgroundJob, project: Project):
 
 # --- Main Job Processor ---
 
+JOB_HANDLERS = {
+    # Lorebook Jobs
+    TaskName.DISCOVER_AND_CRAWL_SOURCES: discover_and_crawl_sources,
+    TaskName.RESCAN_LINKS: rescan_links,
+    TaskName.CONFIRM_LINKS: confirm_links,
+    TaskName.PROCESS_PROJECT_ENTRIES: process_project_entries,
+    TaskName.GENERATE_SEARCH_PARAMS: generate_search_params,
+    # Character Jobs
+    TaskName.FETCH_SOURCE_CONTENT: fetch_source_content,
+    TaskName.GENERATE_CHARACTER_CARD: generate_character_card,
+    TaskName.REGENERATE_CHARACTER_FIELD: regenerate_character_field,
+}
+
 
 async def process_background_job(id: UUID):
     job = await get_background_job(id)
@@ -1293,24 +1306,13 @@ async def process_background_job(id: UUID):
         return
 
     try:
-        # Lorebook Jobs
-        if job.task_name == TaskName.DISCOVER_AND_CRAWL_SOURCES:
-            await discover_and_crawl_sources(job, project)
-        elif job.task_name == TaskName.RESCAN_LINKS:
-            await rescan_links(job, project)
-        elif job.task_name == TaskName.CONFIRM_LINKS:
-            await confirm_links(job, project)
-        elif job.task_name == TaskName.PROCESS_PROJECT_ENTRIES:
-            await process_project_entries(job, project)
-        elif job.task_name == TaskName.GENERATE_SEARCH_PARAMS:
-            await generate_search_params(job, project)
-        # Character Jobs
-        elif job.task_name == TaskName.FETCH_SOURCE_CONTENT:
-            await fetch_source_content(job, project)
-        elif job.task_name == TaskName.GENERATE_CHARACTER_CARD:
-            await generate_character_card(job, project)
-        elif job.task_name == TaskName.REGENERATE_CHARACTER_FIELD:
-            await regenerate_character_field(job, project)
+        handler = JOB_HANDLERS.get(job.task_name)
+        if handler:
+            await handler(job, project)
+        else:
+            logger.error(f"[{job.id}] No handler found for task: {job.task_name}")
+            # To ensure the job is marked as failed, we can raise an exception
+            raise ValueError(f"No handler for task {job.task_name}")
 
     except Exception as e:
         logger.error(f"[{job.id}] Error processing job: {e}", exc_info=True)

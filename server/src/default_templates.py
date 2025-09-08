@@ -73,7 +73,7 @@ entry_creation_prompt = """--- role: system
 ---
 
 --- role: system
-Analyze the following source content (extracted from {{source.url}}) and create a single, detailed SillyTavern lorebook entry.
+Analyze the following source content (extracted from {{source.url}}) and create a single, detailed lorebook entry.
 
 **CRITERIA FOR VALIDATION:**
 *{{project.search_params.criteria}}*
@@ -115,19 +115,21 @@ A Lorebook is a collection of entries used to provide an AI with consistent, con
 
 # --- Character Creator Templates ---
 
-character_card_definition = """### SILLYTAVERN CHARACTER CARD DEFINITION
+character_card_definition = """### CHARACTER CARD DEFINITION
 
 A Character Card is a structured JSON-like format used to define an AI roleplaying character.
 
-**Purpose:** To create a complete, interactive character with a defined personality, backstory, and conversational style for use in SillyTavern.
+**Purpose:** To create a complete, interactive character with a defined personality, backstory, and conversational style.
 
 **Standard Card Structure:**
 - `name`: The character's full name.
-- `description`: A detailed physical and general description. Written in the third person. Should include appearance, attire, and general demeanor.
-- `persona`: A detailed description of the character's personality, demeanor, motivations, and inner thoughts. Written in the third person. This is the core of their personality.
+- `description`: A detailed physical and general description. Should include appearance, attire, and general demeanor.
+- `persona`: A detailed description of the character's personality, demeanor, motivations, and inner thoughts. This is the core of their personality.
 - `scenario`: The setting or situation the character is in when the user first meets them.
-- `first_message`: The character's first message to the user, written in a roleplay style from the character's perspective. It should be engaging and set the scene.
-- `example_messages`: A long string containing several example dialogue exchanges between {{user}} and {{char}} to demonstrate the character's speaking style, personality, and how they interact. Must include multiple back-and-forths. Use markdown for actions (e.g., *she smiles*).
+- `first_message`: The character's first message to the user. It should be engaging and set the scene.
+- `example_messages`: A string containing several example dialogue exchanges between {{user}} and {{char}} to demonstrate the character's speaking style, personality, and how they interact. Must include multiple back-and-forths. Use markdown for actions (e.g., *she smiles*).
+
+**Writing Style:** Third-person, roleplaying.
 """
 
 character_generation_prompt = """--- role: system
@@ -135,14 +137,14 @@ character_generation_prompt = """--- role: system
 ---
 
 --- role: system
-Your task is to create a complete SillyTavern Character Card based on the provided source material. Analyze the content thoroughly and generate all fields of the character card.
+Your task is to create a complete Character Card based on the provided source material. Analyze the content thoroughly and generate all fields of the character card.
 
 **Project Goal/Prompt:** {{ project.prompt }}
 
 **Rules:**
 1.  Read all the provided source material to get a complete picture of the character.
 2.  Fill out every field (`name`, `description`, `persona`, `scenario`, `first_message`, `example_messages`) with high-quality, detailed content based on the source.
-3.  The `example_messages` field must be a long, single string containing multiple dialogue examples.
+3.  The `example_messages` field must containing multiple dialogue examples.
 ---
 
 --- role: user

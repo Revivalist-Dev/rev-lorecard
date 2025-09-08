@@ -72,12 +72,12 @@ class CharacterCardController(Controller):
 
     @get("/export")
     async def export_character_card(self, project_id: str) -> Response:
-        """Export the character card as a SillyTavern v2 PNG file."""
+        """Export the character card as a v2 PNG file."""
         card = await get_character_card_by_project(project_id)
         if not card or not card.name:
             raise NotFoundException("Character card is not generated or is empty.")
 
-        # Format for SillyTavern v2 spec
+        # Format for v2 spec
         spec_v2_data = {
             "spec": "chara_card_v2",
             "spec_version": "2.0",

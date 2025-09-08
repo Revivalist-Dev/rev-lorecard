@@ -113,13 +113,14 @@ export function CharacterSources({ project, selectedSourceIds, setSelectedSource
                       <Group gap="xs" wrap="nowrap">
                         <Checkbox
                           checked={selectedSourceIds.includes(source.id)}
-                          onChange={(event) =>
+                          onChange={(event) => {
+                            const { checked } = event.currentTarget;
                             setSelectedSourceIds((current) =>
-                              event.currentTarget?.checked
+                              checked
                                 ? [...current, source.id]
                                 : current.filter((id) => id !== source.id)
-                            )
-                          }
+                            );
+                          }}
                           disabled={!source.last_crawled_at}
                         />
                         <Box>
