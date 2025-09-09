@@ -26,6 +26,10 @@ class AsyncDBTransaction(ABC):
     """Abstract base class for a transaction-bound database interface."""
 
     @abstractmethod
+    def database_type(self) -> DatabaseType:
+        pass
+
+    @abstractmethod
     async def execute(self, query: str, params: Optional[tuple] = None) -> None:
         pass
 
@@ -189,6 +193,9 @@ class PostgresDB(AsyncDB):
                         self._conn = conn
                         self._db = db
 
+                    def database_type(self) -> DatabaseType:
+                        return self._db.database_type()
+
                     async def execute(
                         self, query: str, params: Optional[tuple] = None
                     ) -> None:
@@ -238,6 +245,9 @@ class _SQLiteTransaction(AsyncDBTransaction):
         self._db_instance = db_instance
         self._commit_required = False
 
+    def database_type(self) -> DatabaseType:
+        return self._db_instance.database_type()
+
     async def execute(self, query: str, params: Optional[tuple] = None) -> None:
         await self._conn.execute(
             query.replace("%s", "?"), self._db_instance._process_params(params) or ()
@@ -280,6 +290,9 @@ class _SQLiteTransaction(AsyncDBTransaction):
 class _SQLitePassthroughTransaction(AsyncDBTransaction):
     def __init__(self, db_instance: "SQLiteDB"):
         self._db_instance = db_instance
+
+    def database_type(self) -> DatabaseType:
+        return self._db_instance.database_type()
 
     async def execute(self, query: str, params: Optional[tuple] = None) -> None:
         await self._db_instance.execute(query, params)

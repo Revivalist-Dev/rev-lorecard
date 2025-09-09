@@ -3,7 +3,7 @@ from sqlite3 import OperationalError as SQLiteOperationalError
 from typing import Dict
 from uuid import uuid4
 from db.common import CreateGlobalTemplate
-from db.database import AsyncDBTransaction
+from db.database import AsyncDBTransaction, DatabaseType
 from logging_config import get_logger
 import default_templates
 from services.encryption import encrypt
@@ -168,84 +168,96 @@ async def v6_migrate_to_credentials(tx: AsyncDBTransaction) -> None:
     - Reads `ai_provider_config` from the old project table structure.
     - Creates a new `Credential` for each unique provider config.
     - Updates each project to point to its corresponding new `Credential`.
-    - Finally, drops the old table (for SQLite).
+    - Finally, drops the old table (for SQLite) or column (for PostgreSQL).
     """
     logger.info(
         "Running data migration for v6: Migrating ai_provider_config to Credentials..."
     )
 
-    try:
-        # In SQLite, the old table is named 'Project_old_for_credentials'
-        projects = await tx.fetch_all(
-            'SELECT id, ai_provider_config FROM "Project_old_for_credentials"'
-        )
-    except (Exception, SQLiteOperationalError):
-        # In PostgreSQL, the column still exists on the 'Project' table
+    projects = []
+    if tx.database_type() == DatabaseType.SQLITE:
+        try:
+            # In SQLite, the old table is renamed, so we read from there.
+            projects = await tx.fetch_all(
+                'SELECT id, ai_provider_config FROM "Project_old_for_credentials"'
+            )
+        except (Exception, SQLiteOperationalError) as e:
+            # This can happen if the table doesn't exist (e.g., no projects existed before migration)
+            logger.warning(
+                f"Could not select from Project_old_for_credentials, assuming no projects to migrate: {e}"
+            )
+            projects = []
+    else:  # PostgreSQL
+        # In PostgreSQL, the column exists on the main table during the transaction.
         projects = await tx.fetch_all('SELECT id, ai_provider_config FROM "Project"')
 
     if not projects:
         logger.info("No existing projects to migrate.")
-        return
+    else:
+        # A map to store unique provider configs and their new credential ID
+        config_to_credential_id: Dict[str, str] = {}
 
-    # A map to store unique provider configs and their new credential ID
-    config_to_credential_id: Dict[str, str] = {}
+        for project in projects:
+            config_raw = project.get("ai_provider_config")
+            if not config_raw:
+                continue
 
-    for project in projects:
-        config_raw = project.get("ai_provider_config")
-        if not config_raw:
-            continue
-
-        config = json.loads(config_raw) if isinstance(config_raw, str) else config_raw
-
-        # Create a stable key for the config to find duplicates
-        config_key = json.dumps(config, sort_keys=True)
-        credential_id = config_to_credential_id.get(config_key)
-
-        if not credential_id:
-            # This is a new, unique config. Create a credential for it.
-            provider = config.get("api_provider")
-            model = config.get("model_name")
-
-            # Prepare credential values (only api_key for now)
-            values_to_encrypt = {}
-            # For this one-time migration, we don't have stored keys.
-            # We can leave it empty, and the user will have to re-enter them.
-            # This is safer than trying to guess or use env vars.
-
-            encrypted_values = encrypt(json.dumps(values_to_encrypt))
-            new_credential_id = uuid4()
-            credential_name = f"Migrated - {provider} - {model}"
-
-            await tx.execute(
-                'INSERT INTO "Credential" (id, name, provider_type, "values") VALUES (%s, %s, %s, %s)',
-                (new_credential_id, credential_name, provider, encrypted_values),
+            config = (
+                json.loads(config_raw) if isinstance(config_raw, str) else config_raw
             )
-            credential_id = str(new_credential_id)
-            config_to_credential_id[config_key] = credential_id
-            logger.info(f"Created new credential '{credential_name}' for migration.")
 
-        # Update the project with the new structure
-        await tx.execute(
-            """
-            UPDATE "Project"
-            SET credential_id = %s, model_name = %s, model_parameters = %s
-            WHERE id = %s
-            """,
-            (
-                credential_id,
-                config.get("model_name"),
-                json.dumps(config.get("model_parameters", {})),
-                project["id"],
-            ),
-        )
-        logger.info(f"Migrated project {project['id']} to use new credential.")
+            # Create a stable key for the config to find duplicates
+            config_key = json.dumps(config, sort_keys=True)
+            credential_id = config_to_credential_id.get(config_key)
 
-    # For SQLite, we must now drop the old table
-    try:
+            if not credential_id:
+                # This is a new, unique config. Create a credential for it.
+                provider = config.get("api_provider")
+                model = config.get("model_name")
+
+                # Prepare credential values (only api_key for now)
+                values_to_encrypt = {}
+                # For this one-time migration, we don't have stored keys.
+                # We can leave it empty, and the user will have to re-enter them.
+                # This is safer than trying to guess or use env vars.
+
+                encrypted_values = encrypt(json.dumps(values_to_encrypt))
+                new_credential_id = uuid4()
+                credential_name = f"Migrated - {provider} - {model}"
+
+                await tx.execute(
+                    'INSERT INTO "Credential" (id, name, provider_type, "values") VALUES (%s, %s, %s, %s)',
+                    (new_credential_id, credential_name, provider, encrypted_values),
+                )
+                credential_id = str(new_credential_id)
+                config_to_credential_id[config_key] = credential_id
+                logger.info(
+                    f"Created new credential '{credential_name}' for migration."
+                )
+
+            # Update the project with the new structure
+            await tx.execute(
+                """
+                UPDATE "Project"
+                SET credential_id = %s, model_name = %s, model_parameters = %s
+                WHERE id = %s
+                """,
+                (
+                    credential_id,
+                    config.get("model_name"),
+                    json.dumps(config.get("model_parameters", {})),
+                    project["id"],
+                ),
+            )
+            logger.info(f"Migrated project {project['id']} to use new credential.")
+
+    # Final cleanup step after migration is complete
+    if tx.database_type() == DatabaseType.SQLITE:
         await tx.execute("DROP TABLE IF EXISTS Project_old_for_credentials")
         logger.info("Dropped old project table for SQLite.")
-    except (Exception, SQLiteOperationalError):
-        pass  # This will fail on PostgreSQL, which is expected
+    else:  # PostgreSQL
+        await tx.execute('ALTER TABLE "Project" DROP COLUMN "ai_provider_config"')
+        logger.info("Dropped old ai_provider_config column for PostgreSQL.")
 
     logger.info("Data migration for v6 completed successfully.")
 

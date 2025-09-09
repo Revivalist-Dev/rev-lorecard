@@ -28,4 +28,4 @@ CREATE INDEX "ix_project_credential_id" ON "Project" ("credential_id");
 -- to the new columns and the Credential table will be in a Python script.
 
 -- == Part 4: Drop the old column ==
-ALTER TABLE "Project" DROP COLUMN "ai_provider_config";
+-- The data migration script will now handle dropping this column after migrating the data.
