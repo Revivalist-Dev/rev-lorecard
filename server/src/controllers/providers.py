@@ -1,15 +1,17 @@
 import asyncio
+import json
 from typing import List, Optional
 from uuid import UUID
 from litestar import Controller, get, post
 from litestar.exceptions import HTTPException, NotFoundException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from logging_config import get_logger
 from providers.index import (
     ChatCompletionErrorResponse,
     ChatCompletionRequest,
     ChatMessage,
     ModelInfo,
+    JsonMode,
     ProviderInfo,
     provider_classes,
     get_provider_for_listing,
@@ -20,6 +22,9 @@ from db.credentials import (
     get_credential_with_values,
     list_credentials,
 )
+from providers.index import (
+    ResponseSchema,
+)
 
 logger = get_logger(__name__)
 
@@ -29,11 +34,18 @@ class TestCredentialPayload(BaseModel):
     values: CredentialValues
     model_name: Optional[str] = None
     credential_id: Optional[UUID] = None
+    json_mode: JsonMode = JsonMode.api_native
 
 
 class TestCredentialResult(BaseModel):
     success: bool
     message: str
+    native_json_supported: bool = Field(default=False)
+
+
+class TestSchemaPayload(BaseModel):
+    greeting: str
+    status: bool
 
 
 class ProviderController(Controller):
@@ -136,67 +148,103 @@ class ProviderController(Controller):
     async def test_credential(
         self, data: TestCredentialPayload
     ) -> TestCredentialResult:
-        logger.info(f"Testing credential for provider: {data.provider_type}")
+        logger.info(
+            f"Testing credential for provider: {data.provider_type}, model: {data.model_name}, mode: {data.json_mode}"
+        )
         if not data.model_name:
             raise HTTPException(
                 status_code=400, detail="A model name is required for testing."
             )
 
-        try:
-            values_to_test = data.values.model_dump()
+        values_to_test = data.values.model_dump()
 
-            if data.credential_id:
-                existing_credential = await get_credential_with_values(
-                    data.credential_id
+        if data.credential_id:
+            existing_credential = await get_credential_with_values(data.credential_id)
+            if not existing_credential:
+                raise NotFoundException(f"Credential {data.credential_id} not found.")
+
+            merged_values = existing_credential["values"].model_dump()
+            if data.values.api_key:
+                merged_values["api_key"] = data.values.api_key
+            if data.values.base_url:
+                merged_values["base_url"] = data.values.base_url
+            values_to_test = merged_values
+
+        provider = get_provider_instance(data.provider_type, values_to_test)
+
+        json_test_request = ChatCompletionRequest(
+            model=data.model_name,
+            messages=[
+                ChatMessage(
+                    role="user",
+                    content="Respond with a simple greeting and status.",
                 )
-                if not existing_credential:
-                    raise NotFoundException(
-                        f"Credential {data.credential_id} not found."
+            ],
+            temperature=1,
+            response_format=ResponseSchema(
+                name="test_schema", schema_value=TestSchemaPayload.model_json_schema()
+            ),
+            json_mode=data.json_mode,
+        )
+
+        response = await provider.generate(json_test_request)
+
+        if isinstance(response, ChatCompletionErrorResponse):
+            if (
+                data.json_mode == JsonMode.api_native
+                and response.raw_response
+                and 400 <= response.status_code < 500
+            ):
+                response_text = (
+                    json.dumps(response.raw_response)
+                    if isinstance(response.raw_response, dict)
+                    else str(response.raw_response)
+                )
+                if any(
+                    term in response_text
+                    for term in [
+                        "response_format",
+                        "json_schema",
+                        "unrecognized",
+                        "tool_choice",
+                    ]
+                ):
+                    return TestCredentialResult(
+                        success=False,
+                        message="Native JSON mode is not supported by this model or endpoint. Try 'Prompt Engineering' mode.",
+                        native_json_supported=False,
                     )
-
-                # Start with the stored values
-                merged_values = existing_credential["values"].model_dump()
-                # Overwrite with new values only if they are not empty strings
-                if data.values.api_key:
-                    merged_values["api_key"] = data.values.api_key
-                if data.values.base_url:
-                    merged_values["base_url"] = data.values.base_url
-                values_to_test = merged_values
-
-            provider = get_provider_instance(data.provider_type, values_to_test)
-
-            # Create a simple, low-cost request
-            test_request = ChatCompletionRequest(
-                model=data.model_name,
-                messages=[ChatMessage(role="user", content="Hello")],
-                temperature=0,
+            return TestCredentialResult(
+                success=False,
+                message=f"API Error ({response.status_code}): {response.raw_response or 'Unknown error'}",
+                native_json_supported=False,
             )
 
-            response = await provider.generate(test_request)
+        if not isinstance(response.content, dict):
+            return TestCredentialResult(
+                success=False,
+                message="Test failed. The model did not return a valid JSON object.",
+                native_json_supported=False,
+            )
 
-            if isinstance(response, ChatCompletionErrorResponse):
-                error_detail = "Unknown error"
-                if response.raw_response and "error" in response.raw_response:
-                    err_data = response.raw_response["error"]
-                    if isinstance(err_data, dict) and "message" in err_data:
-                        error_detail = err_data["message"]
-                    else:
-                        error_detail = str(err_data)
-
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Connection failed: {error_detail}",
-                )
-
-            return TestCredentialResult(success=True, message="Connection successful!")
-
-        except (ValueError, NotFoundException, HTTPException) as e:
-            raise e
+        try:
+            TestSchemaPayload.model_validate(response.content)
         except Exception as e:
-            logger.error(
-                f"An unexpected error occurred during credential test for {data.provider_type}: {e}",
-                exc_info=True,
+            return TestCredentialResult(
+                success=False,
+                message=f"Test failed. Returned JSON did not match the schema. Error: {e}",
+                native_json_supported=False,
             )
-            raise HTTPException(
-                status_code=500, detail=f"An unexpected server error occurred: {e}"
+
+        if data.json_mode == JsonMode.api_native:
+            return TestCredentialResult(
+                success=True,
+                message="Connection successful. Native JSON mode is supported.",
+                native_json_supported=True,
+            )
+        else:  # prompt_engineering
+            return TestCredentialResult(
+                success=True,
+                message="Connection successful. Prompt Engineering JSON mode is working correctly.",
+                native_json_supported=False,
             )

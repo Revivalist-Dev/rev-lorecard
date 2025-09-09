@@ -118,7 +118,7 @@ class ChatCompletionErrorResponse(BaseModel):
 
 
 class JsonMode(str, Enum):
-    native = "native"
+    api_native = "api_native"
     prompt_engineering = "prompt_engineering"
 
 
@@ -130,7 +130,7 @@ class ChatCompletionRequest(BaseModel):
     temperature: Optional[float] = Field(None, ge=0, le=2)
     reasoning: Optional[Reasoning] = None
     response_format: Optional[ResponseSchema] = None
-    json_mode: JsonMode = JsonMode.native
+    json_mode: JsonMode = JsonMode.api_native
 
 
 class BaseProvider(ABC):

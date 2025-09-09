@@ -285,8 +285,8 @@ async def generate_character_card(job: BackgroundJob, project: Project):
                 schema_value=CharacterCardData.model_json_schema(),
             ),
             json_mode=JsonMode.prompt_engineering
-            if project.json_enforcement_mode == JsonEnforcementMode.PROMPT_ENGINEERED
-            else JsonMode.native,
+            if project.json_enforcement_mode == JsonEnforcementMode.prompt_engineering
+            else JsonMode.api_native,
             **project.model_parameters,
         )
     )
@@ -393,8 +393,8 @@ async def regenerate_character_field(job: BackgroundJob, project: Project):
                 schema_value=RegeneratedFieldResponse.model_json_schema(),
             ),
             json_mode=JsonMode.prompt_engineering
-            if project.json_enforcement_mode == JsonEnforcementMode.PROMPT_ENGINEERED
-            else JsonMode.native,
+            if project.json_enforcement_mode == JsonEnforcementMode.prompt_engineering
+            else JsonMode.api_native,
             **project.model_parameters,
         )
     )
@@ -657,8 +657,8 @@ async def discover_and_crawl_sources(job: BackgroundJob, project: Project):
                 ),
                 json_mode=JsonMode.prompt_engineering
                 if project.json_enforcement_mode
-                == JsonEnforcementMode.PROMPT_ENGINEERED
-                else JsonMode.native,
+                == JsonEnforcementMode.prompt_engineering
+                else JsonMode.api_native,
                 **project.model_parameters,
             )
         )
@@ -926,8 +926,8 @@ async def generate_search_params(job: BackgroundJob, project: Project):
                 ),
                 json_mode=JsonMode.prompt_engineering
                 if project.json_enforcement_mode
-                == JsonEnforcementMode.PROMPT_ENGINEERED
-                else JsonMode.native,
+                == JsonEnforcementMode.prompt_engineering
+                else JsonMode.api_native,
                 **project.model_parameters,
             )
         )
@@ -1061,8 +1061,8 @@ async def _process_single_link_io(
                 ),
                 json_mode=JsonMode.prompt_engineering
                 if project.json_enforcement_mode
-                == JsonEnforcementMode.PROMPT_ENGINEERED
-                else JsonMode.native,
+                == JsonEnforcementMode.prompt_engineering
+                else JsonMode.api_native,
                 **project.model_parameters,
             )
         )

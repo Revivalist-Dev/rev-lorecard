@@ -10,6 +10,7 @@ import {
   Loader,
   ActionIcon,
   Tooltip,
+  SegmentedControl,
 } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import { useEffect, useMemo, useState } from 'react';
@@ -37,6 +38,7 @@ export function CredentialModal({ opened, onClose, credential, onSuccess }: Cred
 
   const [testModelName, setTestModelName] = useState('');
   const [localModels, setLocalModels] = useState<ModelInfo[] | null>(null);
+  const [jsonMode, setJsonMode] = useState<'api_native' | 'prompt_engineering'>('api_native');
 
   const form = useForm<CreateCredentialPayload>({
     initialValues: {
@@ -127,6 +129,7 @@ export function CredentialModal({ opened, onClose, credential, onSuccess }: Cred
       values: form.values.values,
       model_name: testModelName,
       credential_id: isEditMode ? credential?.id : undefined,
+      json_mode: jsonMode,
     });
   };
 
@@ -253,6 +256,21 @@ export function CredentialModal({ opened, onClose, credential, onSuccess }: Cred
                   </ActionIcon>
                 </Tooltip>
               </Group>
+
+              <Stack gap="xs" mt="sm">
+                <Text size="sm" fw={500}>
+                  JSON Test Mode
+                </Text>
+                <SegmentedControl
+                  fullWidth
+                  value={jsonMode}
+                  onChange={(value) => setJsonMode(value as 'api_native' | 'prompt_engineering')}
+                  data={[
+                    { label: 'API Native', value: 'api_native' },
+                    { label: 'Prompt Engineering', value: 'prompt_engineering' },
+                  ]}
+                />
+              </Stack>
             </>
           )}
 

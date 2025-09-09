@@ -61,7 +61,7 @@ class ProjectStatus(str, Enum):
 
 class JsonEnforcementMode(str, Enum):
     API_NATIVE = "api_native"
-    PROMPT_ENGINEERED = "prompt_engineered"
+    prompt_engineering = "prompt_engineering"
 
 
 class CreateProject(BaseModel):

@@ -352,14 +352,14 @@ export function ProjectModal({ opened, onClose, project }: ProjectModalProps) {
                 JSON Enforcement Mode
               </Text>
               <Text size="xs" c="dimmed">
-                'API Native' uses the model's built-in JSON mode (faster, less reliable). 'Prompt Engineered' uses a
+                'API Native' uses the model's built-in JSON mode (faster, less reliable). 'Prompt Engineering' uses a
                 special prompt to ensure valid JSON (slower, more reliable with models that struggle with JSON modes).
               </Text>
               <SegmentedControl
                 fullWidth
                 data={[
                   { label: 'API Native', value: 'api_native' },
-                  { label: 'Prompt Engineered', value: 'prompt_engineered' },
+                  { label: 'Prompt Engineering', value: 'prompt_engineering' },
                 ]}
                 {...form.getInputProps('json_enforcement_mode')}
               />
