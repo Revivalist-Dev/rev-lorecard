@@ -3,7 +3,7 @@ import json
 from typing import Any, Dict, Optional, List
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_serializer
 from db.connection import get_db_connection
 from datetime import datetime
 from db.common import PaginatedResponse, PaginationMeta
@@ -59,6 +59,11 @@ class ProjectStatus(str, Enum):
     failed = "failed"
 
 
+class JsonEnforcementMode(str, Enum):
+    API_NATIVE = "api_native"
+    prompt_engineering = "prompt_engineering"
+
+
 class CreateProject(BaseModel):
     id: str
     name: str
@@ -69,6 +74,13 @@ class CreateProject(BaseModel):
     credential_id: Optional[UUID] = None
     model_name: str
     model_parameters: Dict[str, Any]
+    json_enforcement_mode: JsonEnforcementMode = JsonEnforcementMode.API_NATIVE
+
+    @field_serializer("credential_id")
+    def serialize_credential_id(self, value: UUID) -> str:
+        if not value:
+            return None
+        return str(value)
 
 
 class UpdateProject(BaseModel):
@@ -81,6 +93,7 @@ class UpdateProject(BaseModel):
     credential_id: Optional[UUID] = None
     model_name: Optional[str] = None
     model_parameters: Optional[Dict[str, Any]] = None
+    json_enforcement_mode: Optional[JsonEnforcementMode] = None
 
 
 class Project(CreateProject):

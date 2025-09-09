@@ -105,6 +105,11 @@ async def create_default_templates():
             name="character_field_regeneration_prompt",
             content=default_templates.character_field_regeneration_prompt,
         ),
+        CreateGlobalTemplate(
+            id="json-formatter-prompt",
+            name="JSON Formatter Prompt",
+            content=default_templates.json_formatter_prompt,
+        ),
     ]
     for template in templates_to_create:
         existing_template = await get_global_template(template.id)
@@ -321,7 +326,9 @@ async def main():
     worker_thread.start()
 
     port = int(os.getenv("PORT", 3000))
-    config = uvicorn.Config(app, host="0.0.0.0", port=port, log_config=None, forwarded_allow_ips="*")
+    config = uvicorn.Config(
+        app, host="0.0.0.0", port=port, log_config=None, forwarded_allow_ips="*"
+    )
     server = uvicorn.Server(config)
 
     logger.info(f"Starting API server on http://0.0.0.0:{port}")

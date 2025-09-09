@@ -53,6 +53,7 @@ from db.character_cards import (
     update_character_card,
 )
 from db.projects import (
+    JsonEnforcementMode,
     Project,
     ProjectStatus,
     ProjectType,
@@ -74,9 +75,11 @@ from db.sources import (
 from db.source_hierarchy import add_source_child_relationship
 from db.global_templates import list_all_global_templates
 from providers.index import (
+    BaseProvider,
     ChatCompletionErrorResponse,
     ChatCompletionRequest,
     ChatCompletionResponse,
+    JsonMode,
     ResponseSchema,
     get_provider_instance,
 )
@@ -137,7 +140,7 @@ class CrawlResult(BaseModel):
     new_sources_created: int = 0
 
 
-async def _get_provider_for_project(project: Project):
+async def _get_provider_for_project(project: Project) -> BaseProvider:
     """Helper to get a provider instance for a project."""
     if not project.credential_id:
         raise ValueError("Project does not have a credential ID.")
@@ -281,6 +284,9 @@ async def generate_character_card(job: BackgroundJob, project: Project):
                 name="character_card_data",
                 schema_value=CharacterCardData.model_json_schema(),
             ),
+            json_mode=JsonMode.prompt_engineering
+            if project.json_enforcement_mode == JsonEnforcementMode.prompt_engineering
+            else JsonMode.api_native,
             **project.model_parameters,
         )
     )
@@ -386,6 +392,9 @@ async def regenerate_character_field(job: BackgroundJob, project: Project):
                 name="regenerated_field_response",
                 schema_value=RegeneratedFieldResponse.model_json_schema(),
             ),
+            json_mode=JsonMode.prompt_engineering
+            if project.json_enforcement_mode == JsonEnforcementMode.prompt_engineering
+            else JsonMode.api_native,
             **project.model_parameters,
         )
     )
@@ -646,6 +655,10 @@ async def discover_and_crawl_sources(job: BackgroundJob, project: Project):
                     name="selector_response",
                     schema_value=SelectorResponse.model_json_schema(),
                 ),
+                json_mode=JsonMode.prompt_engineering
+                if project.json_enforcement_mode
+                == JsonEnforcementMode.prompt_engineering
+                else JsonMode.api_native,
                 **project.model_parameters,
             )
         )
@@ -911,6 +924,10 @@ async def generate_search_params(job: BackgroundJob, project: Project):
                     name="search_params_response",
                     schema_value=SearchParamsResponse.model_json_schema(),
                 ),
+                json_mode=JsonMode.prompt_engineering
+                if project.json_enforcement_mode
+                == JsonEnforcementMode.prompt_engineering
+                else JsonMode.api_native,
                 **project.model_parameters,
             )
         )
@@ -1042,6 +1059,10 @@ async def _process_single_link_io(
                     name="lorebook_entry_response",
                     schema_value=LorebookEntryResponse.model_json_schema(),
                 ),
+                json_mode=JsonMode.prompt_engineering
+                if project.json_enforcement_mode
+                == JsonEnforcementMode.prompt_engineering
+                else JsonMode.api_native,
                 **project.model_parameters,
             )
         )

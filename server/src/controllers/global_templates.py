@@ -39,6 +39,7 @@ class GlobalTemplateController(Controller):
             "character-card-definition": default_templates.character_card_definition,
             "character-generation-prompt": default_templates.character_generation_prompt,
             "character-field-regeneration-prompt": default_templates.character_field_regeneration_prompt,
+            "json-formatter-prompt": default_templates.json_formatter_prompt,
         }
 
     @post("/")

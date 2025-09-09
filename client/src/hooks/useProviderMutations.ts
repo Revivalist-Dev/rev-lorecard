@@ -13,9 +13,10 @@ export const useTestCredential = () => {
     mutationFn: testCredential,
     onSuccess: (data) => {
       notifications.show({
-        title: 'Success',
+        title: data.success ? 'Success' : 'Test Failed',
         message: data.message,
-        color: 'green',
+        color: data.success ? (data.native_json_supported ? 'green' : 'blue') : 'red',
+        autoClose: data.success ? 7000 : 15000,
       });
     },
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

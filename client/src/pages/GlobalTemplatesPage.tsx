@@ -96,6 +96,7 @@ export function GlobalTemplatesPage() {
               'character-field-regeneration-prompt',
               'character-generation-prompt',
               'character-card-definition',
+              'json-formatter-prompt',
             ].includes(template.id)}
           >
             <IconTrash size={16} />

@@ -1,6 +1,8 @@
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type ModelParameters = Record<string, any>;
 
+export type JsonEnforcementMode = 'api_native' | 'prompt_engineering';
+
 export interface ProjectTemplates {
   selector_generation?: string;
   entry_creation?: string;
@@ -40,6 +42,7 @@ export interface Project {
   credential_id?: string; // UUID
   model_name?: string;
   model_parameters: ModelParameters;
+  json_enforcement_mode: JsonEnforcementMode;
 }
 
 export interface CreateProjectPayload {
@@ -52,6 +55,7 @@ export interface CreateProjectPayload {
   credential_id?: string;
   model_name?: string;
   model_parameters: ModelParameters;
+  json_enforcement_mode: JsonEnforcementMode;
 }
 
 export interface CredentialValues {
@@ -82,11 +86,13 @@ export interface TestCredentialPayload {
   values: CredentialValues;
   model_name: string;
   credential_id?: string;
+  json_mode?: 'api_native' | 'prompt_engineering';
 }
 
 export interface TestCredentialResult {
   success: boolean;
   message: string;
+  native_json_supported: boolean;
 }
 
 export type ContentType = 'html' | 'markdown';

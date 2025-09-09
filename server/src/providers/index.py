@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from enum import Enum
 from typing import Any, Dict, List, Literal, Optional, Union, Type
 from pydantic import BaseModel, Field, field_validator
 
@@ -116,6 +117,11 @@ class ChatCompletionErrorResponse(BaseModel):
     latency_ms: int
 
 
+class JsonMode(str, Enum):
+    api_native = "api_native"
+    prompt_engineering = "prompt_engineering"
+
+
 class ChatCompletionRequest(BaseModel):
     """The main request body sent to the provider API."""
 
@@ -124,6 +130,7 @@ class ChatCompletionRequest(BaseModel):
     temperature: Optional[float] = Field(None, ge=0, le=2)
     reasoning: Optional[Reasoning] = None
     response_format: Optional[ResponseSchema] = None
+    json_mode: JsonMode = JsonMode.api_native
 
 
 class BaseProvider(ABC):
@@ -131,12 +138,24 @@ class BaseProvider(ABC):
     async def generate(
         self, request: ChatCompletionRequest
     ) -> Union[ChatCompletionResponse, ChatCompletionErrorResponse]:
-        pass
+        raise NotImplementedError
 
     @abstractmethod
     async def get_models(self) -> List[ModelInfo]:
         """Fetch and return a list of available models for the provider."""
-        pass
+        raise NotImplementedError
+
+    @abstractmethod
+    async def _generate_native(
+        self, request: ChatCompletionRequest
+    ) -> Union[ChatCompletionResponse, ChatCompletionErrorResponse]:
+        raise NotImplementedError
+
+    @abstractmethod
+    async def _generate_with_prompt_engineering(
+        self, request: ChatCompletionRequest
+    ) -> Union[ChatCompletionResponse, ChatCompletionErrorResponse]:
+        raise NotImplementedError
 
 
 provider_classes: Dict[str, Type[BaseProvider]] = {}
