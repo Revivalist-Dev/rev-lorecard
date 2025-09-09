@@ -64,6 +64,7 @@ export function ProjectModal({ opened, onClose, project }: ProjectModalProps) {
       credential_id: undefined,
       model_name: undefined,
       model_parameters: { temperature: 0.7 },
+      json_enforcement_mode: 'api_native',
       templates: {
         search_params_generation: '',
         selector_generation: '',
@@ -86,6 +87,7 @@ export function ProjectModal({ opened, onClose, project }: ProjectModalProps) {
         ...project,
         prompt: project.prompt || '',
         model_parameters: project.model_parameters || { temperature: 0.7 },
+        json_enforcement_mode: project.json_enforcement_mode || 'api_native',
         templates: {
           search_params_generation: project.templates.search_params_generation || '',
           selector_generation: project.templates.selector_generation || '',
@@ -344,6 +346,24 @@ export function ProjectModal({ opened, onClose, project }: ProjectModalProps) {
                 />
               )}
             </Group>
+
+            <Stack gap={4}>
+              <Text size="sm" fw={500}>
+                JSON Enforcement Mode
+              </Text>
+              <Text size="xs" c="dimmed">
+                'API Native' uses the model's built-in JSON mode (faster, less reliable). 'Prompt Engineered' uses a
+                special prompt to ensure valid JSON (slower, more reliable with models that struggle with JSON modes).
+              </Text>
+              <SegmentedControl
+                fullWidth
+                data={[
+                  { label: 'API Native', value: 'api_native' },
+                  { label: 'Prompt Engineered', value: 'prompt_engineered' },
+                ]}
+                {...form.getInputProps('json_enforcement_mode')}
+              />
+            </Stack>
 
             <div>
               <Text size="sm" fw={500}>

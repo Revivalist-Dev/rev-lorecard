@@ -241,7 +241,7 @@ export function CredentialModal({ opened, onClose, credential, onSuccess }: Cred
                     style={{ flexGrow: 1 }}
                   />
                 )}
-                <Tooltip label="Refresh model list" withArrow>
+                <Tooltip label="Refresh model list" withArrow zIndex={1002}>
                   <ActionIcon
                     variant="default"
                     size="input-sm"

@@ -59,6 +59,11 @@ class ProjectStatus(str, Enum):
     failed = "failed"
 
 
+class JsonEnforcementMode(str, Enum):
+    API_NATIVE = "api_native"
+    PROMPT_ENGINEERED = "prompt_engineered"
+
+
 class CreateProject(BaseModel):
     id: str
     name: str
@@ -69,6 +74,7 @@ class CreateProject(BaseModel):
     credential_id: Optional[UUID] = None
     model_name: str
     model_parameters: Dict[str, Any]
+    json_enforcement_mode: JsonEnforcementMode = JsonEnforcementMode.API_NATIVE
 
 
 class UpdateProject(BaseModel):
@@ -81,6 +87,7 @@ class UpdateProject(BaseModel):
     credential_id: Optional[UUID] = None
     model_name: Optional[str] = None
     model_parameters: Optional[Dict[str, Any]] = None
+    json_enforcement_mode: Optional[JsonEnforcementMode] = None
 
 
 class Project(CreateProject):

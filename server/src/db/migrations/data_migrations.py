@@ -250,9 +250,33 @@ async def v6_migrate_to_credentials(tx: AsyncDBTransaction) -> None:
     logger.info("Data migration for v6 completed successfully.")
 
 
+async def v8_add_json_formatter_template(tx: AsyncDBTransaction) -> None:
+    """
+    Data migration for schema version 8.
+    - Adds the new, robust JSON formatter prompt as a global template.
+    - This migration is non-destructive and does not alter existing templates
+      to ensure backward compatibility with projects using 'api_native' mode.
+    """
+    logger.info("Running data migration for v8: Adding JSON formatter template...")
+
+    # Define the new template to be added
+    formatter_template = CreateGlobalTemplate(
+        id="json-formatter-prompt",
+        name="JSON Formatter Prompt",
+        content=default_templates.json_formatter_prompt,
+    )
+
+    # Use the helper to insert or update the template
+    await _upsert_global_template(formatter_template, tx)
+
+    logger.info("Successfully added 'json-formatter-prompt' to global templates.")
+    logger.info("Data migration for v8 completed successfully.")
+
+
 # This maps the version number to the function that should be run for it.
 DATA_MIGRATIONS = {
     3: v3_override_default_templates,
     5: v5_override_selector_prompt,
     6: v6_migrate_to_credentials,
+    8: v8_add_json_formatter_template,
 }

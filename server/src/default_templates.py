@@ -261,3 +261,25 @@ You are tasked with rewriting a single field of a character card based on the pr
 
 Now, based on all the context above, provide the new rewritten content for the "{{ field_to_regenerate }}" field. Output only the raw text for the new field, with no additional commentary.
 """
+
+json_formatter_prompt = """--- role: user
+You are a highly specialized AI assistant. Your SOLE purpose is to generate a single, valid JSON object that strictly adheres to the provided JSON schema.
+
+**CRITICAL INSTRUCTIONS:**
+1.  You MUST wrap the entire JSON object in a markdown code block (```json\n...\n```).
+2.  Your response MUST NOT contain any explanatory text, comments, or any other content outside of this single code block.
+3.  The JSON object inside the code block MUST be valid and conform to the schema.
+
+
+
+**JSON SCHEMA TO FOLLOW:**
+```json
+{{schema}}
+```
+
+**EXAMPLE OF A PERFECT RESPONSE:**
+```json
+{{example_response}}
+```
+---
+"""
