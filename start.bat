@@ -1,5 +1,6 @@
 @echo off
 setlocal enabledelayedexpansion
+pushd "%~dp0"
 
 echo ===========================================
 echo  Lorecard - Startup Script
