@@ -114,6 +114,10 @@ class OpenAICompatibleClient(BaseProvider):
             raise ValueError(
                 "OpenAI Compatible provider is not configured. Please provide a base_url in your credential or set the OPENAI_COMPATIBLE_BASE_URL environment variable."
             )
+        if self.base_url.rstrip("/").endswith("/chat/completions"):
+            raise ValueError(
+                "The base_url for openai_compatible provider should not end with '/chat/completions'. Please remove it."
+            )
         self.api_key = api_key
         self.headers = {
             "Content-Type": "application/json",

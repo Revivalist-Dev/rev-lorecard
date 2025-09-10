@@ -211,6 +211,26 @@ export function CredentialModal({ opened, onClose, credential, onSuccess }: Cred
                   withAsterisk={!isEditMode}
                   placeholder="e.g., http://localhost:11434/v1"
                   {...form.getInputProps('values.base_url')}
+                  onBlur={(event) => {
+                    const currentValue = event.currentTarget.value;
+                    if (form.values.provider_type === 'openai_compatible' && currentValue) {
+                      let url = currentValue.trim();
+                      url = url.replace(/\/+$/, ''); // remove trailing slashes
+                      let finalUrl = url;
+                      if (url.endsWith('/chat/completions')) {
+                        finalUrl = url.substring(0, url.length - '/chat/completions'.length);
+                      }
+
+                      if (finalUrl !== currentValue) {
+                        form.setFieldValue('values.base_url', finalUrl);
+                        notifications.show({
+                          title: 'Base URL Corrected',
+                          message: 'The /chat/completions suffix has been removed automatically.',
+                          color: 'blue',
+                        });
+                      }
+                    }
+                  }}
                 />
               )}
               <PasswordInput
