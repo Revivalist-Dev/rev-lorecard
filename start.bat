@@ -87,13 +87,23 @@ echo.
 
 REM --- 6. Install client dependencies ---
 echo [6/8] Installing client dependencies...
-cd client & (pnpm install && cd ..) || (cd .. & echo ERROR: Failed to install client dependencies.& pause & exit /b 1)
+call pnpm install --prefix "%~dp0client"
+if errorlevel 1 (
+    echo ERROR: Failed to install client dependencies.
+    pause
+    exit /b 1
+)
 echo      Client dependencies installed.
 echo.
 
 REM --- 7. Build the client application ---
 echo [7/8] Building client application...
-cd client & (pnpm build && cd ..) || (cd .. & echo ERROR: Failed to build the client application.& pause & exit /b 1)
+call pnpm --prefix "%~dp0client" build
+if errorlevel 1 (
+    echo ERROR: Failed to build the client application.
+    pause
+    exit /b 1
+)
 echo      Client build complete.
 echo.
 
