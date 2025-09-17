@@ -110,7 +110,7 @@ export function CharacterSources({ project, selectedSourceIds, setSelectedSource
                 sources.map((source) => (
                   <Paper withBorder p="xs" key={source.id} radius="sm">
                     <Group justify="space-between" wrap="nowrap">
-                      <Group gap="xs" wrap="nowrap">
+                      <Group gap="xs" wrap="nowrap" style={{ minWidth: 0 }}>
                         <Checkbox
                           checked={selectedSourceIds.includes(source.id)}
                           onChange={(event) => {
@@ -121,7 +121,7 @@ export function CharacterSources({ project, selectedSourceIds, setSelectedSource
                           }}
                           disabled={!source.last_crawled_at}
                         />
-                        <Box>
+                        <Box style={{ minWidth: 0 }}>
                           <Text truncate fw={500}>
                             {source.url}
                           </Text>
