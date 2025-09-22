@@ -492,9 +492,15 @@ async def _crawl_and_discover(
         logger.info(
             f"[{source.project_id}] Crawling page {pages_crawled + 1} of source {source.id}: {current_url}"
         )
-        content = await scraper.get_content(current_url, clean=True, pretty=True)
-        soup = BeautifulSoup(content, "html.parser")
-        pages_crawled += 1
+        try:
+            content = await scraper.get_content(current_url, clean=True, pretty=True)
+            soup = BeautifulSoup(content, "html.parser")
+            pages_crawled += 1
+        except Exception as e:
+            logger.error(
+                f"[{source.project_id}] Failed to crawl page {current_url} for source {source.id}. Halting crawl for this source. Error: {e}"
+            )
+            break  # Stop crawling this source's pages, but don't fail the whole job.
 
         content_urls = set()
         for selector in selectors.content_selectors:
@@ -618,6 +624,7 @@ async def discover_and_crawl_sources(job: BackgroundJob, project: Project):
     total_new_sources = 0
     total_selectors_generated = 0
     processed_count = 0
+    failed_source_ids: List[UUID] = []
 
     async with db.transaction() as tx:
         for source_id in job.payload.source_ids:
@@ -644,49 +651,66 @@ async def discover_and_crawl_sources(job: BackgroundJob, project: Project):
             break
 
         source_id, current_depth = queue.popleft()
-        source = await get_project_source(source_id)
-        if not source:
-            continue
+        try:
+            source = await get_project_source(source_id)
+            if not source:
+                continue
 
-        # --- 1. Generate Selectors via LLM ---
-        logger.info(
-            f"[{job.id}] Generating selectors for source {source.id} at depth {current_depth}"
-        )
-        content = await scraper.get_content(source.url, clean=True, pretty=True)
-        context = {
-            "content": content,
-            "project": project.model_dump(),
-            "source": source.model_dump(),
-            "globals": globals_dict,
-        }
-        await wait_for_rate_limit(project.id, project.requests_per_minute)
+            # --- 1. Generate Selectors via LLM ---
+            logger.info(
+                f"[{job.id}] Generating selectors for source {source.id} at depth {current_depth}"
+            )
+            content = await scraper.get_content(source.url, clean=True, pretty=True)
+            context = {
+                "content": content,
+                "project": project.model_dump(),
+                "source": source.model_dump(),
+                "globals": globals_dict,
+            }
+            await wait_for_rate_limit(project.id, project.requests_per_minute)
 
-        if not project.templates.selector_generation:
-            raise ValueError(
-                "Selector generation template is missing for this project."
+            if not project.templates.selector_generation:
+                raise ValueError(
+                    "Selector generation template is missing for this project."
+                )
+
+            response = await provider.generate(
+                ChatCompletionRequest(
+                    model=project.model_name,
+                    messages=create_messages_from_template(
+                        project.templates.selector_generation, context
+                    ),
+                    response_format=ResponseSchema(
+                        name="selector_response",
+                        schema_value=SelectorResponse.model_json_schema(),
+                    ),
+                    json_mode=JsonMode.prompt_engineering
+                    if project.json_enforcement_mode
+                    == JsonEnforcementMode.prompt_engineering
+                    else JsonMode.api_native,
+                    **project.model_parameters,
+                )
             )
 
-        response = await provider.generate(
-            ChatCompletionRequest(
-                model=project.model_name,
-                messages=create_messages_from_template(
-                    project.templates.selector_generation, context
-                ),
-                response_format=ResponseSchema(
-                    name="selector_response",
-                    schema_value=SelectorResponse.model_json_schema(),
-                ),
-                json_mode=JsonMode.prompt_engineering
-                if project.json_enforcement_mode
-                == JsonEnforcementMode.prompt_engineering
-                else JsonMode.api_native,
-                **project.model_parameters,
-            )
-        )
+            # --- DB Write Phase for this source ---
+            async with db.transaction() as tx:
+                if isinstance(response, ChatCompletionErrorResponse):
+                    await create_api_request_log(
+                        CreateApiRequestLog(
+                            project_id=project.id,
+                            job_id=job.id,
+                            api_provider=provider.__class__.__name__,
+                            model_used=project.model_name,
+                            request=response.raw_request,
+                            response=response.raw_response,
+                            latency_ms=response.latency_ms,
+                            error=True,
+                        ),
+                    )
+                    raise Exception(
+                        f"Failed to generate selectors for source {source.id}: {response.raw_response}"
+                    )
 
-        # --- DB Write Phase for this source ---
-        async with db.transaction() as tx:
-            if isinstance(response, ChatCompletionErrorResponse):
                 await create_api_request_log(
                     CreateApiRequestLog(
                         project_id=project.id,
@@ -695,67 +719,59 @@ async def discover_and_crawl_sources(job: BackgroundJob, project: Project):
                         model_used=project.model_name,
                         request=response.raw_request,
                         response=response.raw_response,
+                        input_tokens=response.usage.prompt_tokens,
+                        output_tokens=response.usage.completion_tokens,
+                        calculated_cost=response.usage.cost,
                         latency_ms=response.latency_ms,
-                        error=True,
                     ),
                 )
-                raise Exception(
-                    f"Failed to generate selectors for source {source.id}: {response.raw_response}"
+
+                total_selectors_generated += 1
+                selector_response = SelectorResponse.model_validate(response.content)
+                await update_project_source(
+                    source.id,
+                    UpdateProjectSource(
+                        link_extraction_selector=selector_response.content_selectors,
+                        link_extraction_pagination_selector=selector_response.pagination_selector,
+                    ),
+                    tx=tx,
                 )
 
-            await create_api_request_log(
-                CreateApiRequestLog(
-                    project_id=project.id,
-                    job_id=job.id,
-                    api_provider=provider.__class__.__name__,
-                    model_used=project.model_name,
-                    request=response.raw_request,
-                    response=response.raw_response,
-                    input_tokens=response.usage.prompt_tokens,
-                    output_tokens=response.usage.completion_tokens,
-                    calculated_cost=response.usage.cost,
-                    latency_ms=response.latency_ms,
-                ),
-            )
+                # --- 2. Crawl using the new selectors ---
+                crawl_result = await _crawl_and_discover(
+                    project.id,
+                    source,
+                    selector_response,
+                    queue,
+                    visited_source_urls,
+                    current_depth,
+                    scraper,
+                    existing_db_links,
+                    all_new_links_this_job,
+                    tx,
+                )
+                all_new_links_this_job.update(crawl_result.new_links)
+                all_existing_links_found_again.update(crawl_result.existing_links)
+                total_new_sources += crawl_result.new_sources_created
 
-            total_selectors_generated += 1
-            selector_response = SelectorResponse.model_validate(response.content)
-            await update_project_source(
-                source.id,
-                UpdateProjectSource(
-                    link_extraction_selector=selector_response.content_selectors,
-                    link_extraction_pagination_selector=selector_response.pagination_selector,
-                ),
-                tx=tx,
+        except Exception as e:
+            logger.error(
+                f"[{job.id}] Unrecoverable error processing source {source_id}: {e}",
+                exc_info=True,
             )
-
-            # --- 2. Crawl using the new selectors ---
-            crawl_result = await _crawl_and_discover(
-                project.id,
-                source,
-                selector_response,
-                queue,
-                visited_source_urls,
-                current_depth,
-                scraper,
-                existing_db_links,
-                all_new_links_this_job,
-                tx,
-            )
-            all_new_links_this_job.update(crawl_result.new_links)
-            all_existing_links_found_again.update(crawl_result.existing_links)
-            total_new_sources += crawl_result.new_sources_created
-
+            failed_source_ids.append(source_id)
+        finally:
             # --- 3. Update Job Progress ---
             processed_count += 1
-            await update_job_with_notification(
-                job.id,
-                UpdateBackgroundJob(
-                    processed_items=processed_count,
-                    total_items=len(visited_source_urls),
-                ),
-                tx=tx,
-            )
+            async with db.transaction() as tx:
+                await update_job_with_notification(
+                    job.id,
+                    UpdateBackgroundJob(
+                        processed_items=processed_count,
+                        total_items=len(visited_source_urls),
+                    ),
+                    tx=tx,
+                )
 
     polling_task.cancel()
     # --- Finalization Phase ---
@@ -783,6 +799,7 @@ async def discover_and_crawl_sources(job: BackgroundJob, project: Project):
                     existing_links=sorted(list(all_existing_links_found_again)),
                     new_sources_created=total_new_sources,
                     selectors_generated=total_selectors_generated,
+                    sources_failed=failed_source_ids,
                 ),
             ),
             tx=tx,
@@ -823,6 +840,7 @@ async def rescan_links(job: BackgroundJob, project: Project):
     all_existing_links_found_again: Set[str] = set()
     total_new_sources = 0
     processed_count = 0
+    failed_source_ids: List[UUID] = []
 
     async with db.transaction() as tx:
         for source_id in job.payload.source_ids:
@@ -845,50 +863,57 @@ async def rescan_links(job: BackgroundJob, project: Project):
             break
 
         source_id, current_depth = queue.popleft()
-        source = await get_project_source(source_id)
-        if not source or not source.link_extraction_selector:
-            logger.warning(
-                f"[{job.id}] Source {source_id} has no selectors, skipping rescan."
-            )
-            continue
+        try:
+            source = await get_project_source(source_id)
+            if not source or not source.link_extraction_selector:
+                logger.warning(
+                    f"[{job.id}] Source {source_id} has no selectors, skipping rescan."
+                )
+                continue
 
-        logger.info(
-            f"[{job.id}] Rescanning source {source.id} at depth {current_depth}"
-        )
-
-        async with db.transaction() as tx:
-            # --- 1. Crawl using existing selectors ---
-            selectors = SelectorResponse(
-                content_selectors=source.link_extraction_selector,
-                category_selectors=[],
-                pagination_selector=source.link_extraction_pagination_selector,
+            logger.info(
+                f"[{job.id}] Rescanning source {source.id} at depth {current_depth}"
             )
-            crawl_result = await _crawl_and_discover(
-                project.id,
-                source,
-                selectors,
-                queue,
-                visited_source_urls,
-                current_depth,
-                scraper,
-                existing_db_links,
-                all_new_links_this_job,
-                tx,
-            )
-            all_new_links_this_job.update(crawl_result.new_links)
-            all_existing_links_found_again.update(crawl_result.existing_links)
-            total_new_sources += crawl_result.new_sources_created
 
+            async with db.transaction() as tx:
+                # --- 1. Crawl using existing selectors ---
+                selectors = SelectorResponse(
+                    content_selectors=source.link_extraction_selector,
+                    category_selectors=[],
+                    pagination_selector=source.link_extraction_pagination_selector,
+                )
+                crawl_result = await _crawl_and_discover(
+                    project.id,
+                    source,
+                    selectors,
+                    queue,
+                    visited_source_urls,
+                    current_depth,
+                    scraper,
+                    existing_db_links,
+                    all_new_links_this_job,
+                    tx,
+                )
+                all_new_links_this_job.update(crawl_result.new_links)
+                all_existing_links_found_again.update(crawl_result.existing_links)
+                total_new_sources += crawl_result.new_sources_created
+        except Exception as e:
+            logger.error(
+                f"[{job.id}] Failed to rescan source {source_id}: {e}", exc_info=True
+            )
+            failed_source_ids.append(source_id)
+        finally:
             # --- 2. Update Job Progress ---
             processed_count += 1
-            await update_job_with_notification(
-                job.id,
-                UpdateBackgroundJob(
-                    processed_items=processed_count,
-                    total_items=len(visited_source_urls),
-                ),
-                tx=tx,
-            )
+            async with db.transaction() as tx:
+                await update_job_with_notification(
+                    job.id,
+                    UpdateBackgroundJob(
+                        processed_items=processed_count,
+                        total_items=len(visited_source_urls),
+                    ),
+                    tx=tx,
+                )
 
     polling_task.cancel()
     # --- Finalization Phase ---
@@ -909,6 +934,7 @@ async def rescan_links(job: BackgroundJob, project: Project):
                     existing_links=sorted(list(all_existing_links_found_again)),
                     new_sources_created=total_new_sources,
                     selectors_generated=0,
+                    sources_failed=failed_source_ids,
                 ),
             ),
             tx=tx,

@@ -98,6 +98,7 @@ class DiscoverAndCrawlSourcesResult(BaseModel):
     existing_links: List[str]
     new_sources_created: int
     selectors_generated: int
+    sources_failed: List[UUID] = []
 
 
 class ConfirmLinksResult(BaseModel):
