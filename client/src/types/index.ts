@@ -103,6 +103,7 @@ export interface ProjectSource {
   url: string;
   link_extraction_selector?: string[];
   link_extraction_pagination_selector?: string;
+  url_exclusion_patterns?: string[];
   max_pages_to_crawl: number;
   max_crawl_depth: number;
   last_crawled_at?: string;

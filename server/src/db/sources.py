@@ -16,6 +16,7 @@ class ProjectSource(BaseModel):
     url: str
     link_extraction_selector: Optional[List[str]] = None
     link_extraction_pagination_selector: Optional[str] = None
+    url_exclusion_patterns: Optional[List[str]] = None
     max_pages_to_crawl: int = 20
     max_crawl_depth: int = 1
     last_crawled_at: Optional[datetime] = None
@@ -31,12 +32,14 @@ class CreateProjectSource(BaseModel):
     url: str
     max_pages_to_crawl: int = 20
     max_crawl_depth: int = 1
+    url_exclusion_patterns: Optional[List[str]] = None
 
 
 class UpdateProjectSource(BaseModel):
     url: Optional[str] = None
     link_extraction_selector: Optional[List[str]] = None
     link_extraction_pagination_selector: Optional[str] = None
+    url_exclusion_patterns: Optional[List[str]] = None
     max_pages_to_crawl: Optional[int] = None
     max_crawl_depth: Optional[int] = None
     last_crawled_at: Optional[datetime] = None
@@ -51,8 +54,8 @@ async def create_project_source(
     db = tx or await get_db_connection()
     source_id = uuid4()
     query = """
-        INSERT INTO "ProjectSource" (id, project_id, url, max_pages_to_crawl, max_crawl_depth)
-        VALUES (%s, %s, %s, %s, %s)
+        INSERT INTO "ProjectSource" (id, project_id, url, max_pages_to_crawl, max_crawl_depth, url_exclusion_patterns)
+        VALUES (%s, %s, %s, %s, %s, %s)
         RETURNING *
     """
     params = (
@@ -61,6 +64,7 @@ async def create_project_source(
         source.url,
         source.max_pages_to_crawl,
         source.max_crawl_depth,
+        source.url_exclusion_patterns,
     )
     result = await db.execute_and_fetch_one(query, params)
     if not result:
@@ -97,7 +101,7 @@ async def list_sources_by_project(
         # Exclude raw_content for performance in list views
         query = (
             "SELECT id, project_id, url, link_extraction_selector, link_extraction_pagination_selector, "
-            "max_pages_to_crawl, max_crawl_depth, last_crawled_at, created_at, updated_at, "
+            "url_exclusion_patterns, max_pages_to_crawl, max_crawl_depth, last_crawled_at, created_at, updated_at, "
             "content_type, content_char_count "
             'FROM "ProjectSource" WHERE project_id = %s ORDER BY created_at ASC'
         )

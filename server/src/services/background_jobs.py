@@ -1,4 +1,5 @@
 import asyncio
+import re
 from uuid import UUID
 from datetime import datetime
 from typing import Optional, Union, List, Dict, Set
@@ -465,6 +466,27 @@ async def _crawl_and_discover(
     result = CrawlResult()
     pages_crawled = 0
     current_url: Optional[str] = source.url
+    exclusion_patterns = source.url_exclusion_patterns or []
+
+    def is_excluded(url: str) -> bool:
+        if not exclusion_patterns:
+            return False
+        for pattern in exclusion_patterns:
+            # Convention: /regex/ for regex patterns, otherwise plain string matching.
+            if pattern.startswith("/") and pattern.endswith("/"):
+                try:
+                    # Strip slashes and perform regex search
+                    if re.search(pattern[1:-1], url):
+                        return True
+                except re.error:
+                    # Invalid regex, treat as a plain string for safety
+                    if pattern in url:
+                        return True
+            else:
+                # Plain string matching
+                if pattern in url:
+                    return True
+        return False
 
     while current_url and pages_crawled < source.max_pages_to_crawl:
         logger.info(
@@ -474,13 +496,14 @@ async def _crawl_and_discover(
         soup = BeautifulSoup(content, "html.parser")
         pages_crawled += 1
 
-        # --- 1. Extract all potential content and category URLs from the current page ---
         content_urls = set()
         for selector in selectors.content_selectors:
             try:
                 for link_tag in soup.select(selector):
                     if href := link_tag.get("href"):
-                        content_urls.add(urljoin(current_url, href))  # pyright: ignore[reportArgumentType]
+                        absolute_url = urljoin(current_url, href)  # pyright: ignore[reportArgumentType]
+                        if not is_excluded(absolute_url):
+                            content_urls.add(absolute_url)
             except SelectorSyntaxError as e:
                 logger.warning(
                     f"Invalid content CSS selector '{selector}' for source {source.url}. Skipping. Error: {e}"
@@ -492,13 +515,14 @@ async def _crawl_and_discover(
                 try:
                     for link_tag in soup.select(selector):
                         if href := link_tag.get("href"):
-                            category_urls.add(urljoin(current_url, href))  # pyright: ignore[reportArgumentType]
+                            absolute_url = urljoin(current_url, href)  # pyright: ignore[reportArgumentType]
+                            if not is_excluded(absolute_url):
+                                category_urls.add(absolute_url)
                 except SelectorSyntaxError as e:
                     logger.warning(
                         f"Invalid category CSS selector '{selector}' for source {source.url}. Skipping. Error: {e}"
                     )
 
-        # --- 2. Differentiate new vs. existing links ---
         content_urls -= (
             category_urls  # Ensure content links are not also treated as categories
         )
@@ -508,7 +532,6 @@ async def _crawl_and_discover(
             elif url not in newly_discovered_links_this_job:
                 result.new_links.add(url)
 
-        # --- 3. Process Discovered Sub-category Links and Enqueue (only on the first page) ---
         if pages_crawled == 1 and current_depth < source.max_crawl_depth:
             for cat_url in category_urls:
                 if cat_url not in visited_source_urls:
@@ -526,6 +549,7 @@ async def _crawl_and_discover(
                                 url=cat_url,
                                 max_crawl_depth=source.max_crawl_depth,
                                 max_pages_to_crawl=source.max_pages_to_crawl,
+                                url_exclusion_patterns=source.url_exclusion_patterns,
                             ),
                             tx=tx,
                         )
@@ -536,22 +560,19 @@ async def _crawl_and_discover(
                     )
                     queue.append((child_source.id, current_depth + 1))
 
-        # --- 4. Find the next page URL ---
         if selectors.pagination_selector:
             next_page_tag = soup.select_one(selectors.pagination_selector)
             if next_page_tag and next_page_tag.get("href"):
                 next_page_url = urljoin(current_url, next_page_tag.get("href"))  # pyright: ignore[reportArgumentType]
-                # Prevent infinite loops on pages that link to themselves as 'next'
                 if next_page_url == current_url:
                     current_url = None
                 else:
                     current_url = next_page_url
             else:
-                current_url = None  # No more 'next' page link found
+                current_url = None
         else:
-            current_url = None  # No pagination selector was provided
+            current_url = None
 
-    # --- 5. Update Source's Last Crawled Time ---
     await update_project_source(
         source.id, UpdateProjectSource(last_crawled_at=datetime.now()), tx=tx
     )

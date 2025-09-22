@@ -1,0 +1,2 @@
+-- Add a column to store URL exclusion patterns for a source (SQLite version)
+ALTER TABLE "ProjectSource" ADD COLUMN "url_exclusion_patterns" TEXT CHECK(url_exclusion_patterns IS NULL OR json_valid(url_exclusion_patterns));

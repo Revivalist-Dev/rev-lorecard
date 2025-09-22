@@ -58,6 +58,7 @@ interface CreateSourcePayload {
   url: string;
   max_pages_to_crawl: number;
   max_crawl_depth: number;
+  url_exclusion_patterns?: string[];
 }
 
 const createProjectSource = async ({

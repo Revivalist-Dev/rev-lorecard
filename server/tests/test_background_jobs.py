@@ -636,3 +636,64 @@ async def test_process_project_entries_job_with_test_client(
     # One for each link
     assert logs_data["meta"]["total_items"] >= 1
     assert all(log["error"] is False for log in logs_data["data"])
+
+
+@pytest.mark.asyncio
+async def test_discover_and_crawl_with_url_exclusions(
+    client_test: AsyncTestClient,
+    lorebook_project_payload: CreateProject,
+    credential_id: UUID,
+):
+    """
+    Tests that the DISCOVER_AND_CRAWL_SOURCES job correctly uses
+    url_exclusion_patterns for both plain strings and regex.
+    """
+    # Arrange
+    project_id = lorebook_project_payload.id
+    lorebook_project_payload.credential_id = credential_id
+    await client_test.post("/api/projects", json=lorebook_project_payload.model_dump())
+
+    # 2a. Create a source with exclusion patterns
+    source_payload = {
+        "url": "https://elderscrolls.fandom.com/wiki/Category:Skyrim:_Locations",
+        "max_pages_to_crawl": 1,
+        "url_exclusion_patterns": [
+            "A_Bloody_Trail",  # Plain string exclusion
+            "/wiki/Special:",  # Another plain string
+            "/\\(Online\\)/",  # Regex to exclude ESO locations
+        ],
+    }
+    response = await client_test.post(
+        f"/api/projects/{project_id}/sources", json=source_payload
+    )
+    assert response.status_code == 201
+    source_id = response.json()["data"]["id"]
+
+    # 2b. Update project status
+    await client_test.patch(
+        f"/api/projects/{project_id}",
+        json={"status": "search_params_generated"},
+    )
+
+    # Act: Start and process the job
+    response = await client_test.post(
+        "/api/jobs/discover-and-crawl",
+        json={"project_id": project_id, "source_ids": [source_id]},
+    )
+    assert response.status_code == 201
+    job_id = response.json()["data"]["id"]
+    await process_background_job(job_id)
+
+    # Assert
+    response = await client_test.get(f"/api/jobs/{job_id}")
+    job_data = response.json()["data"]
+    assert job_data["status"] == "completed"
+
+    new_links = job_data["result"]["new_links"]
+    assert len(new_links) > 0
+
+    # Check that excluded links are not present
+    for link in new_links:
+        assert "A_Bloody_Trail" not in link
+        assert "/wiki/Special:" not in link
+        assert "(Online)" not in link

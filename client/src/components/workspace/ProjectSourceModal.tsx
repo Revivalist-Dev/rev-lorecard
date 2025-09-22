@@ -24,6 +24,7 @@ interface SourceFormValues {
   max_crawl_depth: number;
   link_extraction_selector: string;
   link_extraction_pagination_selector: string;
+  url_exclusion_patterns: string;
 }
 
 export function ProjectSourceModal({ opened, onClose, projectId, source, projectType }: ProjectSourceModalProps) {
@@ -41,6 +42,7 @@ export function ProjectSourceModal({ opened, onClose, projectId, source, project
       max_crawl_depth: 1,
       link_extraction_selector: '',
       link_extraction_pagination_selector: '',
+      url_exclusion_patterns: '',
     },
     validate: {
       url: (value) => {
@@ -64,6 +66,7 @@ export function ProjectSourceModal({ opened, onClose, projectId, source, project
         max_crawl_depth: source.max_crawl_depth,
         link_extraction_selector: (source.link_extraction_selector || []).join('\n'),
         link_extraction_pagination_selector: source.link_extraction_pagination_selector || '',
+        url_exclusion_patterns: (source.url_exclusion_patterns || []).join('\n'),
       });
     } else {
       form.reset();
@@ -75,6 +78,7 @@ export function ProjectSourceModal({ opened, onClose, projectId, source, project
     const payload = {
       ...values,
       link_extraction_selector: values.link_extraction_selector.split('\n').filter(Boolean),
+      url_exclusion_patterns: values.url_exclusion_patterns.split('\n').filter(Boolean),
     };
 
     if (isEditMode && source) {
@@ -154,6 +158,16 @@ export function ProjectSourceModal({ opened, onClose, projectId, source, project
                   min={1}
                   max={5}
                   {...form.getInputProps('max_crawl_depth')}
+                />
+              </Group>
+              <Group grow>
+                <Textarea
+                  w={'100%'}
+                  label="URL Exclusion Patterns"
+                  description="URLs containing any of these patterns (one per line) will be ignored during crawling."
+                  autosize
+                  minRows={3}
+                  {...form.getInputProps('url_exclusion_patterns')}
                 />
               </Group>
 
