@@ -6,7 +6,7 @@ from uuid import UUID, uuid4
 
 from db.connection import get_db_connection
 from db.common import PaginatedResponse, PaginationMeta
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, ValidationError, field_validator
 
 from db.database import AsyncDBTransaction
 from logging_config import get_logger
@@ -99,6 +99,15 @@ class DiscoverAndCrawlSourcesResult(BaseModel):
     new_sources_created: int
     selectors_generated: int
     sources_failed: List[UUID] = []
+
+    @field_validator("sources_failed", mode="before")
+    def serialize_sources_failed(cls, v):
+        if v is None:
+            return []
+        ls = []
+        for uuid in v:
+            ls.append(str(uuid))
+        return ls
 
 
 class ConfirmLinksResult(BaseModel):
