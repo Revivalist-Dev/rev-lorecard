@@ -44,7 +44,6 @@ def clean_html(html_content: str) -> str:
         "footer",
         "nav",
         '[role="navigation"]',
-        "aside",
         ".sidebar",
         '[role="complementary"]',
         ".nav",

@@ -177,7 +177,9 @@ async def recover_stale_datas():
         await reset_processing_links_to_pending(tx=tx)
 
 
-CLIENT_BUILD_DIR = Path(__file__).parent.parent.parent / "client" / "dist"
+CLIENT_BUILD_DIR = (
+    Path(os.path.abspath(__file__)).parent.parent.parent / "client" / "dist"
+)
 assets_app = StaticFiles(
     is_html_mode=False,
     directories=[CLIENT_BUILD_DIR / "assets"],
