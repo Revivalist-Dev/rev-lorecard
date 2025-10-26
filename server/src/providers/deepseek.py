@@ -1,6 +1,7 @@
 import json
 import time
 from typing import Any, Dict, List, Literal, Optional, Union
+from uuid import uuid4
 
 import httpx
 from pydantic import BaseModel, Field, ConfigDict
@@ -24,37 +25,25 @@ from services.templates import create_messages_from_template
 
 logger = get_logger(__name__)
 
-
-# --- Pydantic Models for OpenAI-compatible API ---
-
-
-class OpenAICompatibleJsonSchema(BaseModel):
-    name: str
-    strict: bool = True
-    schema_value: Dict[str, Any] = Field(
-        description="The JSON schema for the response.", serialization_alias="schema"
-    )
+API_BASE_URL = "https://api.deepseek.com/v1"
 
 
-class OpenAICompatibleResponseFormat(BaseModel):
-    type: Literal["json_schema"] = "json_schema"
-    json_schema: OpenAICompatibleJsonSchema
+# --- Pydantic Models for DeepSeek API ---
 
 
-class OpenAICompatibleRequestBody(BaseModel):
+class DeepSeekRequestBody(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="allow")
 
     model: str
     messages: List[ChatMessage]
     temperature: Optional[float] = Field(None, ge=0, le=2)
     reasoning: Optional[Reasoning] = None
-    response_format: Optional[OpenAICompatibleResponseFormat] = None
 
     @staticmethod
     def from_common_request(
         common_request: ChatCompletionRequest,
-    ) -> "OpenAICompatibleRequestBody":
-        return OpenAICompatibleRequestBody(
+    ) -> "DeepSeekRequestBody":
+        return DeepSeekRequestBody(
             model=common_request.model,
             messages=common_request.messages,
             temperature=common_request.temperature,
@@ -70,40 +59,40 @@ class ResponseChoice(BaseModel):
     message: ResponseMessage
 
 
-class OpenAICompatibleUsage(BaseModel):
+class DeepSeekUsage(BaseModel):
     prompt_tokens: int
     completion_tokens: int
     total_tokens: int
 
 
-class OpenAICompatibleAPIResponse(BaseModel):
+class DeepSeekAPIResponse(BaseModel):
     id: str
     choices: List[ResponseChoice]
-    usage: OpenAICompatibleUsage
+    usage: DeepSeekUsage
 
 
 # --- Cost Calculation ---
 def _calculate_cost(model: str, prompt_tokens: int, completion_tokens: int) -> float:
-    return -1.0
+    if "deepseek-coder" in model:
+        input_cost_per_million = 0.14
+        output_cost_per_million = 0.14
+    elif "deepseek-chat" in model:
+        input_cost_per_million = 0.14
+        output_cost_per_million = 0.28
+    else:
+        logger.warning(
+            f"Pricing not found for model '{model}'. Returning -1.0 to indicate unknown cost."
+        )
+        return -1.0
+
+    cost = (prompt_tokens / 1_000_000 * input_cost_per_million) + (
+        completion_tokens / 1_000_000 * output_cost_per_million
+    )
+    return cost
 
 
-# --- Provider Client Implementation ---
-class OpenAICompatibleClient(BaseProvider):
-    def __init__(
-        self,
-        base_url: Optional[str] = None,
-        api_key: Optional[str] = None,
-        **kwargs,
-    ):
-        self.base_url = base_url
-        if not self.base_url:
-            raise ValueError(
-                "OpenAI Compatible provider is not configured. Please provide a base_url in your credential or set the OPENAI_COMPATIBLE_BASE_URL environment variable."
-            )
-        if self.base_url.rstrip("/").endswith("/chat/completions"):
-            raise ValueError(
-                "The base_url for openai_compatible provider should not end with '/chat/completions'. Please remove it."
-            )
+class DeepSeekProvider(BaseProvider):
+    def __init__(self, api_key: Optional[str] = None, **kwargs):
         self.api_key = api_key
         self.headers = {
             "Content-Type": "application/json",
@@ -112,33 +101,28 @@ class OpenAICompatibleClient(BaseProvider):
             self.headers["Authorization"] = f"Bearer {self.api_key}"
 
     async def get_models(self) -> List[ModelInfo]:
-        """
-        Returns an empty list as models must be manually specified by the user.
-        """
-        logger.debug(
-            "OpenAI Compatible provider does not support model listing. User must provide model ID."
-        )
-        return []
+        return [
+            ModelInfo(id="deepseek-chat", name="DeepSeek Chat"),
+            ModelInfo(id="deepseek-coder", name="DeepSeek Coder"),
+        ]
 
     async def generate(
         self, request: ChatCompletionRequest
     ) -> Union[ChatCompletionResponse, ChatCompletionErrorResponse]:
-        use_prompt_engineering = (
-            request.json_mode == JsonMode.prompt_engineering and request.response_format
-        )
+        # For DeepSeek, if a JSON response is desired (response_format is set),
+        # we must use prompt engineering. There is no native JSON mode.
+        if request.response_format:
+            return await self._generate_with_prompt_engineering(request)
 
-        if not use_prompt_engineering:
-            return await self._generate_native(request)
-
-        return await self._generate_with_prompt_engineering(request)
+        return await self._generate_native(request)
 
     async def _generate_native(
         self, request: ChatCompletionRequest
     ) -> Union[ChatCompletionResponse, ChatCompletionErrorResponse]:
-        request_body = OpenAICompatibleRequestBody.from_common_request(request)
+        request_body = DeepSeekRequestBody.from_common_request(request)
         payload = request_body.model_dump(exclude_none=True, by_alias=True)
 
-        logger.debug("--- Sending OpenAI Compatible Payload ---")
+        logger.debug("--- Sending DeepSeek Payload (Native) ---")
         logger.debug(json.dumps(payload, indent=2))
         logger.debug("-----------------------------------------")
 
@@ -146,26 +130,21 @@ class OpenAICompatibleClient(BaseProvider):
         try:
             async with httpx.AsyncClient() as client:
                 response = await client.post(
-                    f"{self.base_url.rstrip('/')}/chat/completions",  # pyright: ignore[reportOptionalMemberAccess]
+                    f"{API_BASE_URL}/chat/completions",
                     headers=self.headers,
                     json=payload,
-                    timeout=60,
+                    timeout=300.0,
                 )
                 response.raise_for_status()
 
             raw_response = response.json()
-            api_response = OpenAICompatibleAPIResponse.model_validate(raw_response)
+            api_response = DeepSeekAPIResponse.model_validate(raw_response)
 
             content = (
                 api_response.choices[0].message.content
                 if api_response.choices
                 else None
             )
-
-            try:
-                content = json.loads(content) if content else None
-            except json.JSONDecodeError:
-                pass
 
             usage = ChatCompletionUsage(
                 prompt_tokens=api_response.usage.prompt_tokens,
@@ -180,7 +159,7 @@ class OpenAICompatibleClient(BaseProvider):
 
             return ChatCompletionResponse(
                 id=api_response.id,
-                content=content,  # pyright: ignore[reportArgumentType]
+                content=content,
                 reasoning=None,
                 usage=usage,
                 raw_response=raw_response,
@@ -225,11 +204,15 @@ class OpenAICompatibleClient(BaseProvider):
             {"schema": schema_str, "example_response": example_response_str},
         )
 
-        payload = OpenAICompatibleRequestBody(
+        payload = DeepSeekRequestBody(
             model=request.model,
             messages=final_messages,
             temperature=request.temperature,
         ).model_dump(exclude_none=True, by_alias=True)
+
+        logger.debug("--- Sending DeepSeek Payload (Prompt-Engineered JSON) ---")
+        logger.debug(json.dumps(payload, indent=2))
+        logger.debug("---------------------------------------------------------")
 
         content_text = ""
         raw_response = {}
@@ -239,20 +222,20 @@ class OpenAICompatibleClient(BaseProvider):
         try:
             async with httpx.AsyncClient() as client:
                 response = await client.post(
-                    f"{self.base_url.rstrip('/')}/chat/completions",  # pyright: ignore[reportOptionalMemberAccess]
+                    f"{API_BASE_URL}/chat/completions",
                     headers=self.headers,
                     json=payload,
-                    timeout=60,
+                    timeout=300.0,
                 )
             response.raise_for_status()
 
             raw_response = response.json()
-            api_response = OpenAICompatibleAPIResponse.model_validate(raw_response)
+            api_response = DeepSeekAPIResponse.model_validate(raw_response)
             content_text = (
                 api_response.choices[0].message.content if api_response.choices else ""
             )
 
-            json_str = extract_json_from_code_block(content_text)  # pyright: ignore[reportArgumentType]
+            json_str = extract_json_from_code_block(content_text)
             if not json_str:
                 raise ValueError("No JSON code block found in the response.")
 
@@ -284,7 +267,7 @@ class OpenAICompatibleClient(BaseProvider):
             logger.error(f"Response Body: {e.response.text}")
             return ChatCompletionErrorResponse(
                 raw_request=payload,
-                raw_response=e.response.json() if e.response else None,
+                raw_response=e.response.json() if e.response.text else None,
                 status_code=e.response.status_code,
                 latency_ms=int((time.time() - start_time) * 1000),
             )
@@ -296,7 +279,7 @@ class OpenAICompatibleClient(BaseProvider):
                 status_code=500,
                 latency_ms=int((time.time() - start_time) * 1000),
             )
-        except json.JSONDecodeError as e:
+        except (json.JSONDecodeError, ValueError) as e:
             logger.error(f"Failed to get valid JSON: {e}", exc_info=True)
             return ChatCompletionErrorResponse(
                 raw_request=payload,
@@ -309,4 +292,4 @@ class OpenAICompatibleClient(BaseProvider):
             )
 
 
-register_provider("openai_compatible", OpenAICompatibleClient)
+register_provider("deepseek", DeepSeekProvider)

@@ -109,7 +109,7 @@ def clean_html(html_content: str) -> str:
 
 def html_to_markdown(html_content: str) -> str:
     soup = BeautifulSoup(clean_html(html_content), "lxml")
-    return convert_to_markdown(soup).strip()
+    return convert_to_markdown(str(soup)).strip()
 
 
 class Scraper:

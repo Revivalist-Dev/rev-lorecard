@@ -174,12 +174,12 @@ class GeminiAPIResponse(BaseModel):
 class GeminiClient(BaseProvider):
     def __init__(self, api_key: Optional[str] = None, **kwargs):
         self.api_key = api_key
+
+    async def get_models(self) -> List[ModelInfo]:
         if not self.api_key:
             raise ValueError(
                 "Google Gemini API key not found. Please provide it in your credential or set the GOOGLE_GEMINI_KEY environment variable."
             )
-
-    async def get_models(self) -> List[ModelInfo]:
         logger.debug("Fetching models from Google Gemini")
         try:
             async with httpx.AsyncClient() as client:

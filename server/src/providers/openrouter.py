@@ -105,19 +105,20 @@ class OpenRouterAPIResponse(BaseModel):
 class OpenRouterClient(BaseProvider):
     def __init__(self, api_key: Optional[str] = None, **kwargs):
         self.api_key = api_key
-        if not self.api_key:
-            raise ValueError(
-                "OpenRouter API key not found. Please provide it in your credential or set the OPENROUTER_API_KEY environment variable."
-            )
         self.headers = {
-            "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
         }
+        if self.api_key:
+            self.headers["Authorization"] = f"Bearer {self.api_key}"
 
     async def get_models(self) -> List[ModelInfo]:
         """
         Fetches the list of models from OpenRouter and filters for text-based models.
         """
+        if not self.api_key:
+            raise ValueError(
+                "OpenRouter API key not found. Please provide it in your credential or set the OPENROUTER_API_KEY environment variable."
+            )
         logger.debug("Fetching models from OpenRouter")
         try:
             async with httpx.AsyncClient() as client:

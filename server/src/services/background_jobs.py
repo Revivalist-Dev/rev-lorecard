@@ -393,9 +393,7 @@ async def regenerate_character_field(job: BackgroundJob, project: Project):
                 name="regenerated_field_response",
                 schema_value=RegeneratedFieldResponse.model_json_schema(),
             ),
-            json_mode=JsonMode.prompt_engineering
-            if project.json_enforcement_mode == JsonEnforcementMode.prompt_engineering
-            else JsonMode.api_native,
+            json_mode=JsonMode.prompt_engineering,  # Force prompt engineering for this task
             **project.model_parameters,
         )
     )
