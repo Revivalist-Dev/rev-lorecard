@@ -5,6 +5,7 @@ from uuid import UUID, uuid4
 from db.connection import get_db_connection
 from pydantic import BaseModel
 from db.database import AsyncDB, AsyncDBTransaction
+from db.exceptions import DatabaseError
 
 
 class CreateCharacterCard(BaseModel):
@@ -61,7 +62,7 @@ async def create_or_update_character_card(
     )
     result = await db.execute_and_fetch_one(query, params)
     if not result:
-        raise Exception("Failed to create character card")
+        raise DatabaseError("Failed to create character card")
     return CharacterCard(**result)
 
 

@@ -158,10 +158,10 @@ export interface CharacterCard {
   project_id: string;
   name?: string;
   description?: string;
-  personality?: string;
+  persona?: string;
   scenario?: string;
   first_message?: string;
-  example_dialogue?: string;
+  example_messages?: string;
   created_at: string;
   updated_at: string;
 }

@@ -1,6 +1,6 @@
 import { Stack, Text, Button, Group, Loader, Paper, Title, Textarea, ActionIcon, Tooltip } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
-import type { Project, ProjectSource } from '../../types';
+import type { Project } from '../../types';
 import { useGenerateCharacterJob } from '../../hooks/useJobMutations';
 import { useLatestJob } from '../../hooks/useProjectJobs';
 import { JobStatusIndicator } from '../common/JobStatusIndicator';
@@ -14,8 +14,8 @@ import { notifications } from '@mantine/notifications';
 import apiClient from '../../services/api';
 
 interface CharacterEditorProps {
-  project: Project;
-  selectedSourceIds: string[];
+  readonly project: Project;
+  readonly selectedSourceIds: string[];
 }
 
 export function CharacterEditor({ project, selectedSourceIds }: CharacterEditorProps) {
@@ -82,7 +82,7 @@ export function CharacterEditor({ project, selectedSourceIds }: CharacterEditorP
         responseType: 'blob',
       });
 
-      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const url = globalThis.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement('a');
       link.href = url;
       const filename = `${characterCardResponse.data.name}.png`;
@@ -90,8 +90,8 @@ export function CharacterEditor({ project, selectedSourceIds }: CharacterEditorP
       document.body.appendChild(link);
       link.click();
 
-      link.parentNode?.removeChild(link);
-      window.URL.revokeObjectURL(url);
+      link.remove();
+      globalThis.URL.revokeObjectURL(url);
     } catch (err) {
       console.error('Export failed:', err);
       notifications.show({
@@ -140,7 +140,7 @@ export function CharacterEditor({ project, selectedSourceIds }: CharacterEditorP
         onClose={closeRegenerateModal}
         project={project}
         fieldName={fieldToRegen}
-        fetchedSources={fetchedSources as ProjectSource[]}
+        fetchedSources={fetchedSources}
         characterCard={characterCardResponse?.data}
       />
       <form onSubmit={form.onSubmit((values) => updateCardMutation.mutate({ projectId: project.id, data: values }))}>
@@ -155,7 +155,7 @@ export function CharacterEditor({ project, selectedSourceIds }: CharacterEditorP
                 }
                 disabled={!canGenerate || isGenerationJobActive}
                 loading={isGenerationJobActive}
-                title={!canGenerate ? 'Select at least one fetched source to enable generation.' : ''}
+                title={canGenerate ? '' : 'Select at least one fetched source to enable generation.'}
               >
                 Generate
               </Button>
