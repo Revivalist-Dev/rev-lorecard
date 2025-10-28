@@ -52,7 +52,6 @@ from db.character_cards import (
     create_or_update_character_card,
     get_character_card_by_project,
     update_character_card,
-    _parse_description,
 )
 from db.projects import (
     JsonEnforcementMode,

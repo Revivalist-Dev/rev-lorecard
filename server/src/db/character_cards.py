@@ -1,5 +1,6 @@
+import json
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Dict
 from uuid import UUID, uuid4
 
 from db.connection import get_db_connection
@@ -33,6 +34,16 @@ class CharacterCard(CreateCharacterCard):
     updated_at: datetime
 
 
+def _process_card_result(result: Optional[Dict]) -> Optional[Dict]:
+    """
+    Handles backward compatibility where 'description' might be a dict
+    in the database. Converts it to a JSON string if so.
+    """
+    if result and isinstance(result.get("description"), dict):
+        result["description"] = json.dumps(result["description"])
+    return result
+
+
 async def create_or_update_character_card(
     card: CreateCharacterCard, tx: Optional[AsyncDBTransaction] = None
 ) -> CharacterCard:
@@ -63,7 +74,9 @@ async def create_or_update_character_card(
     result = await db.execute_and_fetch_one(query, params)
     if not result:
         raise DatabaseError("Failed to create character card")
-    return CharacterCard(**result)
+
+    processed_result = _process_card_result(result)
+    return CharacterCard(**processed_result)
 
 
 async def get_character_card_by_project(
@@ -72,7 +85,10 @@ async def get_character_card_by_project(
     db = tx or await get_db_connection()
     query = 'SELECT * FROM "CharacterCard" WHERE project_id = %s'
     result = await db.fetch_one(query, (project_id,))
-    return CharacterCard(**result) if result else None
+    if not result:
+        return None
+    processed_result = _process_card_result(result)
+    return CharacterCard(**processed_result) if processed_result else None
 
 
 async def update_character_card(
@@ -86,7 +102,10 @@ async def update_character_card(
         # If there's nothing to update, just fetch the current state
         query = 'SELECT * FROM "CharacterCard" WHERE id = %s'
         result = await db.fetch_one(query, (card_id,))
-        return CharacterCard(**result) if result else None
+        if not result:
+            return None
+        processed_result = _process_card_result(result)
+        return CharacterCard(**processed_result) if processed_result else None
 
     set_clause = ", ".join([f'"{key}" = %s' for key in update_dict.keys()])
     params = list(update_dict.values())
@@ -94,4 +113,7 @@ async def update_character_card(
 
     query = f'UPDATE "CharacterCard" SET {set_clause} WHERE id = %s RETURNING *'
     result = await db.execute_and_fetch_one(query, tuple(params))
-    return CharacterCard(**result) if result else None
+    if not result:
+        return None
+    processed_result = _process_card_result(result)
+    return CharacterCard(**processed_result) if processed_result else None

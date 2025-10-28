@@ -67,10 +67,14 @@ Carefully craft a detailed and compelling character description in plain text. U
 **CRITICAL REQUIREMENTS:**
 
 * Write the description as a single, formatted string.
-* Use markdown bolding for headings from the 'Character Aspect Guide' (e.g., `**Identity:**`).
-* Follow each heading with a detailed, flowing paragraph.
-* Separate each section with a double newline.
-* Do NOT output JSON or any other structured format.
+* Include each main heading from the 'Character Aspect Guide' (e.g., `**Identity:**`).
+* Under each main heading, include all of its sub-headings (e.g., `**name:**`, `**age:**`).
+* Follow each sub-heading with its detailed content.
+* Separate sub-headings within a main section with a single newline.
+* Separate main heading sections from each other with a double newline.
+* Do NOT use JSON or any other structured format for the description field.
+* Make the character feel like a real person with depth, contradictions, and authentic human complexity.
+* Include mature and erotic detail where appropriate.
 * Output only the raw text for the new description, with no additional commentary.
 {% else %}
 Now, based on all the context above, provide the new rewritten content for the "{{ field_to_regenerate }}" field. Output only the raw text for the new field, with no additional commentary.
