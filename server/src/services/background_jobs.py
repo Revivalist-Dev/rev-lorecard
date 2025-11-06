@@ -103,6 +103,10 @@ from services.rate_limiter import (
 )
 from db.api_request_logs import create_api_request_log, CreateApiRequestLog
 from services.scraper import Scraper
+from services.character_card_parser import (
+    fetch_and_parse_character_card,
+    CharacterCardParseError,
+)
 from logging_config import get_logger
 from services.templates import create_messages_from_template
 
@@ -110,6 +114,15 @@ logger = get_logger(__name__)
 
 # Process database writes in chunks of this size for better UI feedback.
 DB_WRITE_BATCH_SIZE = 10
+
+
+# --- Utility Functions ---
+
+def _is_local_file_path(url: str) -> bool:
+    """Checks if a URL string looks like a local file path (file:// or Windows path)."""
+    return url.startswith("file://") or (
+        len(url) > 2 and url[1] == ":" and url[2] in ("/", "\\")
+    )
 
 
 # --- Result Models for Concurrent Processing ---
@@ -185,14 +198,48 @@ async def fetch_source_content(job: BackgroundJob, project: Project):
                 failed_count += 1
                 continue
 
-            if project.project_type == ProjectType.CHARACTER:
-                content = await scraper.get_content(
-                    source.url, type="markdown", clean=True
+            # Handle potential misclassification of local file paths as web_url due to migration issues
+            current_source_type = source.source_type
+            if (
+                current_source_type == "web_url"
+                and project.project_type == ProjectType.CHARACTER
+                and _is_local_file_path(source.url)
+            ):
+                logger.warning(
+                    f"[{job.id}] Source {source_id} classified as web_url but URL looks like a local file path. Treating as character_card source."
                 )
+                current_source_type = "character_card"
+
+            if current_source_type == "user_text_file":
+                # Content is already provided in raw_content, just ensure it's present
+                if not source.raw_content:
+                    raise ValueError("User Text File source is missing raw_content.")
+                content = source.raw_content
                 content_type = "markdown"
-            else:  # Lorebook
-                content = await scraper.get_content(source.url, type="html", clean=True)
-                content_type = "html"
+            elif current_source_type == "character_card":
+                # Fetch and parse character card content
+                content = await fetch_and_parse_character_card(source.url)
+                content_type = "markdown"
+                logger.debug(f"[{job.id}] Parsed content length: {len(content)}")
+            elif current_source_type == "web_url":
+                # Web scraping logic (default)
+                if not source.url.startswith(("http://", "https://")):
+                    raise ValueError(
+                        f"Web URL source must start with http:// or https://, got: {source.url}"
+                    )
+
+                if project.project_type == ProjectType.CHARACTER:
+                    content = await scraper.get_content(
+                        source.url, type="markdown", clean=True
+                    )
+                    content_type = "markdown"
+                else:  # Lorebook
+                    content = await scraper.get_content(
+                        source.url, type="html", clean=True
+                    )
+                    content_type = "html"
+            else:
+                raise ValueError(f"Unsupported source type: {source.source_type}")
 
             updated_source = await update_project_source(
                 source.id,
@@ -206,11 +253,14 @@ async def fetch_source_content(job: BackgroundJob, project: Project):
             if updated_source:
                 await send_source_update_notification(project.id, updated_source)
             processed_count += 1
-        except Exception as e:
+        except (Exception, CharacterCardParseError) as e:
             logger.error(
                 f"[{job.id}] Failed to fetch content for source {source_id}: {e}",
                 exc_info=True,
             )
+            # Log the content that failed to save, truncated
+            if 'content' in locals():
+                logger.error(f"[{job.id}] Failed content start: {content[:200]}")
             failed_count += 1
         finally:
             progress = ((processed_count + failed_count) / total_sources) * 100

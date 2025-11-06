@@ -6,6 +6,7 @@ import type {
   SingleResponse,
   TestSelectorsPayload,
   TestSelectorsResult,
+  SourceType,
 } from '../types';
 import { notifications } from '@mantine/notifications';
 
@@ -55,9 +56,11 @@ export const useProjectSourceDetails = (projectId: string, sourceId: string | nu
 
 // --- Create ---
 interface CreateSourcePayload {
+  source_type: SourceType;
   url: string;
-  max_pages_to_crawl: number;
-  max_crawl_depth: number;
+  raw_content?: string;
+  max_pages_to_crawl?: number;
+  max_crawl_depth?: number;
   url_exclusion_patterns?: string[];
 }
 

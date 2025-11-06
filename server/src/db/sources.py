@@ -1,6 +1,9 @@
 from datetime import datetime
 from typing import Any, List, Literal, Optional
 from uuid import UUID, uuid4
+from logging_config import get_logger # Added for logging
+
+SourceType = Literal["web_url", "user_text_file", "character_card"]
 
 from db.connection import get_db_connection
 from pydantic import BaseModel
@@ -13,6 +16,7 @@ ContentType = Literal["html", "markdown"]
 class ProjectSource(BaseModel):
     id: UUID
     project_id: str
+    source_type: SourceType = "web_url"
     url: str
     link_extraction_selector: Optional[List[str]] = None
     link_extraction_pagination_selector: Optional[str] = None
@@ -29,14 +33,18 @@ class ProjectSource(BaseModel):
 
 class CreateProjectSource(BaseModel):
     project_id: str
+    source_type: SourceType = "web_url"
     url: str
+    raw_content: Optional[str] = None # For user_text_file
     max_pages_to_crawl: int = 20
     max_crawl_depth: int = 1
     url_exclusion_patterns: Optional[List[str]] = None
 
 
 class UpdateProjectSource(BaseModel):
+    source_type: Optional[SourceType] = None
     url: Optional[str] = None
+    raw_content: Optional[str] = None # For user_text_file
     link_extraction_selector: Optional[List[str]] = None
     link_extraction_pagination_selector: Optional[str] = None
     url_exclusion_patterns: Optional[List[str]] = None
@@ -54,14 +62,16 @@ async def create_project_source(
     db = tx or await get_db_connection()
     source_id = uuid4()
     query = """
-        INSERT INTO "ProjectSource" (id, project_id, url, max_pages_to_crawl, max_crawl_depth, url_exclusion_patterns)
-        VALUES (%s, %s, %s, %s, %s, %s)
+        INSERT INTO "ProjectSource" (id, project_id, source_type, url, raw_content, max_pages_to_crawl, max_crawl_depth, url_exclusion_patterns)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
         RETURNING *
     """
     params = (
         source_id,
         source.project_id,
+        source.source_type,
         source.url,
+        source.raw_content,
         source.max_pages_to_crawl,
         source.max_crawl_depth,
         source.url_exclusion_patterns,
@@ -100,7 +110,7 @@ async def list_sources_by_project(
     else:
         # Exclude raw_content for performance in list views
         query = (
-            "SELECT id, project_id, url, link_extraction_selector, link_extraction_pagination_selector, "
+            "SELECT id, project_id, source_type, url, link_extraction_selector, link_extraction_pagination_selector, "
             "url_exclusion_patterns, max_pages_to_crawl, max_crawl_depth, last_crawled_at, created_at, updated_at, "
             "content_type, content_char_count "
             'FROM "ProjectSource" WHERE project_id = %s ORDER BY created_at ASC'
@@ -129,7 +139,14 @@ async def update_project_source(
     set_clause = ", ".join(set_clause_parts)
     query = f'UPDATE "ProjectSource" SET {set_clause} WHERE id = %s RETURNING *'
 
+    # Debugging: Log the query and parameters
+    from logging_config import get_logger
+    logger = get_logger(__name__)
+    logger.debug(f"Update ProjectSource Query: {query}")
+    logger.debug(f"Update ProjectSource Params: {params}")
+
     result = await db.execute_and_fetch_one(query, tuple(params))
+    logger.debug(f"Update ProjectSource Result: {result}")
     return ProjectSource(**result) if result else None
 
 

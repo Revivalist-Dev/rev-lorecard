@@ -1,0 +1,2 @@
+-- Migration 0010: Source type columns already exist in the database schema, skipping ALTER TABLE commands.
+-- This migration is kept to increment the DB version.

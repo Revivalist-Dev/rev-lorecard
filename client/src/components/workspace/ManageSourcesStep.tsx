@@ -3,7 +3,8 @@ import { IconChevronRight, IconPencil, IconPlayerPlay, IconRefresh, IconTrash } 
 import { useDisclosure } from '@mantine/hooks';
 import { useState, useMemo, memo } from 'react';
 import { useModals } from '@mantine/modals';
-import type { Project, ProjectSource } from '../../types';
+import { notifications } from '@mantine/notifications';
+import type { Project, ProjectSource, SourceType } from '../../types';
 import {
   useProjectSources,
   useDeleteProjectSource,
@@ -50,6 +51,12 @@ const buildSourceTree = (
   return rootSources;
 };
 
+const SOURCE_TYPE_LABELS: Record<SourceType, string> = {
+  web_url: 'Web URL',
+  user_text_file: 'User Text',
+  character_card: 'Char Card',
+};
+
 // --- Recursive Tree Rendering Component ---
 const SourceTreeItem = memo(
   ({
@@ -89,6 +96,9 @@ const SourceTreeItem = memo(
             </Text>
           </Group>
           <Group gap="xs" wrap="nowrap">
+            <Badge variant="filled" color={node.source_type === 'web_url' ? 'blue' : node.source_type === 'character_card' ? 'orange' : 'teal'}>
+              {SOURCE_TYPE_LABELS[node.source_type]}
+            </Badge>
             {node.last_crawled_at && <Badge variant="light">Crawled</Badge>}
             <ActionIcon variant="subtle" onClick={() => onEdit(node)}>
               <IconPencil size={16} />
@@ -217,16 +227,28 @@ export function ManageSourcesStep({ project }: StepProps) {
       return true;
     });
 
-    const selectedSources = sources?.filter((s) => topLevelSelectedIds.includes(s.id)) || [];
-    const hasDeepCrawl = selectedSources.some((s) => s.max_crawl_depth > 1);
+    const crawlableSelectedSources = sources?.filter(
+      (s) => topLevelSelectedIds.includes(s.id) && s.source_type === 'web_url'
+    ) || [];
 
-    const mutationPayload = { project_id: project.id, source_ids: topLevelSelectedIds };
+    if (crawlableSelectedSources.length === 0) {
+      notifications.show({
+        title: 'No Crawlable Sources Selected',
+        message: 'Only Web URL sources can be discovered and scanned.',
+        color: 'yellow',
+      });
+      return;
+    }
+
+    const hasDeepCrawl = crawlableSelectedSources.some((s) => s.max_crawl_depth > 1);
+
+    const mutationPayload = { project_id: project.id, source_ids: crawlableSelectedSources.map(s => s.id) };
     const executeMutation = () => discoverAndCrawlMutation.mutate(mutationPayload);
 
     if (hasDeepCrawl) {
-      const maxDepthSource = selectedSources.reduce(
+      const maxDepthSource = crawlableSelectedSources.reduce(
         (max, s) => (s.max_crawl_depth > max.max_crawl_depth ? s : max),
-        selectedSources[0]
+        crawlableSelectedSources[0]
       );
 
       modals.openConfirmModal({
@@ -280,7 +302,11 @@ export function ManageSourcesStep({ project }: StepProps) {
         <Group>
           <Button
             leftSection={<IconPlayerPlay size={14} />}
-            disabled={selectedSourceIds.length === 0 || isAnyCrawlJobActive}
+            disabled={
+              selectedSourceIds.length === 0 ||
+              isAnyCrawlJobActive ||
+              !sources?.some((s) => selectedSourceIds.includes(s.id) && s.source_type === 'web_url')
+            }
             onClick={handleDiscoverAndCrawlClick}
             loading={discoverAndCrawlMutation.isPending || isDiscoverJobActive}
           >
@@ -289,8 +315,25 @@ export function ManageSourcesStep({ project }: StepProps) {
           <Button
             variant="outline"
             leftSection={<IconRefresh size={14} />}
-            disabled={selectedSourceIds.length === 0 || isAnyCrawlJobActive}
-            onClick={() => rescanMutation.mutate({ project_id: project.id, source_ids: selectedSourceIds })}
+            disabled={
+              selectedSourceIds.length === 0 ||
+              isAnyCrawlJobActive ||
+              !sources?.some((s) => selectedSourceIds.includes(s.id) && s.source_type === 'web_url')
+            }
+            onClick={() => {
+              const crawlableIds = sources
+                ?.filter((s) => selectedSourceIds.includes(s.id) && s.source_type === 'web_url')
+                .map((s) => s.id) || [];
+              if (crawlableIds.length > 0) {
+                rescanMutation.mutate({ project_id: project.id, source_ids: crawlableIds });
+              } else {
+                notifications.show({
+                  title: 'No Crawlable Sources Selected',
+                  message: 'Only Web URL sources can be rescanned.',
+                  color: 'yellow',
+                });
+              }
+            }}
             loading={rescanMutation.isPending || isRescanJobActive}
           >
             Rescan Selected ({selectedSourceIds.length})

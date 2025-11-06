@@ -97,10 +97,14 @@ export interface TestCredentialResult {
 
 export type ContentType = 'html' | 'markdown';
 
+export type SourceType = 'web_url' | 'user_text_file' | 'character_card';
+
 export interface ProjectSource {
   id: string; // UUID
   project_id: string;
+  source_type: SourceType;
   url: string;
+  raw_content?: string; // For user_text_file
   link_extraction_selector?: string[];
   link_extraction_pagination_selector?: string;
   url_exclusion_patterns?: string[];
@@ -109,7 +113,6 @@ export interface ProjectSource {
   last_crawled_at?: string;
   created_at: string;
   updated_at: string;
-  raw_content?: string; // Note: Not typically sent in list views
   content_type?: ContentType;
   content_char_count?: number;
 }
