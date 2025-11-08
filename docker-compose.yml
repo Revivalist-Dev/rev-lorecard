@@ -3,6 +3,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    depends_on:
+      - db
     restart: unless-stopped
     ports:
       - "${PORT:-3000}:${PORT:-3000}"
@@ -14,10 +16,30 @@ services:
       - OPENAI_COMPATIBLE_BASE_URL=${OPENAI_COMPATIBLE_BASE_URL}
       - OPENAI_COMPATIBLE_API_KEY=${OPENAI_COMPATIBLE_API_KEY}
       - APP_ENV=${APP_ENV:-production}
-      - APP_SECRET_KEY=${APP_SECRET_KEY}
 
-      # --- Default to SQLite ---
-      - DATABASE_TYPE=${DATABASE_TYPE:-sqlite}
-      - DATABASE_URL=/app/server/data/${SQLITE_DB_NAME:-lorecard.db}
+      # --- PostgreSQL Configuration ---
+      - DATABASE_TYPE=postgres
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
     volumes:
       - ./data:/app/server/data
+      # Mount the D: drive root for accessing local character cards (Windows path D:\...)
+      - D:/:/d
+
+  db:
+    image: postgres:18
+    container_name: lorecard_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-Komorebi1582!}
+      POSTGRES_DB: ${POSTGRES_DB:-lorecard}
+    ports:
+      - "5432:5432"
+    volumes:
+      - lorecard_postgres_data:/var/lib/postgresql
+
+volumes:
+  lorecard_postgres_data:

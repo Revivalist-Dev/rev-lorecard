@@ -5,7 +5,7 @@ uvicorn
 psycopg
 psycopg_pool
 psycopg_binary
-aiosqlite
+# aiosqlite (Deprecated: using PostgreSQL only)
 jinja2
 httpx
 pytest
@@ -17,3 +17,5 @@ lxml
 html-to-markdown
 cryptography
 Pillow
+PyYAML
+-e ../aichar-main

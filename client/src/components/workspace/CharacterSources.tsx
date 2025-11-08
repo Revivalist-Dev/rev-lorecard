@@ -119,7 +119,7 @@ export function CharacterSources({ project, selectedSourceIds, setSelectedSource
                               checked ? [...current, source.id] : current.filter((id) => id !== source.id)
                             );
                           }}
-                          disabled={!source.last_crawled_at && source.source_type !== 'user_text_file'}
+                          disabled={!source.raw_content}
                         />
                         <Box style={{ minWidth: 0 }}>
                           <Text truncate fw={500}>
@@ -151,7 +151,7 @@ export function CharacterSources({ project, selectedSourceIds, setSelectedSource
                             onClick={() => handleOpenViewModal(source.id)}
                             variant="default"
                             disabled={
-                              !source.last_crawled_at && source.source_type !== 'user_text_file'
+                              source.source_type === 'web_url' && !source.raw_content
                             }
                           >
                             <IconEye size={16} />

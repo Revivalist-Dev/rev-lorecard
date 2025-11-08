@@ -1,8 +1,20 @@
-import { Modal, ScrollArea, Code, Loader, Alert, Title, Box, useMantineTheme } from '@mantine/core';
-import { useProjectSourceDetails } from '../../hooks/useProjectSources';
-import { IconAlertCircle } from '@tabler/icons-react';
+import {
+  Modal,
+  ScrollArea,
+  Code,
+  Loader,
+  Alert,
+  Title,
+  Box,
+  useMantineTheme,
+  Group,
+  Button,
+} from '@mantine/core';
+import { useProjectSourceDetails, useUpdateProjectSource } from '../../hooks/useProjectSources';
+import { IconAlertCircle, IconEdit, IconDeviceFloppy } from '@tabler/icons-react';
 import showdown from 'showdown';
-import { useMemo } from 'react';
+import { useMemo, useState, useEffect } from 'react';
+import { MonacoEditorInput } from '../common/MonacoEditorInput';
 
 interface ViewSourceContentModalProps {
   opened: boolean;
@@ -12,9 +24,41 @@ interface ViewSourceContentModalProps {
 }
 
 export function ViewSourceContentModal({ opened, onClose, projectId, sourceId }: ViewSourceContentModalProps) {
-  const { data, isLoading, isError, error } = useProjectSourceDetails(projectId, sourceId);
+  const { data, isLoading, isError, error, refetch } = useProjectSourceDetails(projectId, sourceId);
+  const updateSourceMutation = useUpdateProjectSource(projectId);
   const source = data?.data;
   const theme = useMantineTheme();
+
+  const [isEditing, setIsEditing] = useState(false);
+  const [editedContent, setEditedContent] = useState<string>('');
+
+  useEffect(() => {
+    if (source?.raw_content) {
+      setEditedContent(source.raw_content);
+    } else {
+      setEditedContent('');
+    }
+    setIsEditing(false); // Reset editing state on source change
+  }, [source]);
+
+  const isEditable =
+    source?.source_type === 'user_text_file' || source?.source_type === 'web_url';
+
+  const handleSave = async () => {
+    if (!sourceId || !source) return;
+
+    await updateSourceMutation.mutateAsync({
+      projectId,
+      sourceId,
+      data: {
+        raw_content: editedContent,
+        // content_type is set by the backend if raw_content is updated
+      },
+    });
+
+    setIsEditing(false);
+    refetch(); // Refetch to ensure the latest data (char count, etc.) is displayed
+  };
 
   // Create a memoized showdown converter with our custom extension
   const converter = useMemo(() => {
@@ -82,7 +126,42 @@ export function ViewSourceContentModal({ opened, onClose, projectId, sourceId }:
   }, [source, converter]);
 
   return (
-    <Modal opened={opened} onClose={onClose} size="80%" title={<Title order={4}>View Source Content</Title>}>
+    <Modal
+      opened={opened}
+      onClose={onClose}
+      size="80%"
+      title={
+        <Group justify="space-between" w="100%">
+          <Title order={4}>
+            {isEditing ? 'Edit Source Content' : 'View Source Content'}
+          </Title>
+          {source && isEditable && (
+            <Group gap="xs">
+              {isEditing ? (
+                <Button
+                  leftSection={<IconDeviceFloppy size={16} />}
+                  onClick={handleSave}
+                  loading={updateSourceMutation.isPending}
+                  disabled={updateSourceMutation.isPending || editedContent === source.raw_content}
+                  size="xs"
+                >
+                  Save Changes
+                </Button>
+              ) : (
+                <Button
+                  leftSection={<IconEdit size={16} />}
+                  onClick={() => setIsEditing(true)}
+                  size="xs"
+                  variant="default"
+                >
+                  Edit Content
+                </Button>
+              )}
+            </Group>
+          )}
+        </Group>
+      }
+    >
       {isLoading && <Loader />}
       {isError && (
         <Alert icon={<IconAlertCircle size="1rem" />} title="Error" color="red">
@@ -91,7 +170,16 @@ export function ViewSourceContentModal({ opened, onClose, projectId, sourceId }:
       )}
       {source && (
         <ScrollArea h="80vh">
-          {source.content_type === 'markdown' ? (
+          {isEditing ? (
+            <Box h="75vh">
+              <MonacoEditorInput
+                value={editedContent}
+                onChange={(value) => setEditedContent(value ?? '')}
+                language={source.content_type === 'markdown' ? 'markdown' : 'plaintext'}
+                height="100%"
+              />
+            </Box>
+          ) : source.content_type === 'markdown' ? (
             <Box
               p="md"
               dangerouslySetInnerHTML={{ __html: renderedContent }}
@@ -100,7 +188,6 @@ export function ViewSourceContentModal({ opened, onClose, projectId, sourceId }:
                 lineHeight: 1.6,
                 // Add styles for better preview
                 'h1, h2, h3': {
-                  marginTop: '24px',
                   marginBottom: '16px',
                   fontWeight: 600,
                   lineHeight: 1.25,

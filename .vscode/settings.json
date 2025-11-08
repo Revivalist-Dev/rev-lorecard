@@ -1,4 +1,17 @@
 {
     "python-envs.defaultEnvManager": "ms-python.python:system",
-    "python-envs.pythonProjects": []
+    "python-envs.pythonProjects": [],
+    "sqltools.connections": [
+        {
+            "ssh": "Disabled",
+            "previewLimit": 50,
+            "server": "localhost",
+            "port": 5432,
+            "driver": "PostgreSQL",
+            "database": "lorecard",
+            "username": "postgres",
+            "password": "Komorebi1582!",
+            "name": "postgres"
+        }
+    ]
 }

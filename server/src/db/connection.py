@@ -1,7 +1,8 @@
 import os
 from typing import Optional
+import asyncio
 
-from db.database import AsyncDB, PostgresDB, SQLiteDB
+from db.database import AsyncDB, PostgresDB
 from db.migration_runner import apply_migrations
 from logging_config import get_logger
 
@@ -34,22 +35,32 @@ async def init_database():
     if db:
         return
 
-    db_type = os.getenv("DATABASE_TYPE", "sqlite").lower()
+    db_type = os.getenv("DATABASE_TYPE", "postgres").lower()
+    if db_type != "postgres":
+        raise ValueError(f"Unsupported DATABASE_TYPE: {db_type}. Only 'postgres' is supported.")
+
     logger.info(f"Initializing database of type: {db_type}")
 
-    if db_type == "postgres":
-        db_url = os.environ.get(
-            "DATABASE_URL", "postgresql://user:password@localhost:5432/lorecard"
-        )
-        db = PostgresDB(db_url)
-    elif db_type == "sqlite":
-        db_url = os.environ.get("DATABASE_URL", "lorecard.db")
-        db = SQLiteDB(db_url)
-    else:
-        raise ValueError(f"Unsupported DATABASE_TYPE: {db_type}")
+    db_url = os.environ.get(
+        "DATABASE_URL", "postgresql://user:password@localhost:5432/lorecard"
+    )
+    db = PostgresDB(db_url)
 
-    await db.connect()
-    await apply_migrations(db, db_type)
+    # Retry loop to wait for the PostgreSQL container to be ready
+    max_retries = 10
+    for i in range(max_retries):
+        try:
+            await db.connect()
+            break
+        except Exception as e:
+            if i < max_retries - 1:
+                logger.warning(f"Database connection failed, retrying in 1 second... ({i+1}/{max_retries})")
+                await asyncio.sleep(1)
+            else:
+                logger.error("Database connection failed after multiple retries.")
+                raise e
+
+    await apply_migrations(db)
 
 
 async def close_database():

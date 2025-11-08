@@ -1,0 +1,4 @@
+Custom Instructions for All Modes:
+These instructions apply to all modes. They provide a base set of behaviors that can be enhanced by mode-specific instructions below.
+
+""

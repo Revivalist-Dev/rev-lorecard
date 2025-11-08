@@ -1,2 +1,2 @@
--- Migration 0010: Source type columns already exist in the database schema, skipping ALTER TABLE commands.
--- This migration is kept to increment the DB version.
+-- Add source_type column with default value 'web_url'
+ALTER TABLE "ProjectSource" ADD COLUMN source_type TEXT NOT NULL DEFAULT 'web_url';

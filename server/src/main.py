@@ -193,7 +193,7 @@ async def serve_assets(scope: Scope, receive: Receive, send: Send) -> None:
     await assets_app(scope, receive, send)
 
 
-@get(path=["/", "/{path:path}"], sync_to_thread=False)
+@get(path=["/", "/{path:path}"])
 async def spa_fallback(path: str | None = None) -> ASGIFileResponse:
     """
     Serves the index.html file for all non-API and non-asset routes.
@@ -239,7 +239,7 @@ async def get_latest_github_version() -> Optional[str]:
         return None
 
 
-@get(path="/info", sync_to_thread=False)
+@get(path="/info")
 async def get_app_info() -> AppInfo:
     """Returns basic application information, including whether an update is available."""
     current_version = os.getenv("APP_VERSION", "development").split("-")[0]

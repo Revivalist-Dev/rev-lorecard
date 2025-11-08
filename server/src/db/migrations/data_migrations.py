@@ -1,9 +1,8 @@
 import json
-from sqlite3 import OperationalError as SQLiteOperationalError
 from typing import Dict
 from uuid import uuid4
 from db.common import CreateGlobalTemplate
-from db.database import AsyncDBTransaction, DatabaseType
+from db.database import AsyncDBTransaction
 from logging_config import get_logger
 import default_templates
 from services.encryption import encrypt
@@ -18,34 +17,16 @@ async def _upsert_global_template(
     A common helper function to insert a global template, or update it if it already exists.
     Handles both PostgreSQL and SQLite dialects.
     """
-    try:
-        # Attempt PostgreSQL's "INSERT ON CONFLICT" for an atomic upsert
-        pg_query = """
-            INSERT INTO "GlobalTemplate" (id, name, content)
-            VALUES (%s, %s, %s)
-            ON CONFLICT (id) DO UPDATE SET
-                content = EXCLUDED.content,
-                name = EXCLUDED.name,
-                updated_at = CURRENT_TIMESTAMP
-        """
-        await tx.execute(pg_query, (template.id, template.name, template.content))
-    except (Exception, SQLiteOperationalError) as e:
-        # If the above fails (e.g., SQLiteOperationalError on "ON CONFLICT"),
-        # fall back to the DELETE then INSERT method for SQLite.
-        if "syntax error" in str(
-            e
-        ):  # A simple check to ensure it's likely a syntax issue
-            logger.debug("Postgres-style upsert failed, falling back to SQLite method.")
-            await tx.execute(
-                'DELETE FROM "GlobalTemplate" WHERE id = %s', (template.id,)
-            )
-            await tx.execute(
-                'INSERT INTO "GlobalTemplate" (id, name, content) VALUES (%s, %s, %s)',
-                (template.id, template.name, template.content),
-            )
-        else:
-            # Re-raise any other unexpected errors
-            raise e
+    # Use PostgreSQL's "INSERT ON CONFLICT" for an atomic upsert
+    pg_query = """
+        INSERT INTO "GlobalTemplate" (id, name, content)
+        VALUES (%s, %s, %s)
+        ON CONFLICT (id) DO UPDATE SET
+            content = EXCLUDED.content,
+            name = EXCLUDED.name,
+            updated_at = CURRENT_TIMESTAMP
+    """
+    await tx.execute(pg_query, (template.id, template.name, template.content))
 
 
 async def v3_override_default_templates(tx: AsyncDBTransaction) -> None:
@@ -175,21 +156,8 @@ async def v6_migrate_to_credentials(tx: AsyncDBTransaction) -> None:
     )
 
     projects = []
-    if tx.database_type() == DatabaseType.SQLITE:
-        try:
-            # In SQLite, the old table is renamed, so we read from there.
-            projects = await tx.fetch_all(
-                'SELECT id, ai_provider_config FROM "Project_old_for_credentials"'
-            )
-        except (Exception, SQLiteOperationalError) as e:
-            # This can happen if the table doesn't exist (e.g., no projects existed before migration)
-            logger.warning(
-                f"Could not select from Project_old_for_credentials, assuming no projects to migrate: {e}"
-            )
-            projects = []
-    else:  # PostgreSQL
-        # In PostgreSQL, the column exists on the main table during the transaction.
-        projects = await tx.fetch_all('SELECT id, ai_provider_config FROM "Project"')
+    # PostgreSQL: The column exists on the main table during the transaction.
+    projects = await tx.fetch_all('SELECT id, ai_provider_config FROM "Project"')
 
     if not projects:
         logger.info("No existing projects to migrate.")
@@ -251,13 +219,9 @@ async def v6_migrate_to_credentials(tx: AsyncDBTransaction) -> None:
             )
             logger.info(f"Migrated project {project['id']} to use new credential.")
 
-    # Final cleanup step after migration is complete
-    if tx.database_type() == DatabaseType.SQLITE:
-        await tx.execute("DROP TABLE IF EXISTS Project_old_for_credentials")
-        logger.info("Dropped old project table for SQLite.")
-    else:  # PostgreSQL
-        await tx.execute('ALTER TABLE "Project" DROP COLUMN "ai_provider_config"')
-        logger.info("Dropped old ai_provider_config column for PostgreSQL.")
+    # Final cleanup step after migration is complete (PostgreSQL only)
+    await tx.execute('ALTER TABLE "Project" DROP COLUMN "ai_provider_config"')
+    logger.info("Dropped old ai_provider_config column for PostgreSQL.")
 
     logger.info("Data migration for v6 completed successfully.")
 

@@ -1,11 +1,15 @@
+import asyncio
 import base64
 import io
 import json
 import httpx
+import yaml
 from PIL import Image
+import aichar
 from typing import Dict, Any
-from urllib.parse import urlparse
+from urllib.parse import urlparse, quote, unquote
 from urllib.request import url2pathname
+import re
 from pathlib import Path
 
 from logging_config import get_logger
@@ -15,6 +19,29 @@ logger = get_logger(__name__)
 class CharacterCardParseError(Exception):
     """Custom exception for character card parsing failures."""
     pass
+
+
+def _translate_windows_path_to_linux(path_str: str) -> str:
+    """
+    Translates a Windows drive path (e.g., D:\path\to\file) to a common
+    Linux Docker mount path (e.g., /d/path/to/file).
+    This assumes Docker Desktop is mounting drives as /c, /d, etc.
+    """
+    # Regex to match a single drive letter followed by a colon and a backslash
+    # e.g., C:\ or D:\
+    import re
+    match = re.match(r'^([a-zA-Z]):[\\/](.*)', path_str)
+    
+    if match:
+        drive_letter = match.group(1).lower()
+        # Replace backslashes with forward slashes. We rely on Path() to handle special characters
+        # like spaces and brackets, as they are valid in Linux filenames and should not be URL-quoted
+        # when accessing the local filesystem via Docker volume mounts.
+        rest_of_path = match.group(2).replace('\\', '/')
+        # Construct the Linux path: /drive_letter/rest/of/path
+        return f"/{drive_letter}/{rest_of_path}"
+    
+    return path_str
 
 async def fetch_and_parse_character_card(url: str) -> str:
     """
@@ -44,10 +71,14 @@ async def fetch_and_parse_character_card(url: str) -> str:
             # Default to parsed_url.path for paths without scheme
             path_to_open = parsed_url.path
 
-        file_path = Path(path_to_open)
+        # Attempt to translate Windows drive paths (e.g., D:\...) to Linux mount points (/d/...)
+        translated_path = _translate_windows_path_to_linux(path_to_open)
+        
+        file_path = Path(translated_path)
         
         if not file_path.is_file():
-            logger.error(f"Attempted to open path: {file_path.resolve()}")
+            # Log the path we actually attempted to open (without resolving, which causes the Docker CWD issue)
+            logger.error(f"Attempted to open path: {file_path}")
             raise CharacterCardParseError(f"Local file not found: {url}")
         
         try:
@@ -69,59 +100,63 @@ async def fetch_and_parse_character_card(url: str) -> str:
     else:
         raise CharacterCardParseError(f"Unsupported URL scheme: {parsed_url.scheme}")
 
-    # Determine if content is JSON or PNG
-    if url.lower().endswith(('.json', '.txt')) or content_bytes.startswith(b'{'):
-        # Assume JSON or raw text
+    # Determine if content is JSON/TXT, YAML, or PNG
+    if url.lower().endswith(('.json', '.txt', '.yaml', '.yml')) or content_bytes.startswith(b'{'):
+        content_str = content_bytes.decode('utf-8')
+        
+        # Determine if content is JSON or YAML based on extension or content start
+        is_yaml = url.lower().endswith(('.yaml', '.yml')) or (not content_str.startswith('{') and not content_str.startswith('['))
+        
         try:
-            data = json.loads(content_bytes.decode('utf-8'))
-        except json.JSONDecodeError:
-            # If it's not JSON, treat it as raw text content
-            return content_bytes.decode('utf-8').strip()
-    elif url.lower().endswith('.png') or content_bytes.startswith(b'\x89PNG'):
-        # Assume PNG card (SillyTavern v2 format)
-        try:
-            image = Image.open(io.BytesIO(content_bytes))
-            metadata = image.info
-            logger.debug(f"PNG metadata keys found: {list(metadata.keys())}")
-            
-            if 'ccv3' in metadata:
-                # SillyTavern v3 format (takes precedence)
-                encoded_data = metadata['ccv3']
-                json_data = base64.b64decode(encoded_data).decode('utf-8')
-                data = json.loads(json_data)
-            elif 'chara' in metadata:
-                # SillyTavern v2 format
-                encoded_data = metadata['chara']
-                json_data = base64.b64decode(encoded_data).decode('utf-8')
-                data = json.loads(json_data)
-            elif 'troll' in metadata:
-                # Legacy/Troll format
-                encoded_data = metadata['troll']
-                json_data = base64.b64decode(encoded_data).decode('utf-8')
-                data = json.loads(json_data)
+            if is_yaml:
+                # Use aichar for YAML parsing
+                char_class = await asyncio.to_thread(aichar.load_character_yaml, content_str)
             else:
-                # Fallback: Extract all metadata as plain text
-                logger.warning("PNG file does not contain 'chara' metadata. Extracting all metadata as plain text.")
-                
-                fallback_content = f"CHARACTER CARD SOURCE: {url} (Unsupported PNG format)\n\n"
-                for key, value in metadata.items():
-                    if isinstance(value, str) and len(value) < 1000: # Limit size for sanity
-                        fallback_content += f"--- METADATA: {key.upper()} ---\n{value.strip()}\n\n"
-                
-                # Always return the fallback content if we reached this point, even if minimal.
-                # This ensures the source is marked as fetched and the user can view the metadata.
-                return fallback_content.strip()
+                # Use aichar for JSON parsing
+                char_class = await asyncio.to_thread(aichar.load_character_json, content_str)
+            
+            # Convert CharacterClass object to a dictionary matching our expected structure
+            data = {
+                "name": char_class.name,
+                "description": char_class.summary,
+                "personality": char_class.personality,
+                "scenario": char_class.scenario,
+                "first_mes": char_class.greeting_message,
+                "mes_example": char_class.example_messages,
+            }
+            
+            # We skip _parse_json_card since aichar already handles V1/Pygmalion normalization
+            
         except Exception as e:
-            raise CharacterCardParseError(f"Failed to parse PNG card: {e}")
+            # If parsing fails, raise a clear error.
+            logger.error(f"Failed to parse JSON/YAML card using aichar: {e}", exc_info=True)
+            raise CharacterCardParseError(f"Failed to parse character card (JSON/YAML format). Underlying error: {e}")
+    elif url.lower().endswith('.png') or content_bytes.startswith(b'\x89PNG'):
+        # Use aichar for robust PNG parsing
+        try:
+            # aichar.load_character_card is synchronous, run it in a thread
+            char_class = await asyncio.to_thread(aichar.load_character_card, content_bytes)
+            
+            # Convert CharacterClass object to a dictionary matching our expected structure
+            data = {
+                "name": char_class.name,
+                "description": char_class.summary,
+                "personality": char_class.personality,
+                "scenario": char_class.scenario,
+                "first_mes": char_class.greeting_message,
+                "mes_example": char_class.example_messages,
+            }
+            
+        except Exception as e:
+            # If aichar fails, we raise a clear error.
+            logger.error(f"Failed to parse PNG card using aichar: {e}", exc_info=True)
+            raise CharacterCardParseError(f"Failed to parse character card (PNG format). Underlying error: {e}")
     else:
-        raise CharacterCardParseError("Unsupported file format (must be JSON, TXT, or PNG).")
+        raise CharacterCardParseError("Unsupported file format (must be JSON, TXT, YAML, or PNG).")
 
     # Format the extracted character data for LLM context
-    if 'spec' in data and data['spec'] == 'chara_card_v2':
-        char_data = data['data']
-    else:
-        # Assume legacy or raw character data structure
-        char_data = data
+    # The data variable now holds the normalized dictionary from aichar parsing (PNG, JSON, or YAML)
+    char_data = data
 
     formatted_content = f"CHARACTER CARD SOURCE: {url}\n\n"
     

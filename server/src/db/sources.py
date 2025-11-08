@@ -51,7 +51,6 @@ class UpdateProjectSource(BaseModel):
     max_pages_to_crawl: Optional[int] = None
     max_crawl_depth: Optional[int] = None
     last_crawled_at: Optional[datetime] = None
-    raw_content: Optional[str] = None
     content_type: Optional[ContentType] = None
     content_char_count: Optional[int] = None
 
@@ -61,9 +60,19 @@ async def create_project_source(
 ) -> ProjectSource:
     db = tx or await get_db_connection()
     source_id = uuid4()
+
+    # Set last_crawled_at and content_char_count if it's a user_text_file with content
+    last_crawled_at = None
+    content_char_count = None
+    content_type = None
+    if source.source_type == "user_text_file" and source.raw_content is not None:
+        last_crawled_at = datetime.now()
+        content_char_count = len(source.raw_content)
+        content_type = "markdown" # Assuming user text is markdown/plain text
+
     query = """
-        INSERT INTO "ProjectSource" (id, project_id, source_type, url, raw_content, max_pages_to_crawl, max_crawl_depth, url_exclusion_patterns)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+        INSERT INTO "ProjectSource" (id, project_id, source_type, url, raw_content, max_pages_to_crawl, max_crawl_depth, url_exclusion_patterns, last_crawled_at, content_char_count, content_type)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         RETURNING *
     """
     params = (
@@ -75,6 +84,9 @@ async def create_project_source(
         source.max_pages_to_crawl,
         source.max_crawl_depth,
         source.url_exclusion_patterns,
+        last_crawled_at,
+        content_char_count,
+        content_type,
     )
     result = await db.execute_and_fetch_one(query, params)
     if not result:
@@ -126,6 +138,19 @@ async def update_project_source(
 ) -> ProjectSource | None:
     db = tx or await get_db_connection()
     update_data = source_update.model_dump(exclude_unset=True)
+    
+    # Handle raw_content update: recalculate char count and set updated_at
+    if "raw_content" in update_data:
+        raw_content = update_data["raw_content"]
+        update_data["content_char_count"] = len(raw_content) if raw_content is not None else None
+        # If content is updated, we should also update the last_crawled_at timestamp
+        # to reflect that the content is fresh (either scraped or manually edited).
+        update_data["last_crawled_at"] = datetime.now()
+        
+        # Ensure content_type is set if raw_content is set and content_type is not explicitly provided
+        if "content_type" not in update_data and raw_content is not None:
+            update_data["content_type"] = "markdown" # Default to markdown for manual edits
+
     if not update_data:
         return await get_project_source(source_id, tx=tx)
 

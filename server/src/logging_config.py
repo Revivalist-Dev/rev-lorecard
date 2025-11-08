@@ -38,7 +38,9 @@ def setup_logging():
             datefmt="[%X]",
             handlers=[RichHandler(rich_tracebacks=True)],
         )
-
+        # Set DB-related logs to DEBUG for debugging migrations
+        logging.getLogger("db").setLevel(logging.DEBUG)
 
 def get_logger(name: str) -> logging.Logger:
     return logging.getLogger(name)
+

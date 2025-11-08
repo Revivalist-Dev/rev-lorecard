@@ -142,12 +142,21 @@ class SourceController(Controller):
 
     @patch("/{source_id:uuid}")
     async def update_source(
-        self, source_id: UUID, data: UpdateProjectSource = Body()
+        self, project_id: str, source_id: UUID, data: UpdateProjectSource = Body()
     ) -> SingleResponse[ProjectSource]:
-        logger.debug(f"Updating source {source_id}")
+        logger.debug(f"Updating source {source_id} for project {project_id}")
+        
+        # Check if source exists and belongs to the project before updating
+        existing_source = await db_get_project_source(source_id)
+        if not existing_source or existing_source.project_id != project_id:
+            raise NotFoundException(
+                f"Source '{source_id}' not found in project '{project_id}'."
+            )
+
         source = await update_project_source(source_id, data)
         if not source:
-            raise NotFoundException(f"Source '{source_id}' not found.")
+            # This should ideally not happen if existing_source was found, but for safety:
+            raise NotFoundException(f"Source '{source_id}' not found after update attempt.")
         return SingleResponse(data=source)
 
     @delete("/{source_id:uuid}")
