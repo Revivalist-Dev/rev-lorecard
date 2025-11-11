@@ -4,7 +4,7 @@ import { useDisclosure } from '@mantine/hooks';
 import { useState } from 'react';
 import type { Credential } from '../types';
 import { useModals } from '@mantine/modals';
-import { formatDate } from '../utils/formatDate';
+import formatDate from '../utils/formatDate';
 import { useCredentials } from '../hooks/useCredentials';
 import { CredentialModal } from '../components/credentials/CredentialModal';
 import { useDeleteCredential } from '../hooks/useCredentialsMutations';

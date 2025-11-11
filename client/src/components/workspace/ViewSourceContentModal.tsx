@@ -1,20 +1,18 @@
 import {
   Modal,
   ScrollArea,
-  Code,
   Loader,
   Alert,
   Title,
   Box,
   useMantineTheme,
   Group,
-  Button,
 } from '@mantine/core';
-import { useProjectSourceDetails, useUpdateProjectSource } from '../../hooks/useProjectSources';
-import { IconAlertCircle, IconEdit, IconDeviceFloppy } from '@tabler/icons-react';
+import { useProjectSourceDetails } from '../../hooks/useProjectSources';
+import { IconAlertCircle } from '@tabler/icons-react';
 import showdown from 'showdown';
-import { useMemo, useState, useEffect } from 'react';
-import { MonacoEditorInput } from '../common/MonacoEditorInput';
+import { useMemo } from 'react';
+import { CodeMirrorInput } from '../common/CodeMirrorInput';
 
 interface ViewSourceContentModalProps {
   opened: boolean;
@@ -24,50 +22,25 @@ interface ViewSourceContentModalProps {
 }
 
 export function ViewSourceContentModal({ opened, onClose, projectId, sourceId }: ViewSourceContentModalProps) {
-  const { data, isLoading, isError, error, refetch } = useProjectSourceDetails(projectId, sourceId);
-  const updateSourceMutation = useUpdateProjectSource(projectId);
+  const { data, isLoading, isError, error } = useProjectSourceDetails(projectId, sourceId);
   const source = data?.data;
   const theme = useMantineTheme();
 
-  const [isEditing, setIsEditing] = useState(false);
-  const [editedContent, setEditedContent] = useState<string>('');
-
-  useEffect(() => {
-    if (source?.raw_content) {
-      setEditedContent(source.raw_content);
-    } else {
-      setEditedContent('');
-    }
-    setIsEditing(false); // Reset editing state on source change
-  }, [source]);
-
-  const isEditable =
-    source?.source_type === 'user_text_file' || source?.source_type === 'web_url';
-
-  const handleSave = async () => {
-    if (!sourceId || !source) return;
-
-    await updateSourceMutation.mutateAsync({
-      projectId,
-      sourceId,
-      data: {
-        raw_content: editedContent,
-        // content_type is set by the backend if raw_content is updated
-      },
-    });
-
-    setIsEditing(false);
-    refetch(); // Refetch to ensure the latest data (char count, etc.) is displayed
-  };
-
   // Create a memoized showdown converter with our custom extension
   const converter = useMemo(() => {
-    if (!source?.url) {
-      // Return a default converter if the source URL isn't available yet
+    if (!source?.url || source.source_type !== 'web_url') {
+      // Only apply link resolution for web_url sources
       return new showdown.Converter({ tables: true, openLinksInNewWindow: true });
     }
 
-    const baseUrl = new URL(source.url).origin;
+    let baseUrl: string;
+    try {
+      baseUrl = new URL(source.url).origin;
+    } catch {
+      // If URL is invalid (e.g., a local file path that wasn't translated), return default converter
+      console.warn(`Source URL is invalid for link resolution: ${source.url}`);
+      return new showdown.Converter({ tables: true, openLinksInNewWindow: true });
+    }
 
     const absoluteLinksExtension = () => [
       {
@@ -113,7 +86,7 @@ export function ViewSourceContentModal({ opened, onClose, projectId, sourceId }:
       openLinksInNewWindow: true,
       extensions: [absoluteLinksExtension],
     });
-  }, [source?.url]);
+  }, [source?.url, source?.source_type]);
 
   const renderedContent = useMemo(() => {
     if (!source?.raw_content) {
@@ -133,32 +106,8 @@ export function ViewSourceContentModal({ opened, onClose, projectId, sourceId }:
       title={
         <Group justify="space-between" w="100%">
           <Title order={4}>
-            {isEditing ? 'Edit Source Content' : 'View Source Content'}
+            View Source Content
           </Title>
-          {source && isEditable && (
-            <Group gap="xs">
-              {isEditing ? (
-                <Button
-                  leftSection={<IconDeviceFloppy size={16} />}
-                  onClick={handleSave}
-                  loading={updateSourceMutation.isPending}
-                  disabled={updateSourceMutation.isPending || editedContent === source.raw_content}
-                  size="xs"
-                >
-                  Save Changes
-                </Button>
-              ) : (
-                <Button
-                  leftSection={<IconEdit size={16} />}
-                  onClick={() => setIsEditing(true)}
-                  size="xs"
-                  variant="default"
-                >
-                  Edit Content
-                </Button>
-              )}
-            </Group>
-          )}
         </Group>
       }
     >
@@ -170,16 +119,7 @@ export function ViewSourceContentModal({ opened, onClose, projectId, sourceId }:
       )}
       {source && (
         <ScrollArea h="80vh">
-          {isEditing ? (
-            <Box h="75vh">
-              <MonacoEditorInput
-                value={editedContent}
-                onChange={(value) => setEditedContent(value ?? '')}
-                language={source.content_type === 'markdown' ? 'markdown' : 'plaintext'}
-                height="100%"
-              />
-            </Box>
-          ) : source.content_type === 'markdown' ? (
+          {source.content_type === 'markdown' ? (
             <Box
               p="md"
               dangerouslySetInnerHTML={{ __html: renderedContent }}
@@ -236,9 +176,15 @@ export function ViewSourceContentModal({ opened, onClose, projectId, sourceId }:
               }}
             />
           ) : (
-            <Code block style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-              {renderedContent}
-            </Code>
+            <Box h="75vh">
+              <CodeMirrorInput
+                value={renderedContent}
+                language="plaintext"
+                height="600px"
+                readOnly={true}
+                onChange={() => {}}
+              />
+            </Box>
           )}
         </ScrollArea>
       )}

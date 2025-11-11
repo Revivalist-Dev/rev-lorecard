@@ -1,0 +1,64 @@
+CHARACTER CARD SOURCE: {{ url }}
+
+--- NAME ---
+{{ char_data.name }}
+
+--- DESCRIPTION ---
+{{ char_data.summary }}
+
+--- PERSONALITY ---
+{{ char_data.personality }}
+
+--- SCENARIO ---
+{{ char_data.scenario }}
+
+--- FIRST MESSAGE ---
+{{ char_data.greeting_message }}
+
+--- EXAMPLE MESSAGES ---
+{{ char_data.example_messages }}
+
+{% if char_data.creator_notes %}
+--- CREATOR NOTES ---
+{{ char_data.creator_notes }}
+{% endif %}
+
+{% if char_data.system_prompt %}
+--- SYSTEM PROMPT ---
+{{ char_data.system_prompt }}
+{% endif %}
+
+{% if char_data.post_history_instructions %}
+--- POST HISTORY INSTRUCTIONS ---
+{{ char_data.post_history_instructions }}
+{% endif %}
+
+{% if char_data.alternate_greetings %}
+--- ALTERNATE GREETINGS ---
+{{ char_data.alternate_greetings | join('\n') }}
+{% endif %}
+
+{% if char_data.tags %}
+--- TAGS ---
+{{ char_data.tags | join(', ') }}
+{% endif %}
+
+{% if char_data.creator %}
+--- CREATOR ---
+{{ char_data.creator }}
+{% endif %}
+
+{% if char_data.character_version %}
+--- CHARACTER VERSION ---
+{{ char_data.character_version }}
+{% endif %}
+
+{% if char_data.extensions %}
+--- EXTENSIONS (JSON) ---
+{{ char_data.extensions | tojson(2) }}
+{% endif %}
+
+{% if char_data.character_book %}
+--- CHARACTER BOOK (JSON) ---
+{{ char_data.character_book | tojson(2) }}
+{% endif %}

@@ -1,16 +1,33 @@
 import re
+import json
 from typing import Dict, Any, Literal
 from jinja2 import Environment, FileSystemLoader
+from pathlib import Path
 from providers.index import ChatMessage
 from logging_config import get_logger
 
 logger = get_logger(__name__)
 
+# Define the base directory for templates relative to the project root
+# Path(__file__).parent is server/src/services
+# Path(__file__).parent.parent is server/src
+TEMPLATE_BASE_DIR = Path(__file__).parent.parent
+
 env = Environment(
-    loader=FileSystemLoader("."),
+    loader=FileSystemLoader(TEMPLATE_BASE_DIR),
     trim_blocks=True,
     lstrip_blocks=True,
 )
+
+env.filters["tojson"] = lambda value, indent=None: json.dumps(value, indent=indent)
+
+
+def render_template(template_path: str, context: Dict[str, Any]) -> str:
+    """Renders a template file and returns the resulting string content."""
+    template = env.get_template(template_path)
+    return template.render(context)
+
+
 
 
 def render_prompt(template_str: str, context: Dict[str, Any]) -> str:

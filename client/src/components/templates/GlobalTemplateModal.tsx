@@ -4,7 +4,7 @@ import { useEffect } from 'react';
 import type { GlobalTemplate } from '../../types';
 import { useCreateGlobalTemplate, useUpdateGlobalTemplate } from '../../hooks/useGlobalTemplatesMutations';
 import { useDefaultGlobalTemplates } from '../../hooks/useGlobalTemplates';
-import { LazyMonacoEditorInput } from '../common/LazyMonacoEditorInput';
+import { CodeMirrorInput } from '../common/CodeMirrorInput';
 import { IconRefresh } from '@tabler/icons-react';
 
 interface GlobalTemplateModalProps {
@@ -102,10 +102,10 @@ export function GlobalTemplateModal({ opened, onClose, template }: GlobalTemplat
             placeholder="e.g., My Custom Entry Prompt"
             {...form.getInputProps('name')}
           />
-          <LazyMonacoEditorInput
+          <CodeMirrorInput
             label={hasDefaultTemplate ? renderTemplateLabel('Template Content') : 'Template Content'}
-            language="handlebars"
-            height={400}
+            language="markdown"
+            height="400px"
             {...form.getInputProps('content')}
             error={form.errors.content}
           />

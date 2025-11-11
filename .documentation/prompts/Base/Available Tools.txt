@@ -1,3 +1,0 @@
-Available Tools:
-Tools for built-in modes cannot be modified
-Read Files, Edit Files, Use Browser, Run Commands, Use MCP

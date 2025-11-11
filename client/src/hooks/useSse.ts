@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useSseStore } from '../stores/sseStore';
 import { notifications } from '@mantine/notifications';
@@ -9,7 +9,8 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
 export function useSse(projectId: string | undefined) {
   const queryClient = useQueryClient();
   const { setStatus } = useSseStore();
-
+  const isClosingRef = useRef(false); // Flag to track intentional closure
+  
   useEffect(() => {
     if (!projectId) return;
 
@@ -20,8 +21,13 @@ export function useSse(projectId: string | undefined) {
       setStatus('connected');
     };
 
-    eventSource.onerror = (err) => {
-      console.error('SSE Error:', err);
+    eventSource.onerror = () => {
+      if (isClosingRef.current) {
+        // Expected error during unmount/refresh, suppress verbose logging
+        console.log('SSE connection interrupted during closure.');
+        return;
+      }
+      console.warn('SSE Error: Connection interrupted.');
       setStatus('error');
       eventSource.close();
     };
@@ -100,15 +106,22 @@ export function useSse(projectId: string | undefined) {
 
     eventSource.addEventListener('source_updated', (event) => {
       const updatedSource: ProjectSource = JSON.parse(event.data);
-      const queryKey = ['sources', updatedSource.project_id];
+      const listQueryKey = ['sources', updatedSource.project_id];
+      const detailQueryKey = ['sourceDetails', updatedSource.project_id, updatedSource.id];
 
-      queryClient.setQueryData<ProjectSource[]>(queryKey, (oldData) => {
+      // 1. Update the list of sources cache
+      queryClient.setQueryData<ProjectSource[]>(listQueryKey, (oldData) => {
         if (!oldData) return [];
         return oldData.map((source) => (source.id === updatedSource.id ? updatedSource : source));
       });
+
+      // 2. Invalidate the single source detail cache (used by View/Edit modals)
+      // This forces a refetch when the modal is opened or focused.
+      queryClient.invalidateQueries({ queryKey: detailQueryKey });
     });
 
     return () => {
+      isClosingRef.current = true; // Set flag before closing
       console.log('Closing SSE connection.');
       eventSource.close();
       setStatus('disconnected');

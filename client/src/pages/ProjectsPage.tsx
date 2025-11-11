@@ -2,7 +2,7 @@ import { Title, Table, Group, Text, ActionIcon, Badge, Stack, Skeleton, Button }
 import { useProjects } from '../hooks/useProjects';
 import { IconEye, IconPencil, IconTrash } from '@tabler/icons-react';
 import { Link } from 'react-router-dom';
-import { formatDate } from '../utils/formatDate';
+import formatDate from '../utils/formatDate';
 import { ProjectModal } from '../components/projects/ProjectModal';
 import { useDisclosure } from '@mantine/hooks';
 import { useState } from 'react';

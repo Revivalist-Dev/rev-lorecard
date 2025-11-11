@@ -4,6 +4,7 @@ from litestar.exceptions import NotFoundException, HTTPException
 from litestar.params import Body
 from pydantic import BaseModel, Field
 from typing import Optional, List
+from schemas import ContentType
 
 from logging_config import get_logger
 from db.background_jobs import (
@@ -42,6 +43,7 @@ class CreateJobForProjectPayload(BaseModel):
 class CreateJobForSourcePayload(BaseModel):
     project_id: str
     source_ids: list[UUID] = Field(..., min_length=1)
+    output_format: Optional[ContentType] = None
 
 
 class ConfirmLinksJobPayload(BaseModel):
@@ -262,7 +264,10 @@ class BackgroundJobController(Controller):
             CreateBackgroundJob(
                 task_name=TaskName.FETCH_SOURCE_CONTENT,
                 project_id=data.project_id,
-                payload=FetchSourceContentPayload(source_ids=data.source_ids),
+                payload=FetchSourceContentPayload(
+                    source_ids=data.source_ids,
+                    content_type=data.output_format,
+                ),
             )
         )
         return SingleResponse(data=job)

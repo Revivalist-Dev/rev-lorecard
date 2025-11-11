@@ -3,10 +3,13 @@ from enum import Enum
 import json
 from typing import Any, Dict, List, Optional, Union
 from uuid import UUID, uuid4
+from schemas import AISourceEditJobPayload, AISourceEditJobResult, ContentType
+from typing import Optional
 
 from db.connection import get_db_connection
 from db.common import PaginatedResponse, PaginationMeta
 from pydantic import BaseModel, ValidationError, field_validator
+from pydantic import BaseModel # Explicitly import BaseModel to satisfy Pylance
 
 from db.database import AsyncDBTransaction
 from logging_config import get_logger
@@ -32,6 +35,7 @@ class TaskName(str, Enum):
     FETCH_SOURCE_CONTENT = "fetch_source_content"
     GENERATE_CHARACTER_CARD = "generate_character_card"
     REGENERATE_CHARACTER_FIELD = "regenerate_character_field"
+    AI_EDIT_SOURCE_CONTENT = "ai_edit_source_content"
 
 
 PARALLEL_LIMITS = {
@@ -43,6 +47,7 @@ PARALLEL_LIMITS = {
     TaskName.FETCH_SOURCE_CONTENT: 1,
     TaskName.GENERATE_CHARACTER_CARD: 1,
     TaskName.REGENERATE_CHARACTER_FIELD: 1,
+    TaskName.AI_EDIT_SOURCE_CONTENT: 1,
 }
 
 
@@ -65,6 +70,7 @@ class GenerateSearchParamsPayload(BaseModel):
 
 class FetchSourceContentPayload(BaseModel):
     source_ids: List[UUID]
+    content_type: Optional[ContentType] = None
 
 
 class GenerateCharacterCardPayload(BaseModel):
@@ -90,6 +96,7 @@ TaskPayload = Union[
     FetchSourceContentPayload,
     GenerateCharacterCardPayload,
     RegenerateCharacterFieldPayload,
+    AISourceEditJobPayload,
 ]
 
 
@@ -145,6 +152,7 @@ TaskResult = Union[
     FetchSourceContentResult,
     GenerateCharacterCardResult,
     RegenerateCharacterFieldResult,
+    AISourceEditJobResult,
 ]
 
 
@@ -198,6 +206,7 @@ def _deserialize_job(db_row: Dict[str, Any]) -> BackgroundJob:
         TaskName.FETCH_SOURCE_CONTENT: FetchSourceContentPayload,
         TaskName.GENERATE_CHARACTER_CARD: GenerateCharacterCardPayload,
         TaskName.REGENERATE_CHARACTER_FIELD: RegenerateCharacterFieldPayload,
+        TaskName.AI_EDIT_SOURCE_CONTENT: AISourceEditJobPayload,
     }
     if db_row.get("payload") is not None:
         try:
@@ -217,6 +226,7 @@ def _deserialize_job(db_row: Dict[str, Any]) -> BackgroundJob:
         TaskName.FETCH_SOURCE_CONTENT: FetchSourceContentResult,
         TaskName.GENERATE_CHARACTER_CARD: GenerateCharacterCardResult,
         TaskName.REGENERATE_CHARACTER_FIELD: RegenerateCharacterFieldResult,
+        TaskName.AI_EDIT_SOURCE_CONTENT: AISourceEditJobResult,
     }
     if db_row.get("result") is not None:
         try:

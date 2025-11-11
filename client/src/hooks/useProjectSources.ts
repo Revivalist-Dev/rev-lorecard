@@ -7,6 +7,9 @@ import type {
   TestSelectorsPayload,
   TestSelectorsResult,
   SourceType,
+  BackgroundJob,
+  SourceContentVersion,
+  ContentType,
 } from '../types';
 import { notifications } from '@mantine/notifications';
 
@@ -51,6 +54,136 @@ export const useProjectSourceDetails = (projectId: string, sourceId: string | nu
     queryKey: ['sourceDetails', projectId, sourceId],
     queryFn: () => fetchProjectSourceDetails(projectId, sourceId!),
     enabled: !!projectId && !!sourceId, // Only run when a sourceId is provided
+    // Disable automatic refetching to prevent state reset while editing
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+  });
+};
+
+// --- Fetch Source Versions ---
+const fetchSourceVersions = async (projectId: string, sourceId: string): Promise<SourceContentVersion[]> => {
+  const response = await apiClient.get(`/projects/${projectId}/sources/${sourceId}/versions`);
+  return response.data;
+};
+
+export const useSourceVersions = (projectId: string, sourceId: string | null) => {
+  return useQuery({
+    queryKey: ['sourceVersions', projectId, sourceId],
+    queryFn: () => fetchSourceVersions(projectId, sourceId!),
+    enabled: !!projectId && !!sourceId,
+  });
+};
+
+// --- Restore Source Version ---
+const restoreSourceVersion = async ({
+  projectId,
+  sourceId,
+  versionId,
+}: {
+  projectId: string;
+  sourceId: string;
+  versionId: string;
+}): Promise<SingleResponse<ProjectSource>> => {
+  const response = await apiClient.post(
+    `/projects/${projectId}/sources/${sourceId}/versions/${versionId}/restore`
+  );
+  return response.data;
+};
+
+export const useRestoreSourceVersion = (projectId: string, sourceId: string | null) => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: restoreSourceVersion,
+    onSuccess: () => {
+      // Invalidate source details to refetch the newly restored content
+      queryClient.invalidateQueries({ queryKey: ['sourceDetails', projectId, sourceId] });
+      queryClient.invalidateQueries({ queryKey: ['sourceVersions', projectId, sourceId] });
+      notifications.show({
+        title: 'Version Restored',
+        message: 'The source content has been successfully restored.',
+        color: 'green',
+      });
+    },
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    onError: (error: any) => {
+      notifications.show({
+        title: 'Error',
+        message: `Failed to restore version: ${error.response?.data?.detail || error.message}`,
+        color: 'red',
+      });
+    },
+  });
+};
+
+// --- Delete Source Version ---
+const deleteSourceVersion = async ({
+  projectId,
+  sourceId,
+  versionId,
+}: {
+  projectId: string;
+  sourceId: string;
+  versionId: string;
+}): Promise<void> => {
+  await apiClient.delete(`/projects/${projectId}/sources/${sourceId}/versions/${versionId}`);
+};
+
+export const useDeleteSourceVersion = (projectId: string, sourceId: string | null) => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: deleteSourceVersion,
+    onSuccess: () => {
+      // Invalidate source versions list
+      queryClient.invalidateQueries({ queryKey: ['sourceVersions', projectId, sourceId] });
+      notifications.show({
+        title: 'Version Deleted',
+        message: 'The source content version has been successfully deleted.',
+        color: 'green',
+      });
+    },
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    onError: (error: any) => {
+      notifications.show({
+        title: 'Error',
+        message: `Failed to delete version: ${error.response?.data?.detail || error.message}`,
+        color: 'red',
+      });
+    },
+  });
+};
+
+// --- Clear Source History ---
+const clearSourceHistory = async ({
+  projectId,
+  sourceId,
+}: {
+  projectId: string;
+  sourceId: string;
+}): Promise<void> => {
+  await apiClient.post(`/projects/${projectId}/sources/${sourceId}/versions/clear-history`);
+};
+
+export const useClearSourceHistory = (projectId: string, sourceId: string | null) => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: clearSourceHistory,
+    onSuccess: () => {
+      // Invalidate source versions list
+      queryClient.invalidateQueries({ queryKey: ['sourceVersions', projectId, sourceId] });
+      notifications.show({
+        title: 'History Cleared',
+        message: 'Source history has been cleared (keeping only the latest version).',
+        color: 'green',
+      });
+    },
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    onError: (error: any) => {
+      notifications.show({
+        title: 'Error',
+        message: `Failed to clear history: ${error.response?.data?.detail || error.message}`,
+        color: 'red',
+      });
+    },
   });
 };
 
@@ -59,6 +192,7 @@ interface CreateSourcePayload {
   source_type: SourceType;
   url: string;
   raw_content?: string;
+  content_type?: ContentType;
   max_pages_to_crawl?: number;
   max_crawl_depth?: number;
   url_exclusion_patterns?: string[];
@@ -220,5 +354,31 @@ const testProjectSourceSelectors = async ({
 export const useTestProjectSourceSelectors = (_projectId: string) => {
   return useMutation({
     mutationFn: testProjectSourceSelectors,
+  });
+};
+
+// --- AI Edit Source Content ---
+interface AiEditSourceContentVariables {
+  projectId: string;
+  data: {
+    source_id: string;
+    original_content: string;
+    edit_instruction: string;
+    full_content_context?: string;
+  };
+}
+
+const aiEditSourceContent = async ({
+  projectId,
+  data,
+}: AiEditSourceContentVariables): Promise<SingleResponse<BackgroundJob>> => {
+  const response = await apiClient.post(`/projects/${projectId}/sources/ai-edit`, data);
+  return response.data;
+};
+
+export const useAiEditSourceContent = () => {
+  return useMutation({
+    mutationFn: aiEditSourceContent,
+    // No onSuccess notification needed here, as the modal handles the result directly
   });
 };

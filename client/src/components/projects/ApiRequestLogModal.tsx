@@ -16,7 +16,7 @@ import {
 } from '@mantine/core';
 import { IconAlertCircle, IconCircleCheck, IconCircleX, IconChevronRight } from '@tabler/icons-react';
 import { useProjectApiRequestLogs } from '../../hooks/useProjectApiRequestLogs';
-import { formatDate } from '../../utils/formatDate';
+import formatDate from '../../utils/formatDate';
 import type { ApiRequestLog } from '../../types';
 
 interface ApiRequestLogModalProps {

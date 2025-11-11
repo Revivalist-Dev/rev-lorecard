@@ -1,25 +1,20 @@
-import asyncio
-import base64
-import io
 import json
 import httpx
-import yaml
-from PIL import Image
-import aichar
-from typing import Dict, Any
+from typing import Dict, Any, List, Optional
 from urllib.parse import urlparse, quote, unquote
 from urllib.request import url2pathname
+from services.templates import render_template
 import re
 from pathlib import Path
+from schemas import ContentType, CharacterCardClass
+from services.templates import render_template
 
 from logging_config import get_logger
 
 logger = get_logger(__name__)
 
-class CharacterCardParseError(Exception):
-    """Custom exception for character card parsing failures."""
-    pass
-
+from exceptions import CharacterCardParseError
+from services.character_card_processor import load_character_card_from_content, CharacterCardProcessorError
 
 def _translate_windows_path_to_linux(path_str: str) -> str:
     """
@@ -43,10 +38,10 @@ def _translate_windows_path_to_linux(path_str: str) -> str:
     
     return path_str
 
-async def fetch_and_parse_character_card(url: str) -> str:
+async def fetch_and_parse_character_card(url: str, output_format: ContentType) -> str:
     """
     Fetches a character card from a URL (remote or local file path) and extracts
-    the character data into a formatted string.
+    the character data into a formatted string based on the requested output_format.
     """
     parsed_url = urlparse(url)
     content_bytes: bytes
@@ -100,82 +95,67 @@ async def fetch_and_parse_character_card(url: str) -> str:
     else:
         raise CharacterCardParseError(f"Unsupported URL scheme: {parsed_url.scheme}")
 
-    # Determine if content is JSON/TXT, YAML, or PNG
-    if url.lower().endswith(('.json', '.txt', '.yaml', '.yml')) or content_bytes.startswith(b'{'):
-        content_str = content_bytes.decode('utf-8')
+    # Use the new synchronous processor directly, as file reading (local or remote) is already awaited.
+    # We rely on the processor to detect the format (PNG, JSON, or YAML) from the bytes.
+    try:
+        # load_character_card_from_content handles both bytes (PNG) and string (JSON/YAML)
+        char_class, raw_data = load_character_card_from_content(content_bytes)
         
-        # Determine if content is JSON or YAML based on extension or content start
-        is_yaml = url.lower().endswith(('.yaml', '.yml')) or (not content_str.startswith('{') and not content_str.startswith('['))
+        # Convert CharacterCardClass object to a dictionary for template rendering (normalized data)
+        # We use model_dump() to get a dictionary representation, including V2/V3 fields.
+        normalized_data = char_class.model_dump(by_alias=False, exclude_none=True)
         
-        try:
-            if is_yaml:
-                # Use aichar for YAML parsing
-                char_class = await asyncio.to_thread(aichar.load_character_yaml, content_str)
-            else:
-                # Use aichar for JSON parsing
-                char_class = await asyncio.to_thread(aichar.load_character_json, content_str)
-            
-            # Convert CharacterClass object to a dictionary matching our expected structure
-            data = {
-                "name": char_class.name,
-                "description": char_class.summary,
-                "personality": char_class.personality,
-                "scenario": char_class.scenario,
-                "first_mes": char_class.greeting_message,
-                "mes_example": char_class.example_messages,
-            }
-            
-            # We skip _parse_json_card since aichar already handles V1/Pygmalion normalization
-            
-        except Exception as e:
-            # If parsing fails, raise a clear error.
-            logger.error(f"Failed to parse JSON/YAML card using aichar: {e}", exc_info=True)
-            raise CharacterCardParseError(f"Failed to parse character card (JSON/YAML format). Underlying error: {e}")
-    elif url.lower().endswith('.png') or content_bytes.startswith(b'\x89PNG'):
-        # Use aichar for robust PNG parsing
-        try:
-            # aichar.load_character_card is synchronous, run it in a thread
-            char_class = await asyncio.to_thread(aichar.load_character_card, content_bytes)
-            
-            # Convert CharacterClass object to a dictionary matching our expected structure
-            data = {
-                "name": char_class.name,
-                "description": char_class.summary,
-                "personality": char_class.personality,
-                "scenario": char_class.scenario,
-                "first_mes": char_class.greeting_message,
-                "mes_example": char_class.example_messages,
-            }
-            
-        except Exception as e:
-            # If aichar fails, we raise a clear error.
-            logger.error(f"Failed to parse PNG card using aichar: {e}", exc_info=True)
-            raise CharacterCardParseError(f"Failed to parse character card (PNG format). Underlying error: {e}")
-    else:
-        raise CharacterCardParseError("Unsupported file format (must be JSON, TXT, YAML, or PNG).")
+    except CharacterCardProcessorError as e:
+        logger.error(f"Failed to parse character card: {e}", exc_info=True)
+        raise CharacterCardParseError(f"Failed to parse character card. Underlying error: {e}")
+    except Exception as e:
+        logger.error(f"Unexpected error during character card parsing: {e}", exc_info=True)
+        raise CharacterCardParseError(f"Unexpected error during character card parsing. Underlying error: {e}")
 
-    # Format the extracted character data for LLM context
-    # The data variable now holds the normalized dictionary from aichar parsing (PNG, JSON, or YAML)
-    char_data = data
+    # The normalized_data variable holds the canonical representation for Markdown output.
+    # The raw_data variable holds the dictionary extracted directly from the file for JSON output.
 
-    formatted_content = f"CHARACTER CARD SOURCE: {url}\n\n"
+    if output_format.value == ContentType.JSON.value:
+        # For JSON output, return the raw data dictionary directly, as requested by the user.
+        # We check for V2/V3 structure and extract the nested 'data' object if present,
+        # as this is what card_extractor.py did to match user expectation.
+        data_to_output = raw_data
+        if data_to_output.get('spec', '').startswith('chara_card_v'):
+            data_to_output = data_to_output.get('data', data_to_output)
+            
+        # Return raw JSON string directly, bypassing Jinja rendering for simplicity and purity.
+        return json.dumps(data_to_output, indent=2, ensure_ascii=False)
     
-    # Map common fields to a readable format
-    fields_to_include = {
-        "name": "Name",
-        "description": "Description",
-        "personality": "Personality",
-        "persona": "Personality", # Handle alternative key
-        "scenario": "Scenario",
-        "first_mes": "First Message",
-        "first_message": "First Message", # Handle alternative key
-        "mes_example": "Example Messages",
-        "example_messages": "Example Messages", # Handle alternative key
+    # --- Markdown Output Path ---
+    
+    # Ensure all values are strings or objects, replacing None with appropriate defaults for template rendering.
+    # This prevents core fields from being dropped from the template context and avoids errors with filters like 'join'.
+    list_fields = ['alternate_greetings', 'tags']
+    dict_fields = ['extensions', 'character_book']
+    
+    filtered_data = {}
+    for k, v in normalized_data.items():
+        if v is None:
+            if k in list_fields:
+                filtered_data[k] = []
+            elif k in dict_fields:
+                filtered_data[k] = {}
+            else:
+                filtered_data[k] = ""
+        else:
+            filtered_data[k] = v
+    
+    context = {
+        "url": url,
+        "char_data": filtered_data,
     }
+    template_path = "services/parsers/character_card_markdown.jinja2"
 
-    for key, label in fields_to_include.items():
-        value = char_data.get(key)
-        if value and isinstance(value, str):
-            formatted_content += f"--- {label.upper()} ---\n{value.strip()}\n\n"
-
-    return formatted_content.strip()
+    try:
+        # Render the template
+        return render_template(template_path, context)
+    except Exception as e:
+        logger.error(f"Failed to render character card template {template_path}: {e}", exc_info=True)
+        # Fallback to a simple string representation if template rendering fails
+        format_str = getattr(output_format, 'value', str(output_format))
+        return f"Error rendering card in {format_str} format: {e}\n\nRaw Data:\n{json.dumps(normalized_data, indent=2)}"

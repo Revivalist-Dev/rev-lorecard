@@ -3,7 +3,7 @@ import { useForm } from '@mantine/form';
 import { useEffect } from 'react';
 import { useUpdateLorebookEntry } from '../../hooks/useLorebookEntryMutations';
 import type { LorebookEntry } from '../../types';
-import { LazyMonacoEditorInput } from '../common/LazyMonacoEditorInput';
+import { CodeMirrorInput } from '../common/CodeMirrorInput';
 
 interface LorebookEntryModalProps {
   opened: boolean;
@@ -66,10 +66,10 @@ export function LorebookEntryModal({ opened, onClose, entry }: LorebookEntryModa
             placeholder="keyword1, keyword2"
             {...form.getInputProps('keywords')}
           />
-          <LazyMonacoEditorInput
+          <CodeMirrorInput
             label="Content"
             language="markdown"
-            height={400}
+            height="400px"
             {...form.getInputProps('content')}
             error={form.errors.content}
           />

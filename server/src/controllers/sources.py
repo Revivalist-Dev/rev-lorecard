@@ -6,6 +6,8 @@ from pydantic import BaseModel
 from typing import List, Optional
 from urllib.parse import urljoin
 from bs4 import BeautifulSoup
+from db.background_jobs import create_background_job, TaskName, BackgroundJob
+from schemas import AISourceEditJobPayload
 from soupsieve.util import SelectorSyntaxError
 import httpx
 
@@ -13,18 +15,24 @@ from db.sources import (
     ProjectSource,
     CreateProjectSource,
     UpdateProjectSource,
+    SourceContentVersion,
     create_project_source,
     delete_project_sources_bulk,
     list_sources_by_project,
     update_project_source,
     delete_project_source,
     get_project_source as db_get_project_source,
+    list_source_content_versions,
+    get_source_content_version,
+    delete_source_content_version,
+    clear_source_content_history,
 )
 from db.source_hierarchy import (
     ProjectSourceHierarchy,
     get_source_hierarchy_for_project,
 )
 from db.common import SingleResponse
+from db.projects import get_project as db_get_project
 from services.scraper import Scraper
 from logging_config import get_logger
 
@@ -139,6 +147,108 @@ class SourceController(Controller):
             pagination_link=pagination_link,
             link_count=len(content_links),
         )
+
+    @post("/ai-edit")
+    async def ai_edit_source_content(
+        self, project_id: str, data: AISourceEditJobPayload = Body()
+    ) -> SingleResponse[BackgroundJob]:
+        """Triggers a background job to use AI to edit the raw content of a source."""
+        logger.info(
+            f"Triggering AI edit job for source {data.source_id} in project {project_id}"
+        )
+
+        project = await db_get_project(project_id)
+        if not project:
+            raise NotFoundException(f"Project '{project_id}' not found.")
+
+        if not project.ai_provider_id or not project.ai_model_id:
+            raise HTTPException(
+                status_code=400,
+                detail="AI provider and model must be configured for this project.",
+            )
+
+        job = await create_background_job(
+            project_id=project_id,
+            task_name=TaskName.AI_EDIT_SOURCE_CONTENT,
+            payload=data,
+        )
+        return SingleResponse(data=job)
+
+    @get("/{source_id:uuid}/versions")
+    async def list_source_versions(
+        self, project_id: str, source_id: UUID
+    ) -> List[SourceContentVersion]:
+        """Lists all historical content versions for a source."""
+        source = await db_get_project_source(source_id)
+        if not source or source.project_id != project_id:
+            raise NotFoundException(
+                f"Source '{source_id}' not found in project '{project_id}'."
+            )
+        
+        # SourceContentVersion is defined in db.sources, need to import it
+        from db.sources import SourceContentVersion
+        
+        return await list_source_content_versions(source_id)
+
+    @post("/{source_id:uuid}/versions/{version_id:uuid}/restore")
+    async def restore_source_version(
+        self, project_id: str, source_id: UUID, version_id: UUID
+    ) -> SingleResponse[ProjectSource]:
+        """Restores a historical content version to the current source content."""
+        version = await get_source_content_version(version_id)
+        if not version or version.project_id != project_id or version.source_id != source_id:
+            raise NotFoundException(
+                f"Version '{version_id}' not found for source '{source_id}' in project '{project_id}'."
+            )
+
+        # The update_project_source function handles creating a backup of the current content
+        # before applying the new content (the restored version).
+        updated_source = await update_project_source(
+            source_id,
+            UpdateProjectSource(
+                raw_content=version.raw_content,
+                # We don't update content_type here, relying on update_project_source's default logic
+            ),
+        )
+
+        if not updated_source:
+            raise HTTPException(status_code=500, detail="Failed to restore source content.")
+
+        return SingleResponse(data=updated_source)
+
+    @delete("/{source_id:uuid}/versions/{version_id:uuid}")
+    async def delete_source_version(
+        self, project_id: str, source_id: UUID, version_id: UUID
+    ) -> None:
+        """Deletes a specific historical content version."""
+        version = await get_source_content_version(version_id)
+        if not version or version.project_id != project_id or version.source_id != source_id:
+            raise NotFoundException(
+                f"Version '{version_id}' not found for source '{source_id}' in project '{project_id}'."
+            )
+        
+        # Check if this is the latest version (which should be protected)
+        versions = await list_source_content_versions(source_id)
+        if versions and versions[0].id == version_id:
+            raise HTTPException(
+                status_code=400,
+                detail="Cannot delete the latest version of the source content.",
+            )
+
+        await delete_source_content_version(version_id)
+
+    @post("/{source_id:uuid}/versions/clear-history")
+    async def clear_source_history(
+        self, project_id: str, source_id: UUID
+    ) -> None:
+        """Deletes all historical content versions for a source, keeping only the latest."""
+        source = await db_get_project_source(source_id)
+        if not source or source.project_id != project_id:
+            raise NotFoundException(
+                f"Source '{source_id}' not found in project '{project_id}'."
+            )
+        
+        await clear_source_content_history(source_id)
 
     @patch("/{source_id:uuid}")
     async def update_source(

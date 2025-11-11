@@ -7,6 +7,7 @@ import type {
   ProcessProjectEntriesPayload,
   RegenerateCharacterFieldPayload,
   GenerateCharacterCardPayload,
+  ContentType,
 } from '../types';
 import { notifications } from '@mantine/notifications';
 
@@ -17,6 +18,7 @@ interface CreateJobForProjectPayload {
 interface CreateJobForSourcePayload {
   project_id: string;
   source_ids: string[];
+  output_format?: ContentType;
 }
 
 const optimisticallyAddNewJob = (queryClient: ReturnType<typeof useQueryClient>, newJob: BackgroundJob) => {
@@ -105,8 +107,36 @@ export const useProcessProjectEntriesJob = () =>
 export const useRescanLinksJob = () => useJobMutation<CreateJobForSourcePayload>('rescan-links', 'Link Rescan Started');
 
 // Character Jobs
-export const useFetchContentJob = () =>
-  useJobMutation<CreateJobForSourcePayload>('fetch-content', 'Content Fetching Started');
+export const useFetchContentJob = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: createJob<CreateJobForSourcePayload>('fetch-content'),
+    onSuccess: (response) => {
+      const newJob = response.data;
+      optimisticallyAddNewJob(queryClient, newJob);
+      queryClient.invalidateQueries({ queryKey: ['latestJob', newJob.project_id, newJob.task_name] });
+      queryClient.invalidateQueries({ queryKey: ['project', newJob.project_id] });
+      queryClient.invalidateQueries({ queryKey: ['sources', newJob.project_id] });
+      queryClient.invalidateQueries({ queryKey: ['sourcesHierarchy', newJob.project_id] });
+
+      notifications.show({
+        title: 'Content Fetching Started',
+        message: 'The background job has been started successfully.',
+        color: 'blue',
+      });
+    },
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    onError: (error: any) => {
+      notifications.show({
+        title: 'Error',
+        message: `Failed to start job: ${error.response?.data?.detail || error.message}`,
+        color: 'red',
+      });
+    },
+  });
+};
+
 export const useGenerateCharacterJob = () =>
   useJobMutation<GenerateCharacterCardPayload>('generate-character', 'Character Generation Started');
 export const useRegenerateFieldJob = () =>

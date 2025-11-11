@@ -1,7 +1,7 @@
 import { Modal, TextInput, Button, Group, Stack, Text, NumberInput, Textarea, Collapse, Alert, Select } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import { useEffect, useState } from 'react';
-import type { ProjectSource, TestSelectorsResult, ProjectType, SourceType } from '../../types';
+import type { ProjectSource, TestSelectorsResult, ProjectType, SourceType, ContentType } from '../../types';
 import {
   useCreateProjectSource,
   useUpdateProjectSource,
@@ -9,6 +9,7 @@ import {
 } from '../../hooks/useProjectSources';
 import { useDisclosure } from '@mantine/hooks';
 import { IconAlertCircle } from '@tabler/icons-react';
+import { CharacterCardFormatSelectorModal } from './CharacterCardFormatSelectorModal';
 
 // Since CreateSourcePayload and UpdateSourcePayload are not exported from the hook file,
 // I will define them here based on the hook file's content to ensure type safety.
@@ -17,6 +18,7 @@ interface LocalCreateSourcePayload {
   source_type: SourceType;
   url: string;
   raw_content?: string;
+  content_type?: ContentType;
   max_pages_to_crawl?: number;
   max_crawl_depth?: number;
   url_exclusion_patterns?: string[];
@@ -44,6 +46,7 @@ interface SourceFormValues {
   link_extraction_selector: string;
   link_extraction_pagination_selector: string;
   url_exclusion_patterns: string;
+  content_type: ContentType;
 }
 
 export function ProjectSourceModal({ opened, onClose, projectId, source, projectType }: ProjectSourceModalProps) {
@@ -53,6 +56,8 @@ export function ProjectSourceModal({ opened, onClose, projectId, source, project
   const testSelectorsMutation = useTestProjectSourceSelectors(projectId);
   const [selectorsVisible, { toggle: toggleSelectors }] = useDisclosure(false);
   const [testResult, setTestResult] = useState<TestSelectorsResult | null>(null);
+  const [formatModalOpened, { open: openFormatModal, close: closeFormatModal }] = useDisclosure(false);
+  const [pendingSubmitValues, setPendingSubmitValues] = useState<SourceFormValues | null>(null);
 
   const form = useForm<SourceFormValues>({
     initialValues: {
@@ -64,6 +69,7 @@ export function ProjectSourceModal({ opened, onClose, projectId, source, project
       link_extraction_selector: '',
       link_extraction_pagination_selector: '',
       url_exclusion_patterns: '',
+      content_type: 'markdown' as ContentType, // Default for character cards
     },
     validate: {
       url: (value, values) => {
@@ -72,8 +78,7 @@ export function ProjectSourceModal({ opened, onClose, projectId, source, project
         try {
           new URL(value);
           return null;
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unused-vars
-        } catch (e: any) {
+        } catch {
           return 'Please enter a valid URL';
         }
       },
@@ -98,6 +103,7 @@ export function ProjectSourceModal({ opened, onClose, projectId, source, project
         link_extraction_selector: (source.link_extraction_selector || []).join('\n'),
         link_extraction_pagination_selector: source.link_extraction_pagination_selector || '',
         url_exclusion_patterns: (source.url_exclusion_patterns || []).join('\n'),
+        content_type: source.content_type || 'markdown',
       });
     } else {
       form.reset();
@@ -105,8 +111,8 @@ export function ProjectSourceModal({ opened, onClose, projectId, source, project
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [source, opened]);
 
-  const handleSubmit = (values: SourceFormValues) => {
-    const { source_type, link_extraction_selector, url_exclusion_patterns, raw_content, ...rest } = values;
+  const handleFinalSubmit = (values: SourceFormValues) => {
+    const { source_type, link_extraction_selector, url_exclusion_patterns, raw_content, content_type, ...rest } = values;
 
     const parsedLinkSelectors = link_extraction_selector.split('\n').filter(Boolean);
     const parsedUrlExclusionPatterns = url_exclusion_patterns.split('\n').filter(Boolean);
@@ -119,15 +125,17 @@ export function ProjectSourceModal({ opened, onClose, projectId, source, project
         source_type,
         url: values.url || `user-text-file-${Date.now()}`,
         raw_content,
+        content_type: 'plaintext', // User text files are always plaintext
         // Explicitly set crawling fields to undefined/defaults if not provided, although they are optional in the type
         max_pages_to_crawl: 1,
         max_crawl_depth: 1,
       } as LocalCreateSourcePayload;
     } else if (source_type === 'character_card') {
-      // For character_card, we only send source_type and url
+      // For character_card, we send source_type, url, and content_type
       payload = {
         source_type,
         url: values.url,
+        content_type,
         max_pages_to_crawl: 1,
         max_crawl_depth: 1,
       } as LocalCreateSourcePayload;
@@ -148,6 +156,25 @@ export function ProjectSourceModal({ opened, onClose, projectId, source, project
     } else {
       // When creating, we ensure the payload matches CreateSourcePayload structure.
       createSourceMutation.mutate({ projectId, data: payload as LocalCreateSourcePayload }, { onSuccess: onClose });
+    }
+  };
+
+  const handlePreSubmit = (values: SourceFormValues) => {
+    if (!isEditMode && values.source_type === 'character_card') {
+      // If creating a new character card source, open the format selector modal
+      setPendingSubmitValues(values);
+      openFormatModal();
+    } else {
+      // Otherwise, proceed directly to submission
+      handleFinalSubmit(values);
+    }
+  };
+
+  const handleFormatSelect = (format: ContentType) => {
+    if (pendingSubmitValues) {
+      const finalValues = { ...pendingSubmitValues, content_type: format };
+      handleFinalSubmit(finalValues);
+      setPendingSubmitValues(null);
     }
   };
 
@@ -189,6 +216,7 @@ export function ProjectSourceModal({ opened, onClose, projectId, source, project
   const isLorebookProject = projectType === 'lorebook';
 
   return (
+    <>
     <Modal
       opened={opened}
       onClose={onClose}
@@ -196,7 +224,7 @@ export function ProjectSourceModal({ opened, onClose, projectId, source, project
       size="lg"
       centered
     >
-      <form onSubmit={form.onSubmit(handleSubmit)}>
+      <form onSubmit={form.onSubmit(handlePreSubmit)}>
         <Stack gap="md">
             <Select
               withAsterisk
@@ -343,5 +371,11 @@ export function ProjectSourceModal({ opened, onClose, projectId, source, project
           </Stack>
         </form>
       </Modal>
-    );
-  }
+      <CharacterCardFormatSelectorModal
+        opened={formatModalOpened}
+        onClose={closeFormatModal}
+        onSelect={handleFormatSelect}
+      />
+    </>
+  );
+}

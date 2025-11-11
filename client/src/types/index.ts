@@ -95,7 +95,7 @@ export interface TestCredentialResult {
   native_json_supported: boolean;
 }
 
-export type ContentType = 'html' | 'markdown';
+export type ContentType = 'html' | 'markdown' | 'json' | 'yaml' | 'plaintext';
 
 export type SourceType = 'web_url' | 'user_text_file' | 'character_card';
 
@@ -115,6 +115,15 @@ export interface ProjectSource {
   updated_at: string;
   content_type?: ContentType;
   content_char_count?: number;
+}
+
+export interface SourceContentVersion {
+  id: string; // UUID
+  source_id: string; // UUID
+  project_id: string;
+  raw_content: string;
+  version_name: string;
+  created_at: string;
 }
 
 export interface ProjectSourceHierarchy {
@@ -185,7 +194,8 @@ export type TaskName =
   | 'rescan_links'
   | 'fetch_source_content'
   | 'generate_character_card'
-  | 'regenerate_character_field';
+  | 'regenerate_character_field'
+  | 'ai_edit_source_content';
 
 export interface ProcessProjectEntriesPayload {
   project_id: string;

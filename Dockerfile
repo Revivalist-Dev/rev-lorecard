@@ -20,18 +20,6 @@ FROM python:3.10-slim AS base
 # ---- Stage 2: Build the final Python application image ----
 FROM base AS server_builder
 
-# Install necessary packages for building Rust extensions (aichar)
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
-    build-essential \
-    curl \
-    pkg-config \
-    libssl-dev \
-    && rm -rf /var/lib/apt/lists/*
-
-# Install Rust toolchain
-RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
-ENV PATH="/root/.cargo/bin:${PATH}"
 
 WORKDIR /app
 
@@ -56,9 +44,6 @@ RUN pip install uv
 
 # Copy server dependency file and install dependencies
 COPY server/requirements.txt ./server/
-
-# Copy aichar source code for building
-COPY aichar-main/ ./aichar-main/
 
 RUN cd server && uv pip install --system --no-cache-dir -r requirements.txt
 
@@ -87,7 +72,6 @@ COPY --from=server_builder /usr/local/lib/python3.10/site-packages /usr/local/li
 # Copy uv executable to PATH
 COPY --from=server_builder /usr/local/bin/uv /usr/local/bin/uv
 COPY --from=server_builder /app/server ./server
-COPY --from=server_builder /app/aichar-main ./aichar-main
 COPY --from=server_builder /app/client/dist ./client/dist
 
 # Expose the port the app runs on

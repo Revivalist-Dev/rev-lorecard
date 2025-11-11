@@ -21,7 +21,7 @@ import type { CreateProjectPayload, Project, Credential, ProjectType } from '../
 import { useProviders } from '../../hooks/useProviders';
 import { useEffect, useMemo, useState } from 'react';
 import { useGlobalTemplates } from '../../hooks/useGlobalTemplates';
-import { LazyMonacoEditorInput } from '../common/LazyMonacoEditorInput';
+import { CodeMirrorInput } from '../common/CodeMirrorInput';
 import { useCredentials } from '../../hooks/useCredentials';
 import { useDisclosure } from '@mantine/hooks';
 import { IconBook, IconPlus, IconRefresh, IconUser } from '@tabler/icons-react';
@@ -404,47 +404,47 @@ export function ProjectModal({ opened, onClose, project }: ProjectModalProps) {
                     <Stack>
                       {isLorebook ? (
                         <>
-                          <LazyMonacoEditorInput
+                          <CodeMirrorInput
                             label={renderTemplateLabel('Search Params Generation', () =>
                               handleResetTemplate('search_params_generation', 'search-params-prompt')
                             )}
-                            language="handlebars"
-                            height={200}
+                            language="markdown"
+                            height="200px"
                             {...form.getInputProps('templates.search_params_generation')}
                           />
-                          <LazyMonacoEditorInput
+                          <CodeMirrorInput
                             label={renderTemplateLabel('Selector Generation', () =>
                               handleResetTemplate('selector_generation', 'selector-prompt')
                             )}
-                            language="handlebars"
-                            height={200}
+                            language="markdown"
+                            height="200px"
                             {...form.getInputProps('templates.selector_generation')}
                           />
-                          <LazyMonacoEditorInput
+                          <CodeMirrorInput
                             label={renderTemplateLabel('Entry Creation', () =>
                               handleResetTemplate('entry_creation', 'entry-creation-prompt')
                             )}
-                            language="handlebars"
-                            height={200}
+                            language="markdown"
+                            height="200px"
                             {...form.getInputProps('templates.entry_creation')}
                           />
                         </>
                       ) : (
                         <>
-                          <LazyMonacoEditorInput
+                          <CodeMirrorInput
                             label={renderTemplateLabel('Character Generation', () =>
                               handleResetTemplate('character_generation', 'character-generation-prompt')
                             )}
-                            language="handlebars"
-                            height={200}
+                            language="markdown"
+                            height="200px"
                             {...form.getInputProps('templates.character_generation')}
                           />
-                          <LazyMonacoEditorInput
+                          <CodeMirrorInput
                             label={renderTemplateLabel('Character Field Regeneration', () =>
                               handleResetTemplate('character_field_regeneration', 'character-field-regeneration-prompt')
                             )}
-                            language="handlebars"
-                            height={200}
+                            language="markdown"
+                            height="200px"
                             {...form.getInputProps('templates.character_field_regeneration')}
                           />
                         </>

@@ -10,7 +10,7 @@ from pydantic import BaseModel
 
 from db.database import AsyncDBTransaction
 
-ContentType = Literal["html", "markdown"]
+ContentType = Literal["html", "markdown", "json", "yaml", "plaintext"]
 
 
 class ProjectSource(BaseModel):
@@ -29,6 +29,22 @@ class ProjectSource(BaseModel):
     raw_content: Optional[str] = None
     content_type: Optional[ContentType] = None
     content_char_count: Optional[int] = None
+
+
+class SourceContentVersion(BaseModel):
+    id: UUID
+    source_id: UUID
+    project_id: str
+    raw_content: str
+    version_name: str
+    created_at: datetime
+
+
+class CreateSourceContentVersion(BaseModel):
+    source_id: UUID
+    project_id: str
+    raw_content: str
+    version_name: str
 
 
 class CreateProjectSource(BaseModel):
@@ -53,6 +69,30 @@ class UpdateProjectSource(BaseModel):
     last_crawled_at: Optional[datetime] = None
     content_type: Optional[ContentType] = None
     content_char_count: Optional[int] = None
+
+
+async def create_source_content_version(
+    version_data: CreateSourceContentVersion, tx: Optional[AsyncDBTransaction] = None
+) -> SourceContentVersion:
+    db = tx or await get_db_connection()
+    version_id = uuid4()
+
+    query = """
+        INSERT INTO "SourceContentVersion" (id, source_id, project_id, raw_content, version_name)
+        VALUES (%s, %s, %s, %s, %s)
+        RETURNING *
+    """
+    params = (
+        version_id,
+        version_data.source_id,
+        version_data.project_id,
+        version_data.raw_content,
+        version_data.version_name,
+    )
+    result = await db.execute_and_fetch_one(query, params)
+    if not result:
+        raise Exception("Failed to create source content version")
+    return SourceContentVersion(**result)
 
 
 async def create_project_source(
@@ -103,6 +143,26 @@ async def get_project_source(
     return ProjectSource(**result) if result else None
 
 
+async def list_source_content_versions(
+    source_id: UUID, tx: Optional[AsyncDBTransaction] = None
+) -> List[SourceContentVersion]:
+    """Lists all historical versions for a given source, ordered by creation time."""
+    db = tx or await get_db_connection()
+    query = 'SELECT * FROM "SourceContentVersion" WHERE source_id = %s ORDER BY created_at DESC'
+    results = await db.fetch_all(query, (source_id,))
+    return [SourceContentVersion(**row) for row in results] if results else []
+
+
+async def get_source_content_version(
+    version_id: UUID, tx: Optional[AsyncDBTransaction] = None
+) -> SourceContentVersion | None:
+    """Retrieves a specific historical version by its ID."""
+    db = tx or await get_db_connection()
+    query = 'SELECT * FROM "SourceContentVersion" WHERE id = %s'
+    result = await db.fetch_one(query, (version_id,))
+    return SourceContentVersion(**result) if result else None
+
+
 async def get_project_source_by_url(
     project_id: str, url: str, tx: AsyncDBTransaction
 ) -> ProjectSource | None:
@@ -138,15 +198,31 @@ async def update_project_source(
 ) -> ProjectSource | None:
     db = tx or await get_db_connection()
     update_data = source_update.model_dump(exclude_unset=True)
-    
-    # Handle raw_content update: recalculate char count and set updated_at
+
+    # --- Content Versioning: Create a version before updating raw_content ---
     if "raw_content" in update_data:
+        # 1. Fetch existing source to get current raw_content and project_id
+        existing_source = await get_project_source(source_id, tx=tx)
+        if existing_source and existing_source.raw_content:
+            # Only create a version if content actually exists and is changing
+            if existing_source.raw_content != update_data["raw_content"]:
+                await create_source_content_version(
+                    CreateSourceContentVersion(
+                        source_id=source_id,
+                        project_id=existing_source.project_id,
+                        raw_content=existing_source.raw_content,
+                        version_name=f"Manual Edit Backup ({datetime.now().strftime('%Y-%m-%d %H:%M')})",
+                    ),
+                    tx=tx,
+                )
+
+        # 2. Handle raw_content update: recalculate char count and set updated_at
         raw_content = update_data["raw_content"]
         update_data["content_char_count"] = len(raw_content) if raw_content is not None else None
         # If content is updated, we should also update the last_crawled_at timestamp
         # to reflect that the content is fresh (either scraped or manually edited).
         update_data["last_crawled_at"] = datetime.now()
-        
+
         # Ensure content_type is set if raw_content is set and content_type is not explicitly provided
         if "content_type" not in update_data and raw_content is not None:
             update_data["content_type"] = "markdown" # Default to markdown for manual edits
@@ -179,6 +255,32 @@ async def delete_project_source(source_id: UUID) -> None:
     db = await get_db_connection()
     query = 'DELETE FROM "ProjectSource" WHERE id = %s'
     await db.execute(query, (source_id,))
+
+
+async def delete_source_content_version(version_id: UUID) -> None:
+    """Deletes a specific historical content version."""
+    db = await get_db_connection()
+    query = 'DELETE FROM "SourceContentVersion" WHERE id = %s'
+    await db.execute(query, (version_id,))
+
+
+async def clear_source_content_history(source_id: UUID) -> None:
+    """Deletes all historical content versions for a source, keeping only the latest."""
+    versions = await list_source_content_versions(source_id)
+    
+    if not versions or len(versions) <= 1:
+        return # Nothing to clear
+
+    # The latest version is versions[0]. We delete all others.
+    versions_to_delete = versions[1:]
+    version_ids_to_delete = [version.id for version in versions_to_delete]
+
+    db = await get_db_connection()
+    placeholders = ", ".join(["%s"] * len(version_ids_to_delete))
+    query = f'DELETE FROM "SourceContentVersion" WHERE id IN ({placeholders})'
+    
+    # We need to ensure we pass the UUIDs as parameters
+    await db.execute(query, tuple(version_ids_to_delete))
 
 
 async def delete_project_sources_bulk(

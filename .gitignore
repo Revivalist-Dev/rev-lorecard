@@ -8,3 +8,5 @@ client/.env.local
 
 # Local data
 data/
+storage/
+sources/

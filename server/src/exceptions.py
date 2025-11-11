@@ -5,6 +5,10 @@ from logging_config import get_logger
 
 logger = get_logger(__name__)
 
+class CharacterCardParseError(HTTPException):
+    """Custom exception for character card parsing failures."""
+    status_code = 400
+    detail = "The provided character card or file could not be parsed. Please check the file format and content."
 
 def generic_exception_handler(_: Request, exc: Exception) -> Response:
     """
@@ -32,12 +36,24 @@ def generic_exception_handler(_: Request, exc: Exception) -> Response:
 
 
 def value_error_exception_handler(_: Request, exc: ValueError) -> Response:
-    """Handler for ValueError exceptions."""
-    logger.warning(f"ValueError: {exc}")
+    """Handler for ValueError exceptions, checking for wrapped 404s."""
+    detail = str(exc)
+    logger.warning(f"ValueError: {detail}")
+    
+    # Check if this ValueError is actually a wrapped NotFoundException (404)
+    if detail.startswith("404:"):
+        return Response(
+            content={
+                "status_code": 404,
+                "detail": detail.removeprefix("404:").strip(),
+            },
+            status_code=404,
+        )
+
     return Response(
         content={
             "status_code": 400,
-            "detail": str(exc),
+            "detail": detail,
         },
         status_code=400,
     )

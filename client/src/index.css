@@ -1,0 +1,9 @@
+/* FOUC Mitigation: Hide content until fully loaded */
+#root.loading {
+  opacity: 0;
+  transition: opacity 0.5s ease-in-out;
+}
+
+#root.loaded {
+  opacity: 1;
+}

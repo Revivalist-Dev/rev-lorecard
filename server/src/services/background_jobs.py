@@ -5,6 +5,7 @@ from datetime import datetime
 from typing import Optional, Union, List, Dict, Set
 from pydantic import BaseModel
 from urllib.parse import urljoin
+from schemas import ContentType
 from bs4 import BeautifulSoup
 from collections import deque
 
@@ -85,6 +86,8 @@ from providers.index import (
     get_provider_instance,
 )
 from schemas import (
+    AISourceEditJobPayload,
+    AISourceEditJobResult,
     CharacterCardData,
     LorebookEntryResponse,
     RegeneratedFieldResponse,
@@ -176,6 +179,11 @@ async def fetch_source_content(job: BackgroundJob, project: Project):
         raise TypeError("Invalid payload for fetch_source_content job.")
 
     source_ids = job.payload.source_ids
+    requested_content_type = job.payload.content_type
+    if isinstance(requested_content_type, str):
+        # Ensure string is converted to ContentType enum instance if present
+        requested_content_type = ContentType(requested_content_type)
+        
     total_sources = len(source_ids)
     processed_count = 0
     failed_count = 0
@@ -215,11 +223,17 @@ async def fetch_source_content(job: BackgroundJob, project: Project):
                 if not source.raw_content:
                     raise ValueError("User Text File source is missing raw_content.")
                 content = source.raw_content
-                content_type = "markdown"
+                # User text files are always plaintext, regardless of requested_content_type
+                content_type = "plaintext"
             elif current_source_type == "character_card":
                 # Fetch and parse character card content
-                content = await fetch_and_parse_character_card(source.url)
-                content_type = "markdown"
+                # Use requested_content_type if provided, otherwise use existing or default to markdown
+                # Ensure source.content_type (which is a string) is converted to ContentType enum if present
+                source_content_type_enum = ContentType(source.content_type) if source.content_type else None
+                
+                final_content_type = requested_content_type or source_content_type_enum or ContentType.MARKDOWN
+                content = await fetch_and_parse_character_card(source.url, final_content_type)
+                content_type = final_content_type.value
                 logger.debug(f"[{job.id}] Parsed content length: {len(content)}")
             elif current_source_type == "web_url":
                 # Web scraping logic (default)
@@ -232,12 +246,12 @@ async def fetch_source_content(job: BackgroundJob, project: Project):
                     content = await scraper.get_content(
                         source.url, type="markdown", clean=True
                     )
-                    content_type = "markdown"
+                    content_type = ContentType.MARKDOWN.value
                 else:  # Lorebook
                     content = await scraper.get_content(
                         source.url, type="html", clean=True
                     )
-                    content_type = "html"
+                    content_type = ContentType.HTML.value
             else:
                 raise ValueError(f"Unsupported source type: {source.source_type}")
 
@@ -1415,6 +1429,86 @@ async def process_project_entries(job: BackgroundJob, project: Project):
             )
 
 
+async def ai_edit_source_content_job(job: BackgroundJob, project: Project):
+    """
+    Uses AI to edit the raw content of a source based on user instructions.
+    The result is stored in the job result, not directly applied to the source.
+    """
+    if not isinstance(job.payload, AISourceEditJobPayload):
+        raise TypeError("Invalid payload for ai_edit_source_content job.")
+
+    if not project.ai_provider_id or not project.ai_model_id:
+        raise ValueError(
+            "AI provider and model must be configured for this project."
+        )
+
+    # 1. Get provider instance
+    provider = await _get_provider_for_project(project)
+
+    # 2. Render prompt
+    template_path = "storage/templates/ai_source_content_edit_prompt.md"
+    context = {
+        "original_content": job.payload.original_content,
+        "edit_instruction": job.payload.edit_instruction,
+    }
+    messages: list[ChatMessage] = create_messages_from_template(
+        template_path, context
+    )
+
+    # 3. Call AI
+    request = ChatCompletionRequest(
+        model=project.ai_model_id,
+        messages=messages,
+        temperature=0.7,
+    )
+    response = await provider.generate(request)
+
+    # 4. Process Response and DB Write
+    async with (await get_db_connection()).transaction() as tx:
+        is_error = isinstance(response, ChatCompletionErrorResponse)
+        usage = response.usage if isinstance(response, ChatCompletionResponse) else None
+        await create_api_request_log(
+            CreateApiRequestLog(
+                project_id=project.id,
+                job_id=job.id,
+                api_provider=provider.__class__.__name__,
+                model_used=project.ai_model_id,
+                request=response.raw_request,
+                response=response.raw_response,
+                latency_ms=response.latency_ms,
+                error=is_error,
+                input_tokens=usage.prompt_tokens if usage else None,
+                output_tokens=usage.completion_tokens if usage else None,
+                calculated_cost=usage.cost if usage else None,
+            ),
+        )
+
+        if is_error:
+            raise Exception(
+                f"Failed to generate AI edit: {response.raw_response}"
+            )
+
+        if response.content is None or isinstance(response.content, dict):
+            raise Exception(
+                "AI response was empty or in an unexpected format."
+            )
+
+        edited_content = response.content.strip()
+
+        # The result is stored in the job result, which the frontend will fetch.
+        await update_job_with_notification(
+            job.id,
+            UpdateBackgroundJob(
+                status=JobStatus.completed,
+                result=AISourceEditJobResult(
+                    source_id=job.payload.source_id,
+                    edited_content=edited_content,
+                ),
+            ),
+            tx=tx,
+        )
+
+
 # --- Main Job Processor ---
 
 JOB_HANDLERS = {
@@ -1428,6 +1522,7 @@ JOB_HANDLERS = {
     TaskName.FETCH_SOURCE_CONTENT: fetch_source_content,
     TaskName.GENERATE_CHARACTER_CARD: generate_character_card,
     TaskName.REGENERATE_CHARACTER_FIELD: regenerate_character_field,
+    TaskName.AI_EDIT_SOURCE_CONTENT: ai_edit_source_content_job,
 }
 
 

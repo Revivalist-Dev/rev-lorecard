@@ -28,6 +28,10 @@ export const useLatestJob = (projectId: string, taskName: TaskName) => {
     queryKey: ['latestJob', projectId, taskName],
     queryFn: () => fetchLatestProjectJob(projectId, taskName),
     enabled: !!projectId,
+    // Job status must be fresh. We rely on invalidation, but remove restrictive caching
+    // to ensure status updates are picked up if invalidation is missed or delayed.
+    // Setting staleTime to 0 ensures it refetches on every mount/focus.
+    staleTime: 0,
     // It's common for no job to exist yet, so a 404 is not a true "error" state
     // that should cause retries. We'll handle it gracefully.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

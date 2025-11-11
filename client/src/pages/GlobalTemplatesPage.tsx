@@ -1,7 +1,7 @@
 import { Title, Table, Group, Text, ActionIcon, Stack, Skeleton, Button, Pagination } from '@mantine/core';
 import { useGlobalTemplates } from '../hooks/useGlobalTemplates';
 import { IconPencil, IconTrash } from '@tabler/icons-react';
-import { formatDate } from '../utils/formatDate';
+import formatDate from '../utils/formatDate';
 import { useDisclosure } from '@mantine/hooks';
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';

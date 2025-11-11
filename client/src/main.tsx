@@ -11,7 +11,7 @@ import '@mantine/notifications/styles.css';
 import './index.css';
 
 const queryClient = new QueryClient();
-// @ts-ignore
+// @ts-expect-error: Exposing client for debugging tools
 window.__TANSTACK_QUERY_CLIENT__ = queryClient;
 
 const theme = createTheme({
@@ -163,3 +163,13 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
     </QueryClientProvider>
   </React.StrictMode>
 );
+
+// FOUC Mitigation: Hide preloader after 3 seconds (as requested)
+const preloader = document.getElementById('preloader');
+if (preloader) {
+  setTimeout(() => {
+    preloader.classList.add('hidden');
+    // Optional: Remove preloader from DOM after transition
+    setTimeout(() => preloader.remove(), 500);
+  }, 3000);
+}
