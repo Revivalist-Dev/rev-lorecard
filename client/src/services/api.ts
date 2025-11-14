@@ -10,3 +10,21 @@ const apiClient = axios.create({
 });
 
 export default apiClient;
+
+// --- Character Card Conversion API ---
+
+import type {
+  SingleResponse,
+  ContentConversionRequest,
+  ContentConversionResponse,
+} from '../types';
+
+export const convertCharacterCardContent = (
+  projectId: string,
+  data: ContentConversionRequest,
+) => {
+  return apiClient.post<SingleResponse<ContentConversionResponse>>(
+    `/projects/${projectId}/character/convert`,
+    data,
+  );
+};

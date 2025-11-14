@@ -1,4 +1,4 @@
-import { Grid, Stack } from '@mantine/core';
+import { Grid, Stack, Box } from '@mantine/core';
 import type { Project } from '../../types';
 import { CharacterSources } from './CharacterSources';
 import { CharacterEditor } from './CharacterEditor';
@@ -13,12 +13,22 @@ export function CharacterWorkspace({ project }: CharacterWorkspaceProps) {
 
   return (
     <Stack>
-      <Grid gutter="xl">
-        <Grid.Col span={{ base: 12, lg: 5 }}>
+      <Grid gutter={5}>
+        <Grid.Col span={{ base: 12, lg: 4 }}>
           <CharacterSources
             project={project}
             selectedSourceIds={selectedSourceIds}
             setSelectedSourceIds={setSelectedSourceIds}
+          />
+        </Grid.Col>
+        <Grid.Col span={{ base: 0, lg: 1 }} style={{ display: 'flex', justifyContent: 'center' }}>
+          <Box
+            w={1}
+            h="100%"
+            style={{
+              background: `linear-gradient(to bottom, transparent 0%, var(--mantine-color-default-border) 20%, var(--mantine-color-default-border) 80%, transparent 100%)`,
+            }}
+            visibleFrom="lg"
           />
         </Grid.Col>
         <Grid.Col span={{ base: 12, lg: 7 }}>

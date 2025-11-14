@@ -1,7 +1,7 @@
-import { AppShell, Burger, Group, Title, NavLink, Box, Text, Anchor, Stack } from '@mantine/core';
+import { AppShell, Burger, Group, Title, NavLink, Box, Text, Anchor, Stack, ActionIcon } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { Link, Outlet, useLocation } from 'react-router-dom';
-import { IconGift, IconHome, IconKey, IconTemplate } from '@tabler/icons-react';
+import { IconGift, IconHome, IconKey, IconTemplate, IconChevronLeft } from '@tabler/icons-react';
 import { useQuery } from '@tanstack/react-query';
 import apiClient from '../../services/api';
 import { notifications } from '@mantine/notifications';
@@ -33,7 +33,7 @@ const UpdateInstructions = ({ runtimeEnv }: { runtimeEnv: 'docker' | 'source' })
 };
 
 export function AppLayout() {
-  const [opened, { toggle }] = useDisclosure();
+  const [opened, { toggle }] = useDisclosure(true);
   const { pathname } = useLocation();
   const { data: appInfo } = useQuery({
     queryKey: ['appInfo'],
@@ -65,7 +65,7 @@ export function AppLayout() {
   return (
     <AppShell
       header={{ height: 60 }}
-      navbar={{ width: 300, breakpoint: 'sm', collapsed: { mobile: !opened } }}
+      navbar={{ width: 300, breakpoint: 'sm', collapsed: { mobile: !opened, desktop: !opened } }}
       padding="md"
     >
       <AppShell.Header>
@@ -116,6 +116,27 @@ export function AppLayout() {
           </Text>
         </Box>
       </AppShell.Main>
+        <Box
+          pos="fixed"
+          top="50%"
+          left={opened ? 300 : 0}
+          ml={opened ? -20 : 0}
+          style={{
+            transform: 'translateY(-50%)',
+            zIndex: 150, // Higher than default navbar z-index (usually 100)
+            transition: 'left 200ms ease, margin-left 200ms ease',
+          }}
+          visibleFrom="sm"
+        >
+          <ActionIcon
+            onClick={toggle}
+            variant="default"
+            size="lg"
+            radius="md"
+          >
+            <IconChevronLeft style={{ transform: opened ? 'rotate(0deg)' : 'rotate(180deg)' }} size={20} />
+          </ActionIcon>
+        </Box>
     </AppShell>
   );
 }

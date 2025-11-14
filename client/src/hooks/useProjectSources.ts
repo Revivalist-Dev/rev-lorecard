@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import apiClient from '../services/api';
+import apiClient, { convertCharacterCardContent } from '../services/api';
 import type {
   ProjectSource,
   ProjectSourceHierarchy,
@@ -10,6 +10,8 @@ import type {
   BackgroundJob,
   SourceContentVersion,
   ContentType,
+  ContentConversionRequest,
+  ContentConversionResponse,
 } from '../types';
 import { notifications } from '@mantine/notifications';
 
@@ -380,5 +382,25 @@ export const useAiEditSourceContent = () => {
   return useMutation({
     mutationFn: aiEditSourceContent,
     // No onSuccess notification needed here, as the modal handles the result directly
+  });
+};
+
+// --- Character Card Conversion ---
+interface ConvertCharacterCardContentVariables {
+  projectId: string;
+  data: ContentConversionRequest;
+}
+
+const convertContent = async ({
+  projectId,
+  data,
+}: ConvertCharacterCardContentVariables): Promise<SingleResponse<ContentConversionResponse>> => {
+  const response = await convertCharacterCardContent(projectId, data);
+  return response.data;
+};
+
+export const useConvertCharacterCardContent = () => {
+  return useMutation({
+    mutationFn: convertContent,
   });
 };

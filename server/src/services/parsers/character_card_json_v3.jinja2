@@ -1,0 +1,22 @@
+{
+  "spec": "chara_card_v3",
+  "spec_version": "3.0",
+  "data": {
+    "name": "{{ char_data.name }}",
+    "description": "{{ char_data.summary }}",
+    "personality": "{{ char_data.personality }}",
+    "scenario": "{{ char_data.scenario }}",
+    "first_mes": "{{ char_data.greeting_message }}",
+    "mes_example": "{{ char_data.example_messages }}",
+    "creator_notes": "{{ char_data.creator_notes | default('') }}",
+    "system_prompt": "{{ char_data.system_prompt | default('') }}",
+    "post_history_instructions": "{{ char_data.post_history_instructions | default('') }}",
+    "alternate_greetings": {{ char_data.alternate_greetings | tojson(2) | default('[]') }},
+    "tags": {{ char_data.tags | tojson(2) | default('[]') }},
+    "creator": "{{ char_data.creator | default('Lorecard') }}",
+    "character_version": "{{ char_data.character_version | default('1.0') }}",
+    "extensions": {{ char_data.extensions | tojson(2) | default('{}') }},
+    "character_book": {{ char_data.character_book | tojson(2) | default('{}') }},
+    "creation_date": {{ char_data.created_time | default(0) }}
+  }
+}

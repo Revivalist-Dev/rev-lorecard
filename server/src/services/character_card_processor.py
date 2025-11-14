@@ -3,10 +3,12 @@ import base64
 from io import BytesIO
 from typing import Union, Dict, Any, List, Tuple, Optional
 import yaml
+import re
 from PIL import Image
 from pydantic import ValidationError
 
-from schemas import CharacterCardClass
+from schemas import CharacterCardClass, ContentType
+from services.templates import render_template
 from logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -117,6 +119,89 @@ def load_character_json(content: str) -> Tuple[CharacterCardClass, Dict[str, Any
         return CharacterCardClass(**mapped_data), data
     except ValidationError as e:
         raise CharacterCardProcessorError(f"Validation error for JSON character data: {e}") from e
+
+def load_character_markdown(
+    content: str, regex_patterns_to_strip: Optional[List[str]] = None
+) -> Tuple[CharacterCardClass, Dict[str, Any]]:
+    """
+    Loads a character card from a Markdown string using predefined headers.
+    """
+    data: Dict[str, Any] = {}
+    
+    # Define the mapping from header text to CharacterCardClass field names
+    # Note: char_data.summary maps to DESCRIPTION, char_data.personality maps to PERSONALITY, etc.
+    FIELD_MAP = {
+        "NAME": "name",
+        "DESCRIPTION": "summary",
+        "PERSONALITY": "personality",
+        "SCENARIO": "scenario",
+        "FIRST MESSAGE": "greeting_message",
+        "EXAMPLE MESSAGES": "example_messages",
+        "CREATOR NOTES": "creator_notes",
+        "SYSTEM PROMPT": "system_prompt",
+        "POST HISTORY INSTRUCTIONS": "post_history_instructions",
+        "ALTERNATE GREETINGS": "alternate_greetings",
+        "TAGS": "tags",
+        "CREATOR": "creator",
+        "CHARACTER VERSION": "character_version",
+        "EXTENSIONS (JSON)": "extensions",
+        "CHARACTER BOOK (JSON)": "character_book",
+    }
+
+    # Regex to find content blocks delimited by '--- HEADER ---'
+    # It captures the header name and the content block following it.
+    # The content block ends either at the next '--- HEADER ---' or the end of the string.
+    # We ignore the first line which might be 'CHARACTER CARD SOURCE: ...'
+    
+    # Split content by '---' lines to isolate blocks
+    blocks = re.split(r"^\s*---\s*([A-Z\s()]+)\s*---\s*$", content, flags=re.MULTILINE | re.IGNORECASE)
+    
+    # The first element is usually pre-header content (like the URL line), which we skip.
+    # Blocks will look like: [preamble, HEADER_NAME_1, CONTENT_1, HEADER_NAME_2, CONTENT_2, ...]
+    
+    # Start processing from the second element (index 1)
+    for i in range(1, len(blocks), 2):
+        header = blocks[i].strip().upper()
+        content_block = blocks[i+1].strip() if i + 1 < len(blocks) else ""
+        
+        # Conditionally strip regex patterns from the content block
+        if regex_patterns_to_strip and content_block:
+            for pattern in regex_patterns_to_strip:
+                try:
+                    # Compile regex with MULTILINE and IGNORECASE flags for robust Markdown parsing
+                    compiled_regex = re.compile(pattern, re.MULTILINE | re.IGNORECASE)
+                    content_block = compiled_regex.sub('', content_block)
+                except re.error as e:
+                    logger.warning(f"Invalid regex pattern provided for stripping: {pattern}. Error: {e}")
+            content_block = content_block.strip()
+        
+        if header in FIELD_MAP:
+            field_name = FIELD_MAP[header]
+            
+            # Handle list/dict fields that were serialized as JSON strings in the template
+            if field_name in ["alternate_greetings", "tags", "extensions", "character_book"]:
+                if content_block:
+                    try:
+                        # Attempt to parse JSON content for these fields
+                        parsed_content = json.loads(content_block)
+                        data[field_name] = parsed_content
+                    except json.JSONDecodeError:
+                        logger.warning(f"Failed to parse JSON content for Markdown field: {field_name}")
+                        data[field_name] = None
+                else:
+                    data[field_name] = None
+            else:
+                data[field_name] = content_block
+
+    # The Markdown format is a custom format, so we don't use _map_fields
+    # as the fields are already mapped to the canonical names.
+    try:
+        # We use the raw data dictionary as the raw_data for consistency,
+        # even though it's not a standard JSON card.
+        return CharacterCardClass(**data), data
+    except ValidationError as e:
+        raise CharacterCardProcessorError(f"Validation error for Markdown character data: {e}") from e
+
 
 def load_character_yaml(content: str) -> Tuple[CharacterCardClass, Dict[str, Any]]:
     """Loads a character card from a YAML string."""
@@ -310,3 +395,82 @@ def load_character_card_from_content(content: Union[bytes, str]) -> Tuple[Charac
                 raise CharacterCardProcessorError(f"Content is neither valid JSON nor YAML character card data. Last error: {yaml_e}")
 
     raise CharacterCardProcessorError("Unsupported content type for character card loading.")
+
+
+def convert_content(
+    content: str,
+    source_type: ContentType,
+    target_type: ContentType,
+    regex_patterns_to_strip: Optional[List[str]] = None,
+) -> str:
+    """
+    Converts character card content between Markdown and JSON formats.
+    """
+    if source_type == target_type:
+        return content
+
+    # 1. Parse the source content into the canonical CharacterCardClass
+    if source_type in [
+        ContentType.CC_MARKDOWN_V1,
+        ContentType.CC_MARKDOWN_V2,
+        ContentType.CC_MARKDOWN_V3,
+    ]:
+        card_class, _ = load_character_markdown(
+            content, regex_patterns_to_strip=regex_patterns_to_strip
+        )
+    elif source_type in [
+        ContentType.CC_JSON_V1,
+        ContentType.CC_JSON_V2,
+        ContentType.CC_JSON_V3,
+        ContentType.CC_JSON_MISC,
+        ContentType.JSON, # Fallback for old generic JSON type if still used elsewhere
+    ]:
+        card_class, _ = load_character_json(content)
+    else:
+        raise CharacterCardProcessorError(
+            f"Unsupported source conversion type: {source_type.value}"
+        )
+
+    # 2. Serialize the canonical class into the target format
+    context = {"char_data": card_class}
+    
+    if target_type == ContentType.CC_MARKDOWN_V1:
+        template_path = "services/parsers/character_card_markdown_v1.jinja2"
+        converted_content = render_template(template_path, context)
+    elif target_type == ContentType.CC_MARKDOWN_V2:
+        template_path = "services/parsers/character_card_markdown_v2.jinja2"
+        converted_content = render_template(template_path, context)
+    elif target_type == ContentType.CC_MARKDOWN_V3:
+        template_path = "services/parsers/character_card_markdown_v3.jinja2"
+        converted_content = render_template(template_path, context)
+    elif target_type == ContentType.CC_JSON_V1:
+        template_path = "services/parsers/character_card_json_v1.jinja2"
+        converted_content = render_template(template_path, context)
+    elif target_type == ContentType.CC_JSON_V2:
+        template_path = "services/parsers/character_card_json_v2.jinja2"
+        converted_content = render_template(template_path, context)
+    elif target_type == ContentType.CC_JSON_V3:
+        template_path = "services/parsers/character_card_json_v3.jinja2"
+        converted_content = render_template(template_path, context)
+    elif target_type == ContentType.CC_JSON_MISC:
+        # Use V2 template as a sensible default for generic JSON output
+        template_path = "services/parsers/character_card_json_v2.jinja2"
+        converted_content = render_template(template_path, context)
+        
+        # The JSON template renders a JSON string, but Jinja2 might introduce extra whitespace.
+        # We should parse and re-dump it to ensure it's clean and compact (or pretty-printed).
+        try:
+            # Parse the Jinja2 output
+            json_data = json.loads(converted_content)
+            # Re-dump it nicely formatted
+            converted_content = json.dumps(json_data, indent=2, ensure_ascii=False)
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to re-format JSON output after rendering: {e}")
+            # Fallback to raw rendered content if re-formatting fails
+            pass
+    else:
+        raise CharacterCardProcessorError(
+            f"Unsupported target conversion type: {target_type.value}"
+        )
+
+    return converted_content

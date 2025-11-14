@@ -27,6 +27,14 @@ const languageMap: Record<ContentType, () => Extension> = {
   plaintext: () => [],
   yaml: yaml,
   html: markdown, // Fallback for HTML
+  // Character Card Formats
+  cc_json_v1: json,
+  cc_json_v2: json,
+  cc_json_v3: json,
+  cc_json_misc: json,
+  cc_markdown_v1: markdown,
+  cc_markdown_v2: markdown,
+  cc_markdown_v3: markdown,
 };
 
 export function CodeMirrorInput({

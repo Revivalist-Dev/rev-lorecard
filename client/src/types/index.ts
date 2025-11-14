@@ -95,7 +95,19 @@ export interface TestCredentialResult {
   native_json_supported: boolean;
 }
 
-export type ContentType = 'html' | 'markdown' | 'json' | 'yaml' | 'plaintext';
+export type ContentType =
+  | 'html'
+  | 'cc_markdown_v1'
+  | 'cc_markdown_v2'
+  | 'cc_markdown_v3'
+  | 'cc_json_v1'
+  | 'cc_json_v2'
+  | 'cc_json_v3'
+  | 'cc_json_misc'
+  | 'json' // Legacy generic JSON
+  | 'markdown' // Legacy generic Markdown
+  | 'yaml'
+  | 'plaintext';
 
 export type SourceType = 'web_url' | 'user_text_file' | 'character_card';
 
@@ -305,4 +317,15 @@ export interface TestSelectorsResult {
   pagination_link?: string;
   error?: string;
   link_count: number;
+}
+
+export interface ContentConversionRequest {
+  content: string;
+  source_type: ContentType;
+  target_type: ContentType;
+  regex_patterns_to_strip?: string[];
+}
+
+export interface ContentConversionResponse {
+  converted_content: string;
 }

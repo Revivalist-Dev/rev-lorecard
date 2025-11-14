@@ -8,10 +8,17 @@ class ContentType(str, Enum):
     Defines the supported content types for sources and character card extraction.
     """
 
+    CC_JSON_MISC = "cc_json_misc"
     JSON = "json"
-    YAML = "yaml"
     MARKDOWN = "markdown"
+    CC_JSON_V1 = "cc_json_v1"
+    CC_JSON_V2 = "cc_json_v2"
+    CC_JSON_V3 = "cc_json_v3"
+    CC_MARKDOWN_V1 = "cc_markdown_v1"
+    CC_MARKDOWN_V2 = "cc_markdown_v2"
+    CC_MARKDOWN_V3 = "cc_markdown_v3"
     PLAINTEXT = "plaintext"
+    YAML = "yaml"
     HTML = "html"
 
 class SelectorResponse(BaseModel):
@@ -154,3 +161,28 @@ class AISourceEditJobResult(BaseModel):
 
     source_id: UUID = Field(..., description="The ID of the ProjectSource that was edited.")
     edited_content: str = Field(..., description="The content after AI editing.")
+
+
+class ContentConversionRequest(BaseModel):
+    """
+    Payload for requesting content conversion between formats.
+    """
+    content: str = Field(..., description="The raw content string to be converted.")
+    source_type: ContentType = Field(
+        ..., description="The format of the provided content (e.g., markdown or json)."
+    )
+    target_type: ContentType = Field(
+        ..., description="The desired output format (e.g., cc_json_v2 or cc_markdown_v3)."
+    )
+    regex_patterns_to_strip: Optional[List[str]] = Field(
+        None,
+        description="Optional list of regex patterns to apply to content fields before parsing (e.g., to strip comment macros).",
+    )
+
+
+class ContentConversionResponse(BaseModel):
+    """
+    Result of the content conversion operation.
+    """
+
+    converted_content: str = Field(..., description="The content after conversion.")

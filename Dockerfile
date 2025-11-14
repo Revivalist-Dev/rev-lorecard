@@ -8,10 +8,15 @@ RUN npm install -g pnpm
 
 # Copy client dependency files and install dependencies to leverage Docker layer caching
 COPY client/package.json client/pnpm-lock.yaml* ./client/
-RUN cd client && pnpm install --frozen-lockfile
+RUN cd client && pnpm install
 
-# Copy the rest of the client source code and build the application
+# Copy the theme source code
+COPY sources/theme-rev-dark/ ./sources/theme-rev-dark/
+
+# Copy BlockNote source code
+# Copy the rest of the client source code and install local theme dependency
 COPY client/ ./client/
+RUN cd client && pnpm install ../sources/theme-rev-dark
 RUN cd client && pnpm build
 
 # ---- Stage 2: Build the final Python application image ----

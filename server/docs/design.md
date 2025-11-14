@@ -301,6 +301,7 @@ This workflow is used for projects with `project_type: 'character'`.
 *   **Character Card**
     *   `GET /projects/{project_id}/character`: Get the character card for a project.
     *   `PATCH /projects/{project_id}/character`: Create or update the character card.
+    *   `POST /projects/{project_id}/character/convert`: Convert character card content between supported formats (Markdown/JSON versions), optionally stripping regex patterns.
     *   `GET /projects/{project_id}/character/export`: Export the card as a v2 PNG file.
 
 *   **Background Jobs**

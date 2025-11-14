@@ -11,15 +11,19 @@ import {
   Text,
   Select,
   SegmentedControl,
+  Tabs,
+  Checkbox,
 } from '@mantine/core';
 import {
   useProjectSourceDetails,
   useAiEditSourceContent,
   useUpdateProjectSource,
+  useConvertCharacterCardContent,
 } from '../../hooks/useProjectSources';
-import { IconAlertCircle, IconRobot, IconHourglass, IconHistory, IconLock, IconLockOpen } from '@tabler/icons-react';
+import { IconAlertCircle, IconRobot, IconHourglass, IconHistory, IconLock, IconLockOpen, IconExchange } from '@tabler/icons-react';
 import { useState, useEffect, useCallback } from 'react';
 import { CodeMirrorDiffEditor } from '../common/CodeMirrorDiffEditor';
+import { BlockNoteEditor } from '../common/BlockNoteEditor';
 import { useSse } from '../../hooks/useSse';
 import { useProjectJobs } from '../../hooks/useProjectJobs';
 import type { BackgroundJob, ContentType } from '../../types';
@@ -27,11 +31,24 @@ import { notifications } from '@mantine/notifications';
 import { SourceVersionHistoryModal } from './SourceVersionHistoryModal';
 
 const FILE_TYPE_OPTIONS = [
-  { value: 'json', label: 'JSON (.json)' },
+  { value: 'cc_json_v2', label: 'Character Card JSON (V2)' },
+  { value: 'cc_json_v3', label: 'Character Card JSON (V3)' },
+  { value: 'cc_markdown_v2', label: 'Character Card Markdown (V2)' },
+  { value: 'cc_markdown_v3', label: 'Character Card Markdown (V3)' },
   { value: 'yaml', label: 'YAML (.yaml)' },
-  { value: 'markdown', label: 'Markdown (.md)' },
   { value: 'plaintext', label: 'Plain Text (.txt)' },
+  { value: 'html', label: 'HTML (.html)' },
+  { value: 'cc_json_v1', label: 'Character Card JSON (V1)' },
+  { value: 'cc_markdown_v1', label: 'Character Card Markdown (V1)' },
+  { value: 'cc_json_misc', label: 'Miscellaneous JSON' },
+  { value: 'json', label: 'Legacy JSON' },
+  { value: 'markdown', label: 'Legacy Markdown' },
 ];
+
+const CONVERSION_TARGET_OPTIONS = FILE_TYPE_OPTIONS.filter(
+  (opt) =>
+    opt.value.startsWith('cc_json') || opt.value.startsWith('cc_markdown')
+);
 
 interface EditSourceContentModalProps {
   opened: boolean;
@@ -53,10 +70,14 @@ export function EditSourceContentModal({ opened, onClose, projectId, sourceId }:
   const [activeAiJobId, setActiveAiJobId] = useState<string | null>(null);
   const [historyModalOpened, setHistoryModalOpened] = useState(false);
   const [selectedLanguage, setSelectedLanguage] = useState<ContentType>('plaintext');
+  const [conversionTarget, setConversionTarget] = useState<ContentType | null>(null);
+  const [stripComments, setStripComments] = useState(false);
   const [editingMode, setEditingMode] = useState<'ManualReview' | 'AIReview'>('ManualReview');
+  const [activeTab, setActiveTab] = useState<'Visual' | 'Difference'>('Visual');
 
   const aiEditMutation = useAiEditSourceContent();
   const updateSourceMutation = useUpdateProjectSource(projectId);
+  const convertMutation = useConvertCharacterCardContent();
   // useSse is a side-effect hook and returns void. We use useProjectJobs to read job updates.
   useSse(projectId);
   const { data: jobsResponse } = useProjectJobs(projectId);
@@ -74,15 +95,9 @@ export function EditSourceContentModal({ opened, onClose, projectId, sourceId }:
       setAiEditedContent(source.raw_content ?? '');
 
       // Initialize selected language based on source content_type
-      const initialLanguage =
-        source.content_type === 'markdown' ||
-        source.content_type === 'json' ||
-        source.content_type === 'yaml' ||
-        source.content_type === 'plaintext' ||
-        source.content_type === 'html'
-          ? source.content_type
-          : 'plaintext';
+      const initialLanguage = (source.content_type || 'plaintext') as ContentType;
       setSelectedLanguage(initialLanguage);
+      setConversionTarget(null); // Reset conversion target on source change
     }
     // Clear any active job when the modal source changes
     setActiveAiJobId(null);
@@ -173,6 +188,7 @@ export function EditSourceContentModal({ opened, onClose, projectId, sourceId }:
     }
   }, [lockedSelection]);
 
+
   const handleLockSelection = () => {
     if (lockedSelection) {
       setLockedSelection(null);
@@ -244,6 +260,72 @@ const handleSave = async () => {
     // Error handling is primarily done by the useMutation onError,
     // but catching here prevents unhandled promise rejection if needed.
     console.error('Save failed:', e);
+  }
+};
+
+const handleConvert = async () => {
+  if (!sourceId || !conversionTarget) return;
+
+  // Conversion is only allowed between character card formats (Markdown/JSON)
+  const isSourceCC =
+    selectedLanguage.startsWith('cc_json') ||
+    selectedLanguage.startsWith('cc_markdown') ||
+    selectedLanguage === 'json' ||
+    selectedLanguage === 'markdown';
+  const isTargetCC = conversionTarget.startsWith('cc_json') || conversionTarget.startsWith('cc_markdown');
+
+  if (!isSourceCC || !isTargetCC) {
+    notifications.show({
+      title: 'Conversion Error',
+      message: 'Conversion is only supported between Character Card formats (including legacy JSON/Markdown) and versioned Character Card formats.',
+      color: 'red',
+    });
+    return;
+  }
+
+  if (selectedLanguage === conversionTarget) {
+    notifications.show({
+      title: 'Conversion Error',
+      message: 'Source and target formats are the same.',
+      color: 'red',
+    });
+    return;
+  }
+
+  try {
+    const result = await convertMutation.mutateAsync({
+      projectId,
+      data: {
+        content: editedContent,
+        source_type: selectedLanguage,
+        target_type: conversionTarget,
+        regex_patterns_to_strip: stripComments
+          ? [
+              // SillyTavern comment macro regex: /^{{comment:[\s\S]*?}}\n?|[ ]?{{comment:[\s\S]*?}}/gm
+              '^{{comment:[\\s\\S]*?}}\\n?|[ ]?{{comment:[\\s\\S]*?}}',
+            ]
+          : undefined,
+      },
+    });
+
+    const convertedContent = result.data.converted_content;
+    setEditedContent(convertedContent);
+    setSelectedLanguage(conversionTarget);
+    setConversionTarget(null); // Clear target after successful conversion
+
+    notifications.show({
+      title: 'Conversion Complete',
+      message: `Content successfully converted from ${selectedLanguage} to ${conversionTarget}.`,
+      color: 'green',
+    });
+  } catch (e) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const error = e as any;
+    notifications.show({
+      title: 'Conversion Failed',
+      message: `Error: ${error.response?.data?.detail || error.message}`,
+      color: 'red',
+    });
   }
 };
 
@@ -407,6 +489,41 @@ const handleApplyAiEdit = () => {
               w={200}
             />
           </Group>
+          
+          {/* Conversion Controls */}
+          <Group justify="space-between" align="flex-end">
+            <Select
+              label="Convert To Format"
+              placeholder="Select target format"
+              data={CONVERSION_TARGET_OPTIONS}
+              value={conversionTarget}
+              onChange={(value) => setConversionTarget((value as ContentType) ?? null)}
+              disabled={!!activeAiJobId || convertMutation.isPending}
+              w={200}
+            />
+            <Checkbox
+              label="Strip SillyTavern Comments"
+              checked={stripComments}
+              onChange={(event) => setStripComments(event.currentTarget.checked)}
+              disabled={!!activeAiJobId || convertMutation.isPending}
+              style={{ alignSelf: 'flex-end', marginBottom: 4 }}
+            />
+            <Button
+              leftSection={<IconExchange size={16} />}
+              onClick={handleConvert}
+              loading={convertMutation.isPending}
+              disabled={
+                !conversionTarget ||
+                conversionTarget === selectedLanguage ||
+                !!activeAiJobId ||
+                convertMutation.isPending
+              }
+              size="xs"
+            >
+              Convert Content
+            </Button>
+          </Group>
+
           <Group justify="flex-end">
             <Button
               leftSection={<IconRobot size={16} />}
@@ -429,16 +546,36 @@ const handleApplyAiEdit = () => {
             </Alert>
           )}
 
-          {/* Diff Editor Container: Use flex: 1 to fill remaining vertical space */}
-          <Box flex={1} style={{ overflowY: 'auto', height: '100%' }}>
-            <CodeMirrorDiffEditor
-              key={`${sourceId}-${editingMode}`}
-              originalContent={editingMode === 'AIReview' ? editedContent : (source.raw_content ?? '')}
-              modifiedContent={editingMode === 'AIReview' ? (aiEditedContent ?? editedContent) : editedContent}
-              language={selectedLanguage}
-              onModifiedChange={editingMode === 'AIReview' ? handleAiModifiedChange : handleModifiedChange}
-              onSelectionChange={handleSelectionChange}
-            />
+          <Box flex={1} style={{ display: 'flex', flexDirection: 'column' }}>
+            <Tabs value={activeTab} onChange={(value) => setActiveTab(value as 'Visual' | 'Difference')} keepMounted={false} style={{ flex: 1 }}>
+              <Tabs.List>
+                <Tabs.Tab value="Visual">Visual</Tabs.Tab>
+                <Tabs.Tab value="Difference">Difference</Tabs.Tab>
+              </Tabs.List>
+
+              <Tabs.Panel value="Visual" style={{ height: '100%', flex: 1 }}>
+                <Box style={{ overflowY: 'auto', height: '100%', paddingTop: 'var(--mantine-spacing-md)' }}>
+                  <BlockNoteEditor
+                    content={editedContent}
+                    onContentChange={handleModifiedChange}
+                    language={selectedLanguage}
+                  />
+                </Box>
+              </Tabs.Panel>
+
+              <Tabs.Panel value="Difference" style={{ height: '100%', flex: 1 }}>
+                <Box style={{ overflowY: 'auto', height: '100%', paddingTop: 'var(--mantine-spacing-md)' }}>
+                  <CodeMirrorDiffEditor
+                    key={`${sourceId}-${editingMode}`}
+                    originalContent={editingMode === 'AIReview' ? editedContent : (source.raw_content ?? '')}
+                    modifiedContent={editingMode === 'AIReview' ? (aiEditedContent ?? editedContent) : editedContent}
+                    language={selectedLanguage}
+                    onModifiedChange={editingMode === 'AIReview' ? handleAiModifiedChange : handleModifiedChange}
+                    onSelectionChange={handleSelectionChange}
+                  />
+                </Box>
+              </Tabs.Panel>
+            </Tabs>
           </Box>
         </Stack>
       )}

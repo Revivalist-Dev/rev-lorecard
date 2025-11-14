@@ -1,16 +1,39 @@
-import { useMantineColorScheme } from '@mantine/core';
+import { useMantineColorScheme, Paper } from '@mantine/core';
 import { useEffect, useRef, useState } from 'react';
 import { EditorState, Compartment, type Extension } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
 import { json } from '@codemirror/lang-json';
 import { markdown } from '@codemirror/lang-markdown';
 import { yaml } from '@codemirror/lang-yaml';
-import { oneDark } from '@codemirror/theme-one-dark';
+import { createTheme } from '@uiw/codemirror-themes';
+import { tags as t } from '@lezer/highlight';
 import { foldGutter } from '@codemirror/language';
 import { MergeView, type DirectMergeConfig } from '@codemirror/merge';
 import { lineNumbers, highlightActiveLine, highlightActiveLineGutter, keymap } from '@codemirror/view';
 import { history, defaultKeymap, historyKeymap } from '@codemirror/commands';
 import type { ContentType } from '../../types';
+
+const revDarkTheme = createTheme({
+  theme: 'dark',
+  settings: {
+    background: '#2e2e2e',
+    foreground: '#c9c9c9',
+    caret: '#61afef',
+    selection: '#444444',
+    selectionMatch: '#444444',
+    lineHighlight: '#353535',
+    gutterBackground: '#242424',
+    gutterForeground: '#c9c9c9',
+  },
+  styles: [
+    // Placeholder styles to ensure theme is applied, actual syntax colors are handled by language extensions
+    { tag: t.comment, color: '#8a3016' },
+    { tag: t.variableName, color: '#61afef' },
+    { tag: t.keyword, color: '#c678dd' },
+    { tag: t.string, color: '#98c379' },
+    { tag: t.number, color: '#d19a66' },
+  ],
+});
 
 interface CodeMirrorDiffEditorProps {
   originalContent: string;
@@ -32,13 +55,21 @@ const languageMap: Record<ContentType, () => Extension> = {
   plaintext: () => [], // Return empty array for plain text
   yaml: yaml,
   html: markdown, // Using markdown as a fallback for HTML
+  // Character Card Formats
+  cc_json_v1: json,
+  cc_json_v2: json,
+  cc_json_v3: json,
+  cc_json_misc: json,
+  cc_markdown_v1: markdown,
+  cc_markdown_v2: markdown,
+  cc_markdown_v3: markdown,
 };
 
 export function CodeMirrorDiffEditor({
   originalContent,
   modifiedContent,
   language,
-  height = '550px',
+  height = '650px',
   onModifiedChange,
   onSelectionChange,
 }: CodeMirrorDiffEditorProps) {
@@ -60,29 +91,8 @@ export function CodeMirrorDiffEditor({
     const effectiveScheme = scheme === 'auto' ? 'dark' : scheme;
     const isDark = effectiveScheme === 'dark';
 
-    const customTheme = EditorView.theme({
-      // Set background color for the entire editor area
-      '.cm-editor': {
-        backgroundColor: isDark ? 'var(--mantine-color-dark-7) !important' : 'var(--mantine-color-white) !important',
-        color: isDark ? 'var(--mantine-color-dark-0)' : 'var(--mantine-color-dark-7)',
-      },
-      // Ensure the content area also respects the background
-      '.cm-content': {
-        caretColor: isDark ? 'var(--mantine-color-white)' : 'var(--mantine-color-dark-7)',
-      },
-      // Style the gutters
-      '.cm-gutters': {
-        backgroundColor: isDark ? 'var(--mantine-color-dark-7)' : 'var(--mantine-color-gray-0)',
-        color: isDark ? 'var(--mantine-color-dark-2)' : 'var(--mantine-color-gray-6)',
-        borderRight: '1px solid var(--mantine-color-dark-4)',
-      },
-      // Style the line numbers
-      '.cm-lineNumbers .cm-gutterElement': {
-        color: isDark ? 'var(--mantine-color-dark-2)' : 'var(--mantine-color-gray-6)',
-      },
-    });
-
-    return [isDark ? oneDark : [], customTheme];
+    // Use the custom defined dark theme when dark mode is active
+    return [isDark ? revDarkTheme : []];
   };
 
   // Initialize MergeView
@@ -191,5 +201,9 @@ export function CodeMirrorDiffEditor({
     }
   }, [colorScheme, isInitialized]);
 
-  return <div ref={editorRef} style={{ height }} />;
+  return (
+    <Paper withBorder p={0} style={{ overflowY: 'auto' }}>
+      <div ref={editorRef} style={{ height }} />
+    </Paper>
+  );
 }

@@ -68,6 +68,14 @@ https://github.com/user-attachments/assets/abd86ee8-b347-40f2-a768-cb83d5607d1f
 </details>
 
 <details>
+  <summary>[Character] Content Conversion</summary>
+  
+  *Allows on-the-fly conversion between versioned Character Card JSON and Markdown formats, including optional comment stripping.*
+  
+  ![Character Content Conversion](showcase/character-content-conversion.png)
+</details>
+
+<details>
   <summary>Project Analytics</summary>
   
   ![Project Analytics](showcase/project-analytics.png)

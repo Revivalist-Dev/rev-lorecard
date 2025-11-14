@@ -66,18 +66,6 @@ function SourceItem({
       <Stack gap={4}>
         {/* Top Row: Checkbox, Copy Button, Source URL (expands) */}
         <Group wrap="nowrap" align="flex-start" gap={0}>
-          <Box mr="xs">
-            <Checkbox
-              checked={selectedSourceIds.includes(source.id)}
-              onChange={(event) => {
-                const { checked } = event.currentTarget;
-                setSelectedSourceIds((current) =>
-                  checked ? [...current, source.id] : current.filter((id) => id !== source.id)
-                );
-              }}
-              disabled={!source.raw_content && !source.last_crawled_at}
-            />
-          </Box>
           {/* Attached Copy Button Container */}
           <Box
             style={{
@@ -145,7 +133,18 @@ function SourceItem({
 
         {/* Bottom Row: Status/Tokens (left) and Action Icons (right) */}
         <Group justify="space-between" wrap="nowrap" mt="sm">
-          <Group gap="xs" align="center" style={{ flex: 1 }} justify="center">
+          <Group gap="xs" align="center" style={{ flex: 1 }} justify="flex-start">
+            <Checkbox
+              checked={selectedSourceIds.includes(source.id)}
+              onChange={(event) => {
+                const { checked } = event.currentTarget;
+                setSelectedSourceIds((current) =>
+                  checked ? [...current, source.id] : current.filter((id) => id !== source.id)
+                );
+              }}
+              disabled={!source.raw_content && !source.last_crawled_at}
+              size="sm"
+            />
             {source.content_char_count && (
               <Text size="xs" c="dimmed">
                 {Math.ceil(source.content_char_count / 4)} tokens
@@ -299,24 +298,25 @@ export function CharacterSources({ project, selectedSourceIds, setSelectedSource
         onClose={closeFormatModal}
         onSelect={handleFormatSelect}
       />
-      <Stack>
-        <Group justify="space-between">
-          <Title order={4}>Context Sources</Title>
-          <Button leftSection={<IconPlus size={16} />} onClick={handleOpenCreateModal} size="xs">
-            Add Source
-          </Button>
-        </Group>
-        <Text size="sm" c="dimmed">
-          Add source URLs, fetch their content, then select which ones to use for generation.
-        </Text>
-
+      <Box mb="md">
         <JobStatusIndicator job={fetchContentJob} title="Content Fetching" />
+      </Box>
+      <Paper withBorder p="md">
+        <Stack>
+          <Group justify="space-between">
+            <Title order={4}>Context Sources</Title>
+            <Button leftSection={<IconPlus size={16} />} onClick={handleOpenCreateModal} size="xs">
+              Add Source
+            </Button>
+          </Group>
+          <Text size="sm" c="dimmed">
+            Add source URLs, fetch their content, then select which ones to use for generation.
+          </Text>
 
-        <Paper withBorder p="md" mt="xs">
           {isLoadingSources ? (
             <Loader />
           ) : (
-            <Stack>
+            <Stack mt="xs">
               {sources && sources.length > 0 ? (
                 sources.map((source) => (
                   <SourceItem
@@ -340,8 +340,8 @@ export function CharacterSources({ project, selectedSourceIds, setSelectedSource
               )}
             </Stack>
           )}
-        </Paper>
-      </Stack>
+        </Stack>
+      </Paper>
     </>
   );
 }

@@ -2,8 +2,8 @@ import base64
 import io
 import json
 from uuid import UUID
-from litestar import Controller, get, patch
-from litestar.exceptions import NotFoundException
+from litestar import Controller, get, patch, post
+from litestar.exceptions import NotFoundException, HTTPException
 from litestar.params import Body
 from litestar.response import Response
 from PIL import Image, PngImagePlugin
@@ -19,6 +19,8 @@ from db.character_cards import (
 from db.common import SingleResponse
 from db.projects import get_project as db_get_project
 from logging_config import get_logger
+from schemas import ContentConversionRequest, ContentConversionResponse
+from services.character_card_processor import convert_content, CharacterCardProcessorError
 
 logger = get_logger(__name__)
 
@@ -69,6 +71,24 @@ class CharacterCardController(Controller):
                 f"Character card for project '{project_id}' not found."
             )
         return SingleResponse(data=card)
+
+    @post("/convert")
+    async def convert_character_card_content(
+        self, data: ContentConversionRequest = Body()
+    ) -> SingleResponse[ContentConversionResponse]:
+        """Convert character card content between supported formats (Markdown/JSON versions)."""
+        try:
+            converted_content = convert_content(
+                content=data.content,
+                source_type=data.source_type,
+                target_type=data.target_type,
+            )
+            return SingleResponse(
+                data=ContentConversionResponse(converted_content=converted_content)
+            )
+        except CharacterCardProcessorError as e:
+            logger.error(f"Content conversion failed: {e}")
+            raise HTTPException(status_code=400, detail=str(e)) from e
 
     @get("/export")
     async def export_character_card(self, project_id: str) -> Response:
